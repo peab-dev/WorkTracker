@@ -30,3 +30,7 @@ env/
 data/
 *.jsonl
 *.log
+
+# Excalidraw / planning docs
+WorkTracker-Uebersicht.excalidraw
+WorkTracker-Umsetzungsplan-v3-Final.md
