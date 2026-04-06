@@ -1,15 +1,32 @@
-# Python
-daemon/.venv/
-__pycache__/
-*.pyc
-
-# Daten (privat, pro User)
-data/
-logs/
-summaries/
-
-# Gelernte Patterns (pro User)
-daemon/learned_patterns.yaml
-
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Claude Code
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Data (private tracking data — never commit)
+data/
+*.jsonl
+*.log
