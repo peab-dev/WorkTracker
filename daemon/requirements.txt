@@ -1,5 +1,6 @@
 pyobjc-framework-Cocoa>=10.0
 pyobjc-framework-Quartz>=10.0
+pyobjc-framework-ApplicationServices>=10.0
 pyobjc-framework-EventKit>=10.0
 pandas>=2.2
 pyyaml>=6.0

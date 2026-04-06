@@ -47,6 +47,19 @@ def _safe_int(val, default: int = 0) -> int:
         return default
 
 
+def _safe_str(val, default: str = "") -> str:
+    """Convert value to str, handling NaN, None, and non-string types."""
+    if val is None:
+        return default
+    if isinstance(val, float):
+        if math.isnan(val):
+            return default
+        return str(val)
+    if isinstance(val, str):
+        return val
+    return str(val)
+
+
 SYSTEM_APPS = {
     "WindowManager", "Finder", "Dock", "SystemUIServer",
     "Control Center", "Notification Center", "loginwindow",
@@ -131,11 +144,14 @@ def match_project(
 
     Returns *(project_name, category)*.  Priority: title → url → app_name.
     """
+    title = _safe_str(title)
+    url = _safe_str(url)
+    app_name = _safe_str(app_name)
     if not title and not url and not app_name:
         return default, ""
     title_lower = title.lower()
-    url_lower = url.lower() if url else ""
-    app_lower = app_name.lower() if app_name else ""
+    url_lower = url.lower()
+    app_lower = app_name.lower()
     for proj_name, proj_info in projects.items():
         # Title patterns
         for pattern in proj_info.get("patterns", []):
@@ -151,6 +167,8 @@ def match_project(
             for pattern in proj_info.get("app_patterns", []):
                 if fnmatch.fnmatch(app_lower, pattern.lower()):
                     return proj_name, proj_info.get("category", "")
+    if app_name:
+        return f"{default} ({app_name})", ""
     return default, ""
 
 
@@ -277,8 +295,8 @@ def detect_sessions(df: pd.DataFrame, cfg: dict) -> list[dict]:
     current: dict[str, Any] | None = None
 
     for _, row in df.iterrows():
-        app_name = row.get("app_name", "")
-        title = row.get("app_window_title", "")
+        app_name = _safe_str(row.get("app_name"))
+        title = _safe_str(row.get("app_window_title"))
         ts = row["ts"]
 
         if current is None:
@@ -364,11 +382,9 @@ def _merge_micro_sessions(sessions: list[dict], min_snapshots: int) -> list[dict
 
 
 def _new_session(row: pd.Series, projects: dict, default_project: str) -> dict:
-    title = row.get("app_window_title") or ""
-    url = row.get("app_url") or ""
-    if isinstance(url, float):
-        url = ""  # NaN guard
-    app_name = row.get("app_name") or ""
+    title = _safe_str(row.get("app_window_title"))
+    url = _safe_str(row.get("app_url"))
+    app_name = _safe_str(row.get("app_name"))
     proj, cat = match_project(title, projects, default_project, url=url, app_name=app_name)
     interval = 10
     return {
@@ -395,7 +411,7 @@ def _new_session(row: pd.Series, projects: dict, default_project: str) -> dict:
 
 
 def _accumulate_session(session: dict, row: pd.Series, interval: int) -> None:
-    session["_last_title"] = row.get("app_window_title", "")
+    session["_last_title"] = _safe_str(row.get("app_window_title"))
     session["_last_ts"] = row["ts"]
     session["keystrokes_total"] += _safe_int(row.get("input_keystrokes"))
     session["mouse_clicks_total"] += _safe_int(row.get("input_mouse_clicks_left")) \
@@ -504,8 +520,8 @@ def calc_daily_stats(df: pd.DataFrame, sessions: list[dict], cfg: Optional[dict]
         return stats
 
     sdf = pd.DataFrame(sessions)
-    sdf["start_dt"] = pd.to_datetime(sdf["start"])
-    sdf["end_dt"] = pd.to_datetime(sdf["end"])
+    sdf["start_dt"] = pd.to_datetime(sdf["start"], format="ISO8601")
+    sdf["end_dt"] = pd.to_datetime(sdf["end"], format="ISO8601")
     sdf["start_hour"] = sdf["start_dt"].dt.hour
 
     # --- Overview ---
@@ -881,7 +897,7 @@ def render_daily_md(date: datetime, stats: dict, comparison: list[dict]) -> str:
         start_t = pd.Timestamp(s["start"]).strftime("%H:%M")
         end_t = pd.Timestamp(s["end"]).strftime("%H:%M")
         dur = fmt_duration(s["duration_seconds"])
-        wt = s.get("window_title") or ""
+        wt = _safe_str(s.get("window_title"))
         title_short = wt[:40] + "…" if len(wt) > 40 else wt
         # URL or git branch as extra context
         extra = ""
@@ -1029,7 +1045,7 @@ def render_weekly_md(date: datetime, all_sessions: list[dict], daily_stats_list:
         return "\n".join(lines)
 
     sdf = pd.DataFrame(all_sessions)
-    sdf["start_dt"] = pd.to_datetime(sdf["start"])
+    sdf["start_dt"] = pd.to_datetime(sdf["start"], format="ISO8601")
     sdf["day_name"] = sdf["start_dt"].dt.weekday
 
     total_sec = sdf["duration_seconds"].sum()
@@ -1155,7 +1171,7 @@ def render_monthly_md(date: datetime, all_sessions: list[dict]) -> str:
         return "\n".join(lines)
 
     sdf = pd.DataFrame(all_sessions)
-    sdf["start_dt"] = pd.to_datetime(sdf["start"])
+    sdf["start_dt"] = pd.to_datetime(sdf["start"], format="ISO8601")
     total_sec = sdf["duration_seconds"].sum()
     focus = sdf[sdf["duration_seconds"] > 1500]
     active_days = sdf["start_dt"].dt.date.nunique()
@@ -1351,7 +1367,7 @@ def run_daily(date: datetime) -> None:
 
 def suggest_patterns(sessions: list[dict], date: datetime) -> None:
     """Analyze 'Other' sessions and write suggestions to learned_patterns.yaml."""
-    sonstiges = [s for s in sessions if s.get("project") == "Other"]
+    sonstiges = [s for s in sessions if s.get("project", "").startswith("Other")]
     if not sonstiges:
         log.info("No 'Other' sessions — no suggestions needed.")
         return
@@ -1364,8 +1380,8 @@ def suggest_patterns(sessions: list[dict], date: datetime) -> None:
     )
 
     for s in sonstiges:
-        title = s.get("window_title", "")
-        url = s.get("url", "")
+        title = _safe_str(s.get("window_title"))
+        url = _safe_str(s.get("url"))
         dur = s.get("duration_seconds", 0)
 
         # Extract domain from URL if available

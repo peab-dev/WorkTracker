@@ -6,19 +6,20 @@
 <title>WorkTracker Docs</title>
 <style>
   :root {
-    --bg: #0d1117;
-    --bg2: #161b22;
-    --bg3: #1c2128;
-    --border: #30363d;
-    --text: #c9d1d9;
-    --text2: #8b949e;
-    --cyan: #58a6ff;
-    --green: #7ee787;
-    --orange: #d29922;
-    --red: #f85149;
-    --purple: #bc8cff;
-    --white: #f0f6fc;
-    --code-bg: #0d1117;
+    --bg: #0c1116;
+    --bg2: #141a20;
+    --bg3: #1b222a;
+    --border: #2b3642;
+    --text: #cfd7e0;
+    --text2: #8a95a3;
+    --cyan: #4fc3d8;
+    --green: #6fe28a;
+    --acid: #d4f500;
+    --orange: #ff5a1f;
+    --red: #ff4d4f;
+    --purple: #b392ff;
+    --white: #f4f8ff;
+    --code-bg: #0c1116;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -45,17 +46,32 @@
     backdrop-filter: blur(12px);
   }
   .topnav .logo {
-    font-size: 18px; font-weight: 700;
-    color: var(--cyan);
+    font-size: 24px; font-weight: 200;
+    color: var(--acid);
     letter-spacing: 1px;
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 3px;
+    text-decoration: none;
+    font-family: 'SF Mono', 'Fira Code', monospace;
   }
-  .topnav .logo .dot { color: var(--red); }
+  .topnav .logo .dot { color: var(--red); font-size: 14px; }
+  .topnav .beta {
+    font-size: 13px; font-weight: 400;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+    color: var(--white);
+    border: 1px solid darkslategrey;
+    background: darkslategrey;
+    padding: 2px 8px 1px;
+    opacity: 0.55;
+    margin-left: 8px;
+  }
   .topnav .version {
-    font-size: 11px; font-weight: 400;
-    background: var(--bg3); color: var(--text2);
-    padding: 2px 8px; border-radius: 10px;
+    font-size: 13px; font-weight: 400;
+    background: darkslategrey; color: var(--acid);
+    padding: 2px 8px 1px;
     margin-left: 6px;
+    opacity: 0.86;
+    border: 1px solid darkslategrey;
   }
   .topnav-links {
     margin-left: auto; display: flex; gap: 24px;
@@ -83,17 +99,21 @@
   .sidebar h3 {
     font-size: 11px; font-weight: 600;
     text-transform: uppercase; letter-spacing: 1.2px;
-    color: var(--text2); padding: 8px 20px 4px;
+    color: var(--text); padding: 8px 20px 4px;
   }
   .sidebar a {
     display: block; padding: 6px 20px;
     color: var(--text2); text-decoration: none;
     font-size: 14px; transition: all .12s;
-    border-left: 3px solid transparent;
+    border-left: 6px solid transparent;
   }
   .sidebar a:hover {
     color: var(--white); background: var(--bg3);
-    border-left-color: var(--cyan);
+    border-left-color: var(--acid);
+  }
+  .sidebar a.active {
+    color: var(--white); background: var(--bg3);
+    border-left-color: var(--acid);
   }
 
   /* ── Main Content ── */
@@ -107,19 +127,23 @@
   /* ── Hero ── */
   .hero {
     text-align: center;
-    padding: 60px 0 40px;
+    padding-bottom: 40px;
     border-bottom: 1px solid var(--border);
     margin-bottom: 48px;
   }
   .hero-logo {
     font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 32px; font-weight: 700;
-    color: var(--cyan);
+    font-size: 2.66em; font-weight: 700;
+    color: var(--acid);
     letter-spacing: 2px;
   }
-  .hero-logo .colon { color: var(--red); }
+  .colon {
+    color: var(--red);
+    animation: colonPulse 1s ease-in-out infinite;
+    opacity: 0.85;
+  }
   .hero p {
-    color: var(--text2); font-size: 18px;
+    color: var(--white); font-size: 22px;
     margin-top: 12px;
   }
   .hero .badges {
@@ -132,11 +156,10 @@
     border-radius: 14px;
     font-size: 12px; font-weight: 600;
     border: 1px solid;
+    color: var(--text2);
+    opacity: 0.9;
   }
-  .badge-green { color: var(--green); border-color: #23492a; background: #0d1f12; }
-  .badge-cyan { color: var(--cyan); border-color: #1a3a5c; background: #0d1926; }
-  .badge-purple { color: var(--purple); border-color: #3b2466; background: #1a0d2e; }
-  .badge-orange { color: var(--orange); border-color: #5c3d0d; background: #261a06; }
+  .badge-light { color: var(--white); border-color: #23492a; background: #0d1f12; }
 
   /* ── Typography ── */
   h1 {
@@ -155,12 +178,12 @@
 
   h3 {
     font-size: 16px; font-weight: 600;
-    color: var(--cyan); margin: 24px 0 8px;
+    color: var(--white); margin: 24px 0 8px;
   }
 
   p { margin: 8px 0; }
 
-  a { color: var(--cyan); }
+  a { color: var(--text2); }
 
   /* ── Code ── */
   code {
@@ -169,21 +192,80 @@
     background: var(--bg3);
     padding: 2px 6px;
     border-radius: 4px;
-    color: var(--orange);
+    color: var(--acid);
+  }
+  code.inline-code {
+    cursor: pointer;
+    position: relative;
+    padding-right: 24px;
+  }
+  code.inline-code .copy-inline-btn {
+    position: absolute;
+    right: 4px; top: 45%;
+    transform: translateY(-50%);
+    width: 16px; height: 16px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--text2);
+    opacity: 0.66;
+    transition: opacity .12s, color .12s, border-color .12s;
+    cursor: pointer;
+  }
+  code.inline-code:hover .copy-inline-btn {
+    opacity: 0.86;
   }
 
   pre {
-    background: var(--code-bg);
+    background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 16px 20px;
     overflow-x: auto;
     margin: 12px 0 16px;
     line-height: 1.5;
+    position: relative;
+    cursor: pointer;
   }
   pre code {
     background: none; padding: 0;
-    color: var(--text); font-size: 13px;
+    color: var(--acid); font-size: 13px;
+  }
+  .copy-btn {
+    position: absolute;
+    top: 10px; right: 10px;
+    width: 28px; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--text2);
+    border-radius: 6px;
+    opacity: 0.7;
+    transition: opacity .12s, color .12s, border-color .12s;
+    cursor: pointer;
+  }
+  pre:hover .copy-btn { opacity: 1; color: var(--white); border-color: #3a4552; }
+
+  .copy-toast {
+    position: fixed;
+    left: 0; top: 0;
+    background: #0d2a16;
+    border: 1px solid #1f5a2f;
+    color: #9af29a;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity .2s, transform .2s;
+    pointer-events: none;
+    z-index: 200;
+  }
+  .copy-toast.show { opacity: 0.85; transform: translateY(0); }
+
+  @keyframes colonPulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
   }
 
   /* ── Tables ── */
@@ -215,8 +297,8 @@
     margin: 16px 0;
     font-size: 14px;
   }
-  .callout-info { border-color: var(--cyan); background: #0d192610; }
-  .callout-warn { border-color: var(--orange); background: #261a0610; }
+  .callout-info { border-color: var(--acid); background: #1c220010; }
+  .callout-warn { border-color: var(--acid); background: #1c220010; }
   .callout-danger { border-color: var(--red); background: #26060610; }
   .callout strong { color: var(--white); }
 
@@ -225,12 +307,13 @@
     display: flex; gap: 16px; margin: 16px 0;
   }
   .step-num {
-    width: 28px; height: 28px; min-width: 28px;
+    width: 35px; height: 35px; min-width: 28px;
     border-radius: 50%;
-    background: var(--cyan);
+    background: var(--acid);
     color: var(--bg);
-    font-weight: 700; font-size: 14px;
+    font-weight: 700; font-size: 18px;
     display: flex; align-items: center; justify-content: center;
+    opacity: 0.92;
   }
   .step-body { flex: 1; }
   .step-body h4 {
@@ -249,7 +332,7 @@
     padding: 16px 20px;
     margin: 12px 0;
   }
-  .tree .dir { color: var(--cyan); font-weight: 600; }
+  .tree .dir { color: var(--acid); font-weight: 600; }
   .tree .file { color: var(--text); }
   .tree .desc { color: var(--text2); }
 
@@ -284,17 +367,19 @@
     color: var(--text2);
     font-size: 13px;
   }
-  .footer a { color: var(--cyan); text-decoration: none; }
+  .footer a { color: var(--acid); text-decoration: none; opacity: 0.86; }
+  .footer a:hover { opacity: 1; }
 </style>
 </head>
 <body>
 
 <!-- ═══════════ TOP NAV ═══════════ -->
 <nav class="topnav">
-  <div class="logo">
-    WORK<span class="dot">:</span>TRACKER
+  <a class="logo" href="index.html">
+    WORK<span class="colon">:</span>TRACKER
     <span class="version">v0.0.1</span>
-  </div>
+    <span class="beta">public beta</span>
+  </a>
   <div class="topnav-links">
     <a href="#quickstart">Quick Start</a>
     <a href="#commands">Commands</a>
@@ -307,6 +392,7 @@
 
 <!-- ═══════════ SIDEBAR ═══════════ -->
 <aside class="sidebar">
+  <a href="index.html">About</a>
   <h3>Getting Started</h3>
   <a href="#quickstart">Quick Start</a>
   <a href="#requirements">Requirements</a>
@@ -338,6 +424,10 @@
   <a href="#sessions">Session Detection</a>
   <a href="#pattern-learning">Pattern Learning</a>
   <a href="#special-features">Special Features</a>
+
+  <h3>OPTIONAL POWER UP</h3>
+  <a href="#optional">Empower with local AI</a>
+
 </aside>
 
 <!-- ═══════════ CONTENT ═══════════ -->
@@ -346,15 +436,21 @@
 <!-- Hero -->
 <div class="hero">
   <div class="hero-logo">WORK<span class="colon">:</span>TRACKER</div>
-  <p>Automatic macOS activity tracking with privacy in mind</p>
+  <p>Track all your activities on Mac &ndash; automatically. <br>
+Analyze and learn how you do things in detail.<br>
+100% open source. Privacy always in mind.<br>
+Improve your workflow naturally.<br>
+Runs locally and fully transparent.<br>
+No black-box, no fees.<br>
+Made with &lt;3 in Austria.<br></p>
   <div class="badges">
-    <span class="badge badge-green">macOS</span>
-    <span class="badge badge-cyan">Python 3</span>
-    <span class="badge badge-purple">launchd</span>
-    <span class="badge badge-orange">v0.0.1</span>
-  </div>
+    <span class="badge badge-light">Runs Locally</span>
+    <span class="badge badge-light">Open Source</span>
+    <span class="badge badge-light">No Blackbox</span>
+    <span class="badge badge-light">App Tracking</span>
+    <span class="badge badge-light">Flow Insights</span>
 </div>
-
+</div>
 
 <!-- ════════════════════════════════════════════════════════════════ -->
 <h1 id="quickstart">Quick Start</h1>
@@ -362,8 +458,9 @@
 <div class="step">
   <div class="step-num">1</div>
   <div class="step-body">
-    <h4>Clone or copy to your Mac</h4>
-    <p>Place the WorkTracker folder anywhere. The installer will copy it to <code>~/WorkTracker</code>.</p>
+    <h4>Clone the repo</h4>
+    <pre><code>git clone https://github.com/peab-dev/WorkTracker.git
+cd WorkTracker</code></pre>
   </div>
 </div>
 
@@ -371,8 +468,7 @@
   <div class="step-num">2</div>
   <div class="step-body">
     <h4>Run the installer</h4>
-    <pre><code>cd WorkTracker
-./install.sh</code></pre>
+    <pre><code>./install.sh</code></pre>
     <p>This sets up Python, dependencies, launchd services, and shell aliases.</p>
   </div>
 </div>
@@ -380,24 +476,17 @@
 <div class="step">
   <div class="step-num">3</div>
   <div class="step-body">
-    <h4>Grant macOS permissions</h4>
-    <p>Go to <strong>System Settings &rarr; Privacy & Security</strong> and enable <strong>Accessibility</strong> and <strong>Screen Recording</strong> for your Terminal app.</p>
+    <h4>Grant permissions in macOS settings</h4>
+    <p>System Settings &rarr; Privacy &amp; Security &rarr; enable <strong>Accessibility</strong> and <strong>Screen Recording</strong> for your Terminal app.</p>
   </div>
 </div>
 
 <div class="step">
   <div class="step-num">4</div>
   <div class="step-body">
-    <h4>Reload your shell</h4>
-    <pre><code>source ~/.zshrc   # or: wtrl</code></pre>
-  </div>
-</div>
-
-<div class="step">
-  <div class="step-num">5</div>
-  <div class="step-body">
     <h4>Check status</h4>
-    <pre><code>wt status</code></pre>
+    <pre><code>source ~/.zshrc   # or: wtrl
+wt status</code></pre>
     <p>The collector starts automatically. Data appears within seconds.</p>
   </div>
 </div>
@@ -435,8 +524,8 @@
 
 <h3>What it does</h3>
 <ol style="margin:8px 0 8px 24px; color:var(--text2);">
-  <li>Checks prerequisites (macOS, Xcode CLI Tools, Python 3)</li>
-  <li>Offers to install Homebrew and Python if missing</li>
+  <li>Checks prerequisites (<a href="https://www.apple.com/macos/" target="_blank" rel="noopener">macOS</a>, <a href="https://developer.apple.com/xcode/" target="_blank" rel="noopener">Xcode CLI Tools</a>, <a href="https://www.python.org/" target="_blank" rel="noopener">Python 3</a>)</li>
+  <li>Offers to install <a href="https://brew.sh/" target="_blank" rel="noopener">Homebrew</a> and <a href="https://www.python.org/" target="_blank" rel="noopener">Python</a> if missing</li>
   <li>Copies project to <code>~/WorkTracker</code></li>
   <li>Creates directory structure (<code>data/</code>, <code>logs/</code>, <code>summaries/</code>)</li>
   <li>Sets up Python virtual environment + installs dependencies</li>
@@ -518,7 +607,8 @@
   <tr><th>Command</th><th>Alias</th><th>Description</th></tr>
   <tr><td><code>wt dash</code></td><td>&mdash;</td><td>Open terminal dashboard (curses UI, 2s refresh)</td></tr>
   <tr><td><code>wt web</code></td><td>&mdash;</td><td>Start web dashboard at <code>http://127.0.0.1:7880</code></td></tr>
-  <tr><td><code>wt menubar</code></td><td><code>wt mb</code> / <code>wtmb</code></td><td>Start macOS menubar widget (requires <code>wt web</code> running)</td></tr>
+  <tr><td><code>wt menubar</code></td><td><code>wt mb</code> / <code>wtmb</code></td><td>Start macOS menubar widget (auto-starts web dashboard)</td></tr>
+  <tr><td><code>wt docs</code></td><td><code>wt docu</code> / <code>wtdocs</code></td><td>Open documentation in browser</td></tr>
 </table>
 
 <h2 id="aliases">Shell Aliases</h2>
@@ -534,6 +624,7 @@
   <tr><td><code>wtw</code></td><td><code>wt weekly</code></td></tr>
   <tr><td><code>wtm</code></td><td><code>wt monthly</code></td></tr>
   <tr><td><code>wtmb</code></td><td><code>wt menubar</code></td></tr>
+  <tr><td><code>wtdocs</code></td><td><code>wt docs</code></td></tr>
   <tr><td><code>wtrl</code></td><td><code>exec $SHELL -l</code> (reload shell)</td></tr>
 </table>
 
@@ -683,13 +774,13 @@ default_project: "Other"</code></pre>
         <span style="color:var(--green)">[Collector]</span>  <span style="color:var(--text2)">every 10s</span>
                     <span style="color:var(--text2)">|</span>
                     <span style="color:var(--text2)">v</span>
-     <span style="color:var(--orange)">data/snapshots/YYYY-MM-DD.jsonl</span>
+     <span style="color:var(--acid)">data/snapshots/YYYY-MM-DD.jsonl</span>
                     <span style="color:var(--text2)">|</span>
                     <span style="color:var(--text2)">v</span>
-       <span style="color:var(--cyan)">[Aggregator]</span>  <span style="color:var(--text2)">daily / weekly / monthly</span>
+       <span style="color:var(--acid)">[Aggregator]</span>  <span style="color:var(--text2)">daily / weekly / monthly</span>
               <span style="color:var(--text2)">|              |</span>
               <span style="color:var(--text2)">v              v</span>
-  <span style="color:var(--orange)">data/sessions/</span>    <span style="color:var(--orange)">summaries/*.md</span>
+  <span style="color:var(--acid)">data/sessions/</span>    <span style="color:var(--acid)">summaries/*.md</span>
                            <span style="color:var(--text2)">|</span>
                            <span style="color:var(--text2)">v</span>
                   <span style="color:var(--purple)">[AI Summary]</span>  <span style="color:var(--text2)">via Cowork</span>
@@ -926,12 +1017,188 @@ python aggregator.py --mode monthly</code></pre>
 
 
 <!-- Footer -->
+<h1 id="optional">OPTIONAL</h1>
+<p>Level up your <strong>Work:Tracker</strong> output. Uncover unseen activity patterns &amp; time-wastings with the power of AI. Connect local LLMs of your choice &amp; improve your computer workflow in a new way.</p>
+
 <div class="footer">
   <p>WorkTracker v0.0.1 &mdash; made in Austria with <span style="color:var(--red)">&lt;3</span> by <a href="https://peab.at">peab.at</a></p>
 </div>
 
 </main>
 </div>
+
+<div id="copy-toast" class="copy-toast" role="status" aria-live="polite">Copied</div>
+
+<script>
+  const COPY_ICON = `
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+      <path fill="currentColor" d="M8 7a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2V7zm2-4h7a4 4 0 0 1 4 4v9a4 4 0 0 1-4 4h-7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zm-5 6h1v8a4 4 0 0 0 4 4h6v1a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V9z"/>
+    </svg>`;
+
+  const toast = document.getElementById('copy-toast');
+  let toastTimer = null;
+
+  function showToast(message, point) {
+    toast.textContent = message;
+    toast.classList.add('show');
+    if (point) {
+      const top = point.y + 20;
+      let left = point.x - toast.offsetWidth / 2;
+      const maxLeft = window.innerWidth - toast.offsetWidth - 12;
+      if (left > maxLeft) left = maxLeft;
+      if (left < 12) left = 12;
+      toast.style.top = `${top}px`;
+      toast.style.left = `${left}px`;
+    }
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 900);
+  }
+
+  function normalizeCopyText(text) {
+    const raw = text.trim();
+    if (!raw) return text;
+    if (/\s/.test(raw)) return text;
+    if (!raw.includes('/')) return text;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return text;
+    if (raw.startsWith('~/')) return raw;
+
+    const userHomeMatch = raw.match(/^\/Users\/[^/]+(\/.*)?$/);
+    if (userHomeMatch) {
+      const rest = raw.replace(/^\/Users\/[^/]+/, '');
+      return `~${rest || ''}`;
+    }
+
+    if (raw.startsWith('WorkTracker/')) return `~/${raw}`;
+    if (raw.startsWith('data/') || raw.startsWith('summaries/') || raw.startsWith('logs/') || raw.startsWith('daemon/')) {
+      return `~/WorkTracker/${raw}`;
+    }
+
+    return text;
+  }
+
+  async function copyText(text, point) {
+    const normalized = normalizeCopyText(text);
+    const isPath = normalized !== text && normalized.startsWith('~/');
+    const finalText = isPath ? normalized : normalized;
+    try {
+      await navigator.clipboard.writeText(finalText);
+      showToast('Copied', point);
+    } catch (err) {
+      const textarea = document.createElement('textarea');
+      textarea.value = finalText;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        showToast('Copied', point);
+      } catch (e) {
+        showToast('Copy failed', point);
+      }
+      document.body.removeChild(textarea);
+    }
+  }
+
+  function setupPreCopy() {
+    document.querySelectorAll('pre').forEach((pre) => {
+      const code = pre.querySelector('code');
+      if (!code) return;
+      const text = code.innerText;
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'copy-btn';
+      btn.setAttribute('aria-label', 'Copy code');
+      btn.innerHTML = COPY_ICON;
+
+      pre.appendChild(btn);
+
+      const doCopy = (e) => copyText(text, { x: e.clientX, y: e.clientY });
+
+      pre.addEventListener('click', (e) => {
+        const isButton = e.target.closest('button');
+        if (!isButton) doCopy(e);
+      });
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        doCopy(e);
+      });
+    });
+  }
+
+  function setupInlineCopy() {
+    document.querySelectorAll('code').forEach((code) => {
+      if (code.closest('pre')) return;
+      const text = code.textContent;
+      code.dataset.copyText = text;
+      code.classList.add('inline-code');
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'copy-inline-btn';
+      btn.setAttribute('aria-label', 'Copy');
+      btn.innerHTML = COPY_ICON;
+
+      code.appendChild(btn);
+
+      const doCopy = (e) => copyText(code.dataset.copyText || text, { x: e.clientX, y: e.clientY });
+
+      code.addEventListener('click', (e) => {
+        const isButton = e.target.closest('button');
+        if (isButton) {
+          e.stopPropagation();
+        }
+        doCopy(e);
+      });
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        doCopy(e);
+      });
+    });
+  }
+
+  function setupSidebarActive() {
+    const sidebarLinks = Array.from(document.querySelectorAll('.sidebar a[href^="#"]'));
+    const sections = sidebarLinks
+      .map((link) => document.querySelector(link.getAttribute('href')))
+      .filter(Boolean);
+
+    function setActive(id) {
+      sidebarLinks.forEach((link) => {
+        const isActive = link.getAttribute('href') === `#${id}`;
+        link.classList.toggle('active', isActive);
+      });
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (visible && visible.target.id) setActive(visible.target.id);
+      },
+      { rootMargin: '-20% 0px -60% 0px', threshold: [0.1, 0.25, 0.5] }
+    );
+
+    sections.forEach((section) => observer.observe(section));
+
+    sidebarLinks.forEach((link) => {
+      link.addEventListener('click', () => {
+        const id = link.getAttribute('href').slice(1);
+        if (id) setActive(id);
+      });
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setupPreCopy();
+    setupInlineCopy();
+    setupSidebarActive();
+  });
+</script>
 
 </body>
 </html>
