@@ -1,0 +1,611 @@
+#!/bin/bash
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# wt — WorkTracker CLI
+# Colorful, structured command-line interface for WorkTracker
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+set -euo pipefail
+
+# ── Paths ────────────────────────────────────────────────────────────────────
+BASE="$HOME/WorkTracker"
+DAEMON="$BASE/daemon"
+VENV="$DAEMON/.venv/bin/python"
+LOG_DIR="$BASE/logs"
+SUMMARIES="$BASE/summaries"
+
+LABEL_COL="com.peab.worktracker.collector"
+LABEL_AGG_D="com.peab.worktracker.aggregator.daily"
+LABEL_AGG_W="com.peab.worktracker.aggregator.weekly"
+LABEL_AGG_M="com.peab.worktracker.aggregator.monthly"
+PLIST_COL="$HOME/Library/LaunchAgents/$LABEL_COL.plist"
+
+# ── Colors ───────────────────────────────────────────────────────────────────
+RST='\033[0m'
+BOLD='\033[1m'
+DIM='\033[2m'
+
+RED='\033[38;5;203m'
+GREEN='\033[38;5;114m'
+YELLOW='\033[38;5;221m'
+BLUE='\033[38;5;111m'
+CYAN='\033[38;5;117m'
+MAGENTA='\033[38;5;176m'
+ORANGE='\033[38;5;215m'
+WHITE='\033[38;5;252m'
+GRAY='\033[38;5;240m'
+GRAY_L='\033[38;5;245m'
+
+BG_GREEN='\033[48;5;22m'
+BG_RED='\033[48;5;52m'
+BG_BLUE='\033[48;5;17m'
+BG_YELLOW='\033[48;5;58m'
+
+# ── Symbols ──────────────────────────────────────────────────────────────────
+SYM_OK="●"
+SYM_WARN="◆"
+SYM_ERR="○"
+SYM_ARROW="▸"
+SYM_CHECK="✓"
+SYM_CROSS="✗"
+SYM_LINE="─"
+SYM_DOUBLE="━"
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+line() {
+    local char="${1:-$SYM_LINE}"
+    local color="${2:-$GRAY}"
+    local cols=$(tput cols 2>/dev/null || echo 80)
+    printf "${color}"
+    printf '%*s' "$cols" '' | tr ' ' "$char"
+    printf "${RST}\n"
+}
+
+header() {
+    local title="$1"
+    echo ""
+    line "$SYM_DOUBLE" "$CYAN"
+    printf "  ${CYAN}${BOLD}%s${RST}" "$title"
+    printf "${GRAY_L}  %s${RST}\n" "$(date '+%Y-%m-%d %H:%M:%S')"
+    line "$SYM_DOUBLE" "$CYAN"
+}
+
+section() {
+    echo ""
+    printf "  ${CYAN}${BOLD}%s${RST}\n" "$1"
+    printf "  ${GRAY}%s${RST}\n" "$(printf '%*s' ${#1} '' | tr ' ' "$SYM_LINE")"
+}
+
+badge_ok()   { printf "${BG_GREEN}${GREEN}${BOLD} %s ${RST}" "$1"; }
+badge_warn() { printf "${BG_YELLOW}${YELLOW}${BOLD} %s ${RST}" "$1"; }
+badge_err()  { printf "${BG_RED}${RED}${BOLD} %s ${RST}" "$1"; }
+badge_info() { printf "${BG_BLUE}${BLUE}${BOLD} %s ${RST}" "$1"; }
+
+msg_ok()   { printf "  ${GREEN}${SYM_CHECK}${RST}  %b\n" "$1"; }
+msg_err()  { printf "  ${RED}${SYM_CROSS}${RST}  %b\n" "$1"; }
+msg_info() { printf "  ${BLUE}${SYM_ARROW}${RST}  %b\n" "$1"; }
+msg_warn() { printf "  ${YELLOW}${SYM_WARN}${RST}  %b\n" "$1"; }
+
+# Format ps etime (e.g. "25:08", "1:05:08", "2-03:12:45") → human readable
+fmt_uptime() {
+    local raw="$1"
+    [[ -z "$raw" ]] && return
+
+    local days=0 hours=0 mins=0 secs=0
+
+    if [[ "$raw" == *-* ]]; then
+        # dd-hh:mm:ss
+        days="${raw%%-*}"
+        raw="${raw#*-}"
+    fi
+
+    IFS=':' read -ra parts <<< "$raw"
+    local n=${#parts[@]}
+    if (( n == 3 )); then
+        hours=$((10#${parts[0]}))
+        mins=$((10#${parts[1]}))
+        secs=$((10#${parts[2]}))
+    elif (( n == 2 )); then
+        mins=$((10#${parts[0]}))
+        secs=$((10#${parts[1]}))
+    fi
+
+    local result=""
+    if (( days > 0 )); then
+        result="${days}d ${hours}h ${mins}m"
+    elif (( hours > 0 )); then
+        result="${hours}h ${mins}m"
+    elif (( mins > 0 )); then
+        result="${mins}m ${secs}s"
+    else
+        result="${secs}s"
+    fi
+    echo "$result"
+}
+
+# Service status check
+svc_status() {
+    local label="$1"
+    local info
+    info=$(launchctl list "$label" 2>/dev/null) || { echo "unloaded|0|0|"; return; }
+
+    local pid
+    pid=$(echo "$info" | grep '"PID"' | awk '{print $NF}' | tr -d '";')
+    local exit_code
+    exit_code=$(echo "$info" | grep '"LastExitStatus"' | awk '{print $NF}' | tr -d '";')
+
+    if [[ -n "$pid" && "$pid" =~ ^[0-9]+$ ]]; then
+        local raw_uptime
+        raw_uptime=$(ps -p "$pid" -o etime= 2>/dev/null | xargs)
+        local uptime
+        uptime=$(fmt_uptime "$raw_uptime")
+        echo "running|$pid|${exit_code:-0}|${uptime}"
+    else
+        echo "loaded|0|${exit_code:-0}|"
+    fi
+}
+
+# Formatted service line
+print_svc() {
+    local name="$1"
+    local label="$2"
+    local schedule="${3:-}"
+
+    local result
+    result=$(svc_status "$label")
+    local state pid exit_code uptime
+    IFS='|' read -r state pid exit_code uptime <<< "$result"
+
+    printf "  "
+    case "$state" in
+        running)
+            printf "${GREEN}${SYM_OK}${RST}  "
+            printf "${WHITE}${BOLD}%-16s${RST}" "$name"
+            printf "${GREEN}running${RST}  "
+            printf "${GRAY_L}PID %-8s${RST}" "$pid"
+            if [[ -n "$uptime" ]]; then
+                printf "${GRAY}up ${WHITE}%s${RST}" "$uptime"
+            fi
+            ;;
+        loaded)
+            printf "${BLUE}${SYM_WARN}${RST}  "
+            printf "${WHITE}${BOLD}%-16s${RST}" "$name"
+            printf "${BLUE}ready${RST}    "
+            if [[ -n "$schedule" ]]; then
+                printf "${GRAY_L}%-14s${RST}" "$schedule"
+            fi
+            if [[ "$exit_code" != "0" ]]; then
+                printf "${YELLOW}exit=${exit_code}${RST}"
+            else
+                printf "${GREEN}exit=0${RST}"
+            fi
+            ;;
+        unloaded)
+            printf "${RED}${SYM_ERR}${RST}  "
+            printf "${WHITE}%-16s${RST}" "$name"
+            printf "${RED}not loaded${RST}"
+            ;;
+    esac
+    echo ""
+}
+
+fmt_dur() {
+    local sec=$1
+    if (( sec < 60 )); then
+        echo "${sec}s"
+    elif (( sec < 3600 )); then
+        echo "$(( sec / 60 ))m"
+    else
+        printf "%dh %02dm" $((sec / 3600)) $(( (sec % 3600) / 60 ))
+    fi
+}
+
+latest_report() {
+    local type="$1"
+    local dir="$SUMMARIES/$type"
+    if [[ -d "$dir" ]]; then
+        local latest
+        latest=$(ls -t "$dir"/*.md 2>/dev/null | head -1)
+        if [[ -n "$latest" ]]; then
+            local name size
+            name=$(basename "$latest")
+            size=$(stat -f%z "$latest" 2>/dev/null || echo 0)
+            echo "$name|$size"
+            return
+        fi
+    fi
+    echo "|0"
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Commands
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+cmd_status() {
+    header "WORKTRACKER STATUS"
+
+    section "Services"
+    print_svc "Collector"    "$LABEL_COL"
+    print_svc "Agg Daily"    "$LABEL_AGG_D"  "daily 22:00"
+    print_svc "Agg Weekly"   "$LABEL_AGG_W"  "Sun 22:30"
+    print_svc "Agg Monthly"  "$LABEL_AGG_M"  "1st of month"
+
+    local today
+    today=$(date '+%Y-%m-%d')
+
+    section "Data ($today)"
+
+    local snap_file="$BASE/data/snapshots/${today}.jsonl"
+    local sess_file="$BASE/data/sessions/${today}.json"
+
+    if [[ -f "$snap_file" ]]; then
+        local snap_count
+        snap_count=$(wc -l < "$snap_file" | tr -d ' ')
+        printf "  ${GRAY_L}Snapshots:${RST}    ${WHITE}${BOLD}%s${RST}\n" "$snap_count"
+    else
+        printf "  ${GRAY_L}Snapshots:${RST}    ${GRAY}none${RST}\n"
+    fi
+
+    if [[ -f "$sess_file" ]]; then
+        local sess_count
+        sess_count=$("$VENV" -c "import json; print(len(json.load(open('$sess_file'))))" 2>/dev/null || echo "0")
+        printf "  ${GRAY_L}Sessions:${RST}     ${WHITE}${BOLD}%s${RST}\n" "$sess_count"
+    else
+        printf "  ${GRAY_L}Sessions:${RST}     ${GRAY}none${RST}\n"
+    fi
+
+    local data_size
+    data_size=$(du -sh "$BASE/data" 2>/dev/null | awk '{print $1}')
+    local log_size
+    log_size=$(du -sh "$LOG_DIR" 2>/dev/null | awk '{print $1}')
+    printf "  ${GRAY_L}Data:${RST}         ${WHITE}%s${RST}    " "$data_size"
+    printf "${GRAY_L}Logs:${RST} ${WHITE}%s${RST}\n" "$log_size"
+
+    section "Reports"
+
+    for type in daily weekly monthly; do
+        local result name size
+        result=$(latest_report "$type")
+        IFS='|' read -r name size <<< "$result"
+
+        local type_label
+        type_label=$(echo "$type" | awk '{print toupper(substr($0,1,1)) substr($0,2)}')
+        printf "  ${GRAY_L}%-10s${RST}" "${type_label}:"
+        if [[ -n "$name" ]]; then
+            local kb
+            kb=$(echo "scale=1; $size / 1024" | bc 2>/dev/null || echo "?")
+            printf "${WHITE}%s${RST}  ${GRAY}(%s KB)${RST}\n" "$name" "$kb"
+        else
+            printf "${GRAY}—${RST}\n"
+        fi
+    done
+
+    section "Recent Logs"
+
+    for logname in collector aggregator; do
+        local logfile="$LOG_DIR/${logname}.log"
+        if [[ -f "$logfile" ]]; then
+            printf "  ${GRAY_L}${logname}:${RST}\n"
+            tail -2 "$logfile" 2>/dev/null | while IFS= read -r logline; do
+                if echo "$logline" | grep -q '\[ERROR\]'; then
+                    printf "    ${RED}%s${RST}\n" "$logline"
+                elif echo "$logline" | grep -q '\[WARNING\]'; then
+                    printf "    ${YELLOW}%s${RST}\n" "$logline"
+                else
+                    printf "    ${GRAY}%s${RST}\n" "$logline"
+                fi
+            done
+        fi
+    done
+
+    echo ""
+}
+
+cmd_restart() {
+    header "COLLECTOR RESTART"
+
+    msg_info "Stopping collector..."
+    launchctl stop "$LABEL_COL" 2>/dev/null || true
+    launchctl unload "$PLIST_COL" 2>/dev/null || true
+    sleep 1
+
+    msg_info "Starting collector..."
+    launchctl load "$PLIST_COL" 2>/dev/null
+    launchctl start "$LABEL_COL"
+    sleep 1
+
+    local result
+    result=$(svc_status "$LABEL_COL")
+    local state pid
+    IFS='|' read -r state pid _ <<< "$result"
+
+    if [[ "$state" == "running" ]]; then
+        msg_ok "Collector running — PID ${BOLD}${pid}${RST}"
+    elif [[ "$state" == "loaded" ]]; then
+        msg_warn "Collector loaded but no PID"
+        msg_info "Check: ${DIM}$LOG_DIR/collector-stderr.log${RST}"
+    else
+        msg_err "Collector failed to start"
+        msg_info "Check: ${DIM}$LOG_DIR/collector-stderr.log${RST}"
+        echo ""
+        printf "  ${GRAY_L}Recent errors:${RST}\n"
+        tail -3 "$LOG_DIR/collector-stderr.log" 2>/dev/null | while IFS= read -r l; do
+            printf "    ${RED}%s${RST}\n" "$l"
+        done
+        exit 1
+    fi
+    echo ""
+}
+
+cmd_agg() {
+    local mode="$1"
+    local mode_upper
+    mode_upper=$(echo "$mode" | tr '[:lower:]' '[:upper:]')
+
+    case "$mode" in
+        daily)   local label_name="Daily";;
+        weekly)  local label_name="Weekly";;
+        monthly) local label_name="Monthly";;
+    esac
+
+    header "AGGREGATOR $mode_upper"
+
+    msg_info "Running ${label_name} aggregation..."
+
+    local start_time
+    start_time=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
+
+    "$VENV" "$DAEMON/aggregator.py" --mode "$mode" 2>&1 | while IFS= read -r agg_line; do
+        if echo "$agg_line" | grep -q '^✓'; then
+            printf "    ${GREEN}${BOLD}%s${RST}\n" "$agg_line"
+        elif echo "$agg_line" | grep -q '\[ERROR\]'; then
+            printf "    ${RED}%s${RST}\n" "$agg_line"
+        elif echo "$agg_line" | grep -q '\[WARNING\]'; then
+            printf "    ${YELLOW}%s${RST}\n" "$agg_line"
+        elif echo "$agg_line" | grep -q '\[INFO\]'; then
+            printf "    ${GRAY_L}%s${RST}\n" "$agg_line"
+        else
+            printf "    ${GRAY}%s${RST}\n" "$agg_line"
+        fi
+    done
+
+    local exit_code=${PIPESTATUS[0]}
+    local end_time
+    end_time=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
+    local elapsed_ms
+    elapsed_ms=$(perl -e "printf '%d', ($end_time - $start_time) * 1000")
+
+    echo ""
+    if [[ "$exit_code" -eq 0 ]]; then
+        msg_ok "${label_name} aggregation complete $(badge_ok "${elapsed_ms}ms")"
+
+        local result name size
+        result=$(latest_report "$mode")
+        IFS='|' read -r name size <<< "$result"
+        if [[ -n "$name" ]]; then
+            local kb
+            kb=$(echo "scale=1; $size / 1024" | bc 2>/dev/null || echo "?")
+            msg_info "Report: ${WHITE}${BOLD}$name${RST} ${GRAY}(${kb} KB)${RST}"
+        fi
+    else
+        msg_err "${label_name} aggregation failed $(badge_err "exit=$exit_code")"
+        msg_info "Check: ${DIM}$LOG_DIR/aggregator.log${RST}"
+    fi
+    echo ""
+}
+
+cmd_dashboard() {
+    exec "$VENV" "$DAEMON/dashboard.py"
+}
+
+cmd_web() {
+    header "WEB DASHBOARD"
+    msg_info "Starting on ${CYAN}${BOLD}http://127.0.0.1:7880${RST}"
+    msg_info "Press ${WHITE}${BOLD}Ctrl+C${RST} to stop"
+    line "$SYM_LINE" "$GRAY"
+    echo ""
+    "$VENV" "$DAEMON/web_dashboard.py" &
+    local _srv_pid=$!
+    # Wait for server to be ready, then open browser
+    for _ in 1 2 3 4 5 6; do
+        sleep 0.5
+        if curl -s --max-time 1 http://127.0.0.1:7880 >/dev/null 2>&1; then
+            open http://127.0.0.1:7880
+            break
+        fi
+    done
+    trap 'kill "$_srv_pid" 2>/dev/null; exit 0' INT
+    wait "$_srv_pid"
+}
+
+cmd_menubar() {
+    header "MENUBAR WIDGET"
+
+    # Ensure web dashboard is running on port 7880
+    if ! curl -s --max-time 1 http://127.0.0.1:7880 >/dev/null 2>&1; then
+        msg_info "Web dashboard not running — starting in background..."
+        "$VENV" "$DAEMON/web_dashboard.py" &
+        _web_pid=$!
+        # Wait briefly for it to come up
+        for _ in 1 2 3 4 5; do
+            sleep 0.5
+            if curl -s --max-time 1 http://127.0.0.1:7880 >/dev/null 2>&1; then
+                break
+            fi
+        done
+        if curl -s --max-time 1 http://127.0.0.1:7880 >/dev/null 2>&1; then
+            msg_ok "Web dashboard started (PID ${_web_pid})"
+        else
+            msg_warn "Web dashboard may not be ready yet"
+        fi
+    else
+        msg_ok "Web dashboard already running on port 7880"
+    fi
+
+    msg_info "Starting menubar widget..."
+    msg_info "Press ${WHITE}${BOLD}Ctrl+C${RST} to stop"
+    line "$SYM_LINE" "$GRAY"
+    echo ""
+    trap 'echo ""; msg_info "Menubar widget stopped"; [[ -n "${_web_pid:-}" ]] && kill "$_web_pid" 2>/dev/null; exit 0' INT
+    "$VENV" "$DAEMON/menubar.py"
+}
+
+cmd_tail() {
+    header "LOG TAIL"
+    msg_info "Following collector logs... ${GRAY}(Ctrl+C to stop)${RST}"
+    line "$SYM_LINE" "$GRAY"
+    echo ""
+    tail -f "$LOG_DIR/collector.log" "$LOG_DIR/collector-stderr.log" 2>/dev/null
+}
+
+cmd_help() {
+    printf '\033[?25l'  # hide cursor
+    printf '\033[2J\033[H'  # clear screen
+
+    # ── Typewriter animation: WORK-TRACKER ──
+    local title="WORK-TRACKER"
+    local dash_pos=4  # position of the '-' in the title
+
+    printf "\n  "
+    for (( i=0; i<${#title}; i++ )); do
+        local ch="${title:$i:1}"
+        if [[ "$ch" == "-" ]]; then
+            printf "${RED}${BOLD}%s${RST}" "$ch"
+        else
+            printf "${CYAN}${BOLD}%s${RST}" "$ch"
+        fi
+        sleep 0.06
+    done
+    printf "  ${GRAY}for mac${RST}"
+    sleep 0.15
+    echo ""
+
+    printf "  ${GRAY_L}made in Austria with ${RED}<3${GRAY_L} by ${CYAN}${BOLD}peab.at${RST}\n"
+    echo ""
+    printf "  ${WHITE}${BOLD}Usage:${RST}  ${CYAN}wt${RST} ${WHITE}<command>${RST}\n"
+    echo ""
+
+    printf "  ${CYAN}${BOLD}Overview${RST}\n"
+    printf "    ${WHITE}${BOLD}status${RST}       ${GRAY_L}Show services, data & reports${RST}        ${ORANGE}wts${RST}\n"
+    printf "    ${WHITE}${BOLD}tail${RST}         ${GRAY_L}Follow collector logs live${RST}           ${ORANGE}wtl${RST}\n"
+    echo ""
+
+    printf "  ${CYAN}${BOLD}Collector${RST}\n"
+    printf "    ${WHITE}${BOLD}restart${RST}      ${GRAY_L}Restart collector daemon${RST}             ${ORANGE}wtr${RST}\n"
+    printf "    ${WHITE}${BOLD}start${RST}        ${GRAY_L}Start collector${RST}\n"
+    printf "    ${WHITE}${BOLD}stop${RST}         ${GRAY_L}Stop collector${RST}\n"
+    echo ""
+
+    printf "  ${CYAN}${BOLD}Aggregator${RST}\n"
+    printf "    ${WHITE}${BOLD}daily${RST}        ${GRAY_L}Run daily aggregation${RST}                ${ORANGE}wtd${RST}\n"
+    printf "    ${WHITE}${BOLD}weekly${RST}       ${GRAY_L}Run weekly aggregation${RST}               ${ORANGE}wtw${RST}\n"
+    printf "    ${WHITE}${BOLD}monthly${RST}      ${GRAY_L}Run monthly aggregation${RST}              ${ORANGE}wtm${RST}\n"
+    echo ""
+
+    printf "  ${CYAN}${BOLD}Dashboard${RST}\n"
+    printf "    ${WHITE}${BOLD}dash${RST}         ${GRAY_L}Open terminal dashboard${RST}\n"
+    printf "    ${WHITE}${BOLD}web${RST}          ${GRAY_L}Start web dashboard (port 7880)${RST}\n"
+    printf "    ${WHITE}${BOLD}menubar${RST}      ${GRAY_L}Start macOS menubar widget${RST}              ${ORANGE}wtmb${RST}\n"
+    printf "    ${WHITE}${BOLD}docs${RST}         ${GRAY_L}Open documentation in browser${RST}           ${ORANGE}wtdocs${RST}\n"
+    echo ""
+
+    printf "  ${GRAY_L}wtrl${RST} ${GRAY}= reload shell (activate aliases)${RST}\n"
+    echo ""
+
+    # ── Blinkender Dash: rot ↔ cyan im Sekundentakt ──
+    trap 'printf "\033[?25h\033[0m"; stty echo 2>/dev/null; exit 0' INT
+    stty -echo 2>/dev/null
+
+    local dash_col=$(( 2 + dash_pos ))  # column of '-' in the title line (row 1)
+    local colors=("${RED}" "${CYAN}")
+    local i=0
+
+    while true; do
+        local c="${colors[$i]}"
+        tput cup 1 $dash_col; printf "${c}${BOLD}-${RST}"
+        i=$(( (i + 1) % 2 ))
+
+        if read -t 2.5 -n 1 -s 2>/dev/null; then
+            break
+        fi
+    done
+
+    stty echo 2>/dev/null
+    printf '\033[?25h\033[0m'
+    echo ""
+}
+
+cmd_start() {
+    header "COLLECTOR START"
+    msg_info "Loading and starting collector..."
+    launchctl load "$PLIST_COL" 2>/dev/null || true
+    launchctl start "$LABEL_COL"
+    sleep 1
+
+    local result
+    result=$(svc_status "$LABEL_COL")
+    local state pid
+    IFS='|' read -r state pid _ <<< "$result"
+
+    if [[ "$state" == "running" ]]; then
+        msg_ok "Collector running — PID ${BOLD}${pid}${RST}"
+    else
+        msg_warn "Collector loaded, waiting to start"
+    fi
+    echo ""
+}
+
+cmd_stop() {
+    header "COLLECTOR STOP"
+    msg_info "Stopping collector..."
+    launchctl stop "$LABEL_COL" 2>/dev/null || true
+    launchctl unload "$PLIST_COL" 2>/dev/null || true
+    msg_ok "Collector stopped"
+    echo ""
+}
+
+cmd_docs() {
+    local docs_file="$BASE/docs/index.html"
+    if [[ -f "$docs_file" ]]; then
+        msg_info "Opening documentation..."
+        open "$docs_file"
+    else
+        msg_err "Documentation not found: ${WHITE}$docs_file${RST}"
+    fi
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Main
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Timing (ms precision via perl, always available on macOS)
+_wt_t0=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
+_wt_timed=true
+
+case "${1:-help}" in
+    s|status)     cmd_status;;
+    r|restart)    cmd_restart;;
+    start)        cmd_start;;
+    stop)         cmd_stop;;
+    d|daily)      cmd_agg daily;;
+    w|weekly)     cmd_agg weekly;;
+    m|monthly)    cmd_agg monthly;;
+    dash)         _wt_timed=false; cmd_dashboard;;
+    web)          _wt_timed=false; cmd_web;;
+    menubar|mb)   _wt_timed=false; cmd_menubar;;
+    docs|docu|documentation)  cmd_docs;;
+    tail|log)     _wt_timed=false; cmd_tail;;
+    h|help|-h|--help)  _wt_timed=false; cmd_help;;
+    *)
+        _wt_timed=false
+        printf "${RED}Unknown command: ${WHITE}${BOLD}%s${RST}\n" "$1"
+        printf "${GRAY_L}Run ${WHITE}wt help${GRAY_L} for usage info${RST}\n"
+        exit 1
+        ;;
+esac
+
+if [[ "$_wt_timed" == "true" ]]; then
+    _wt_t1=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
+    _wt_elapsed=$(perl -e "printf '%.3f', $_wt_t1 - $_wt_t0")
+    printf "  ${GRAY}${DIM}done in ${_wt_elapsed}s${RST}\n"
+fi
