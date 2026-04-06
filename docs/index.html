@@ -331,6 +331,8 @@
     border-radius: 8px;
     padding: 16px 20px;
     margin: 12px 0;
+    white-space: pre;
+    overflow-x: auto;
   }
   .tree .dir { color: var(--acid); font-weight: 600; }
   .tree .file { color: var(--text); }
@@ -369,6 +371,42 @@
   }
   .footer a { color: var(--acid); text-decoration: none; opacity: 0.86; }
   .footer a:hover { opacity: 1; }
+
+  .gradient-box {
+    position: relative;
+    border-radius: 12px;
+    padding: 2px;
+    margin: 24px 0;
+    background: linear-gradient(135deg, #ff6b9d, #c084fc, #67c8ff, #22d3c4);
+    background-size: 300% 300%;
+    animation: gradientShift 6s ease infinite;
+  }
+  .gradient-box-inner {
+    background: var(--bg2);
+    border-radius: 10px;
+    padding: 18px 22px;
+  }
+  .gradient-box-inner .label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    background: linear-gradient(90deg, #ff6b9d, #c084fc, #67c8ff, #22d3c4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+  .gradient-box-inner p {
+    color: var(--text);
+    font-size: 14px;
+    margin: 0;
+  }
+  @keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
 </style>
 </head>
 <body>
@@ -395,6 +433,7 @@
   <a href="index.html">About</a>
   <h3>Getting Started</h3>
   <a href="#quickstart">Quick Start</a>
+  <a href="#optional">Optional Power Up</a>
   <a href="#requirements">Requirements</a>
   <a href="#install">Installation</a>
   <a href="#permissions">Permissions</a>
@@ -425,8 +464,6 @@
   <a href="#pattern-learning">Pattern Learning</a>
   <a href="#special-features">Special Features</a>
 
-  <h3>OPTIONAL POWER UP</h3>
-  <a href="#optional">Empower with local AI</a>
 
 </aside>
 
@@ -491,6 +528,14 @@ wt status</code></pre>
   </div>
 </div>
 
+
+<div id="optional" class="gradient-box">
+  <div class="gradient-box-inner">
+    <div class="label">Optional Power Up</div>
+    <p>Level up your <strong>Work:Tracker</strong> output. Uncover unseen activity patterns &amp; time-wastings with the power of AI. Connect local LLMs of your choice &amp; improve your computer workflow in a new way.</p>
+    <p style="margin-top:10px;color:var(--text2);font-size:13px;">Prompts for scheduled Claude Cowork tasks to give deep workflow insights will come in <b>v0.0.2</b>.</p>
+  </div>
+</div>
 
 <!-- ════════════════════════════════════════════════════════════════ -->
 <h1 id="requirements">Requirements</h1>
@@ -1015,10 +1060,6 @@ python aggregator.py --mode monthly</code></pre>
 <h2>Media Detection</h2>
 <p>Detects playback from Spotify, Apple Music, VLC, IINA, Podcasts (native apps) and YouTube, Netflix, Twitch, SoundCloud (browser tabs via title pattern matching). Parallel media activity is tracked alongside work sessions.</p>
 
-
-<!-- Footer -->
-<h1 id="optional">OPTIONAL</h1>
-<p>Level up your <strong>Work:Tracker</strong> output. Uncover unseen activity patterns &amp; time-wastings with the power of AI. Connect local LLMs of your choice &amp; improve your computer workflow in a new way.</p>
 
 <div class="footer">
   <p>WorkTracker v0.0.1 &mdash; made in Austria with <span style="color:var(--red)">&lt;3</span> by <a href="https://peab.at">peab.at</a></p>
