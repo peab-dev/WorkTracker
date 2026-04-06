@@ -1,80 +1,68 @@
-# WorkTracker
+# WORK:TRACKER
 
-**Automatic activity tracker for macOS** — captures what you work on every 10 seconds, aggregates it into sessions, and generates daily/weekly/monthly summaries with AI-powered analysis.
+Automatic activity tracker for macOS — captures what you work on every 10 seconds, aggregates it into sessions, and generates daily/weekly/monthly summaries with AI-powered analysis.
 
 Built for macOS (Apple Silicon), designed as a fully local, private productivity tool.
 
-## Architecture
+![Version](https://img.shields.io/badge/version-0.0.1-brightgreen)
+![Status](https://img.shields.io/badge/status-public%20beta-blue)
+![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)
+![License](https://img.shields.io/badge/license-open%20source-green)
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  LAYER 1 — DATA COLLECTION (Python daemon, every 10s)   │
-│  collector.py → JSONL files (1 file per day)            │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│  LAYER 2 — AGGREGATION (Python + Pandas, via launchd)   │
-│  aggregator.py → Session JSON + Markdown export         │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│  LAYER 3 — AI ANALYSIS (Claude Cowork, scheduled tasks) │
-│  Reads Markdown → Generates summaries + suggestions     │
-└─────────────────────────────────────────────────────────┘
-```
+`Runs Locally` · `Open Source` · `No Blackbox` · `App Tracking` · `Flow Insights`
 
-## What It Tracks
+---
 
-- **Active application** and window title
-- **Project detection** via configurable pattern matching
-- **Input activity** (keystroke/mouse click counts — no content)
-- **Clipboard content** (optional)
-- **Media playback** state
-- **All open windows** (optional)
-- **Idle detection** with configurable threshold
+## Quick Start
 
-## Project Structure
+### 1. Install
 
-```
-~/WorkTracker/
-├── daemon/
-│   ├── collector.py          # Data collection daemon
-│   ├── aggregator.py         # Session aggregation
-│   ├── config.yaml           # Main configuration
-│   ├── project_patterns.yaml # Project detection rules
-│   └── requirements.txt
-├── launchd/                  # macOS launchd service configs
-├── data/
-│   ├── snapshots/            # Raw JSONL (1 file per day)
-│   └── sessions/             # Aggregated sessions
-├── summaries/
-│   ├── daily/
-│   ├── weekly/
-│   └── monthly/
-└── logs/
+```bash
+git clone https://github.com/peab-dev/WorkTracker.git
+cd WorkTracker
+./install.sh
 ```
 
-## Tech Stack
+### 2. Grant Permissions
 
-- **Python 3.11+** — collector & aggregator
-- **Pandas** — data aggregation
-- **pyobjc** — macOS system APIs (window info, media state)
-- **launchd** — daemon scheduling
-- **Claude Cowork** — AI-powered analysis layer
+Grant permissions in **macOS Settings → Privacy & Security → Accessibility + Screen Recording** to Terminal.
 
-## Setup
+### 3. Run
 
-> ⚠️ This project is in active development. Full setup instructions coming soon.
+```bash
+source ~/.zshrc   # or: wtrl
+wt status
+```
 
-1. Clone the repo
-2. Install dependencies: `pip install -r daemon/requirements.txt`
-3. Configure `daemon/config.yaml` and `daemon/project_patterns.yaml`
-4. Install launchd services from `launchd/`
+---
 
-## Privacy
+## Features
 
-All data stays **100% local**. No cloud services, no telemetry, no external APIs (except optional AI analysis via Claude). Your activity data never leaves your machine.
+### Core
+- macOS app + activity tracking
+- Sessions, intensity, and reports
+- Daily / weekly / monthly aggregation
 
-## License
+### Local-First
+- Runs entirely on your Mac
+- No black box, no fees
+- Your data stays local
 
-MIT
+### Optional: AI Power Up
+Level up your Work:Tracker output. Uncover unseen activity patterns & time-wastings with the power of AI. Connect local LLMs of your choice & improve your workflow.
+
+---
+
+## Useful Commands
+
+| Command      | Description                          |
+|--------------|--------------------------------------|
+| `wt status`  | Show service status and latest data  |
+| `wt daily`   | Run daily aggregation now            |
+| `wt web`     | Start the local web dashboard        |
+
+---
+
+## Made in Austria
+
+WorkTracker v0.0.1 — made with <3 by [peab.at](https://peab.at)
