@@ -1,0 +1,15 @@
+# Python
+daemon/.venv/
+__pycache__/
+*.pyc
+
+# Daten (privat, pro User)
+data/
+logs/
+summaries/
+
+# Gelernte Patterns (pro User)
+daemon/learned_patterns.yaml
+
+# macOS
+.DS_Store

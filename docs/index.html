@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorkTracker Docs</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #1c2128;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text2: #8b949e;
+    --cyan: #58a6ff;
+    --green: #7ee787;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --white: #f0f6fc;
+    --code-bg: #0d1117;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 16px;
+  }
+
+  /* ── Top Nav ── */
+  .topnav {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: 64px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 24px;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+  .topnav .logo {
+    font-size: 18px; font-weight: 700;
+    color: var(--cyan);
+    letter-spacing: 1px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .topnav .logo .dot { color: var(--red); }
+  .topnav .version {
+    font-size: 11px; font-weight: 400;
+    background: var(--bg3); color: var(--text2);
+    padding: 2px 8px; border-radius: 10px;
+    margin-left: 6px;
+  }
+  .topnav-links {
+    margin-left: auto; display: flex; gap: 24px;
+  }
+  .topnav-links a {
+    color: var(--text2); text-decoration: none; font-size: 14px;
+    transition: color .15s;
+  }
+  .topnav-links a:hover { color: var(--white); }
+
+  /* ── Layout ── */
+  .wrapper {
+    display: flex; margin-top: 64px;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    position: fixed; top: 64px; left: 0; bottom: 0;
+    width: 260px;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 20px 0;
+  }
+  .sidebar h3 {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--text2); padding: 8px 20px 4px;
+  }
+  .sidebar a {
+    display: block; padding: 6px 20px;
+    color: var(--text2); text-decoration: none;
+    font-size: 14px; transition: all .12s;
+    border-left: 3px solid transparent;
+  }
+  .sidebar a:hover {
+    color: var(--white); background: var(--bg3);
+    border-left-color: var(--cyan);
+  }
+
+  /* ── Main Content ── */
+  .content {
+    margin-left: 260px;
+    padding: 40px 48px 80px;
+    max-width: 900px;
+    min-height: 100vh;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    text-align: center;
+    padding: 60px 0 40px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+  .hero-logo {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 32px; font-weight: 700;
+    color: var(--cyan);
+    letter-spacing: 2px;
+  }
+  .hero-logo .colon { color: var(--red); }
+  .hero p {
+    color: var(--text2); font-size: 18px;
+    margin-top: 12px;
+  }
+  .hero .badges {
+    margin-top: 20px; display: flex;
+    justify-content: center; gap: 12px; flex-wrap: wrap;
+  }
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 14px;
+    font-size: 12px; font-weight: 600;
+    border: 1px solid;
+  }
+  .badge-green { color: var(--green); border-color: #23492a; background: #0d1f12; }
+  .badge-cyan { color: var(--cyan); border-color: #1a3a5c; background: #0d1926; }
+  .badge-purple { color: var(--purple); border-color: #3b2466; background: #1a0d2e; }
+  .badge-orange { color: var(--orange); border-color: #5c3d0d; background: #261a06; }
+
+  /* ── Typography ── */
+  h1 {
+    font-size: 28px; font-weight: 700;
+    color: var(--white);
+    margin: 48px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  h1:first-of-type { margin-top: 0; }
+
+  h2 {
+    font-size: 20px; font-weight: 600;
+    color: var(--white); margin: 32px 0 12px;
+  }
+
+  h3 {
+    font-size: 16px; font-weight: 600;
+    color: var(--cyan); margin: 24px 0 8px;
+  }
+
+  p { margin: 8px 0; }
+
+  a { color: var(--cyan); }
+
+  /* ── Code ── */
+  code {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 13px;
+    background: var(--bg3);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--orange);
+  }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    margin: 12px 0 16px;
+    line-height: 1.5;
+  }
+  pre code {
+    background: none; padding: 0;
+    color: var(--text); font-size: 13px;
+  }
+
+  /* ── Tables ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 20px;
+    font-size: 14px;
+  }
+  th {
+    text-align: left; padding: 10px 14px;
+    background: var(--bg3); color: var(--white);
+    font-weight: 600; font-size: 12px;
+    text-transform: uppercase; letter-spacing: .6px;
+    border-bottom: 2px solid var(--border);
+  }
+  td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:hover td { background: var(--bg2); }
+
+  /* ── Callout ── */
+  .callout {
+    border-left: 3px solid;
+    padding: 12px 16px;
+    border-radius: 0 6px 6px 0;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+  .callout-info { border-color: var(--cyan); background: #0d192610; }
+  .callout-warn { border-color: var(--orange); background: #261a0610; }
+  .callout-danger { border-color: var(--red); background: #26060610; }
+  .callout strong { color: var(--white); }
+
+  /* ── Steps ── */
+  .step {
+    display: flex; gap: 16px; margin: 16px 0;
+  }
+  .step-num {
+    width: 28px; height: 28px; min-width: 28px;
+    border-radius: 50%;
+    background: var(--cyan);
+    color: var(--bg);
+    font-weight: 700; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step-body { flex: 1; }
+  .step-body h4 {
+    color: var(--white); font-size: 15px;
+    margin-bottom: 4px;
+  }
+  .step-body p { font-size: 14px; color: var(--text2); }
+
+  /* ── File tree ── */
+  .tree {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 13px; line-height: 1.7;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 12px 0;
+  }
+  .tree .dir { color: var(--cyan); font-weight: 600; }
+  .tree .file { color: var(--text); }
+  .tree .desc { color: var(--text2); }
+
+  /* ── Data flow diagram ── */
+  .diagram {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 13px; line-height: 1.6;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 16px 0;
+    text-align: center;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 860px) {
+    .sidebar { display: none; }
+    .content { margin-left: 0; padding: 24px 20px 60px; }
+    .topnav-links { gap: 14px; }
+    .hero-logo { font-size: 24px; }
+  }
+
+  /* ── Footer ── */
+  .footer {
+    margin-top: 60px;
+    padding: 24px 0;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    color: var(--text2);
+    font-size: 13px;
+  }
+  .footer a { color: var(--cyan); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ TOP NAV ═══════════ -->
+<nav class="topnav">
+  <div class="logo">
+    WORK<span class="dot">:</span>TRACKER
+    <span class="version">v0.0.1</span>
+  </div>
+  <div class="topnav-links">
+    <a href="#quickstart">Quick Start</a>
+    <a href="#commands">Commands</a>
+    <a href="#config">Config</a>
+    <a href="#how-it-works">How It Works</a>
+  </div>
+</nav>
+
+<div class="wrapper">
+
+<!-- ═══════════ SIDEBAR ═══════════ -->
+<aside class="sidebar">
+  <h3>Getting Started</h3>
+  <a href="#quickstart">Quick Start</a>
+  <a href="#requirements">Requirements</a>
+  <a href="#install">Installation</a>
+  <a href="#permissions">Permissions</a>
+  <a href="#uninstall">Uninstall</a>
+
+  <h3>Usage</h3>
+  <a href="#commands">CLI Commands</a>
+  <a href="#aliases">Shell Aliases</a>
+  <a href="#dashboards">Dashboards</a>
+  <a href="#reports">Reports</a>
+
+  <h3>Configuration</h3>
+  <a href="#config">Config Overview</a>
+  <a href="#config-collector">Collector</a>
+  <a href="#config-aggregator">Aggregator</a>
+  <a href="#config-patterns">Project Patterns</a>
+
+  <h3>Architecture</h3>
+  <a href="#how-it-works">How It Works</a>
+  <a href="#data-flow">Data Flow</a>
+  <a href="#directory">Directory Structure</a>
+  <a href="#services">Launchd Services</a>
+
+  <h3>Deep Dive</h3>
+  <a href="#collector-detail">Collector</a>
+  <a href="#aggregator-detail">Aggregator</a>
+  <a href="#sessions">Session Detection</a>
+  <a href="#pattern-learning">Pattern Learning</a>
+  <a href="#special-features">Special Features</a>
+</aside>
+
+<!-- ═══════════ CONTENT ═══════════ -->
+<main class="content">
+
+<!-- Hero -->
+<div class="hero">
+  <div class="hero-logo">WORK<span class="colon">:</span>TRACKER</div>
+  <p>Automatic macOS activity tracking with privacy in mind</p>
+  <div class="badges">
+    <span class="badge badge-green">macOS</span>
+    <span class="badge badge-cyan">Python 3</span>
+    <span class="badge badge-purple">launchd</span>
+    <span class="badge badge-orange">v0.0.1</span>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="quickstart">Quick Start</h1>
+
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">
+    <h4>Clone or copy to your Mac</h4>
+    <p>Place the WorkTracker folder anywhere. The installer will copy it to <code>~/WorkTracker</code>.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">
+    <h4>Run the installer</h4>
+    <pre><code>cd WorkTracker
+./install.sh</code></pre>
+    <p>This sets up Python, dependencies, launchd services, and shell aliases.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">
+    <h4>Grant macOS permissions</h4>
+    <p>Go to <strong>System Settings &rarr; Privacy & Security</strong> and enable <strong>Accessibility</strong> and <strong>Screen Recording</strong> for your Terminal app.</p>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">4</div>
+  <div class="step-body">
+    <h4>Reload your shell</h4>
+    <pre><code>source ~/.zshrc   # or: wtrl</code></pre>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">5</div>
+  <div class="step-body">
+    <h4>Check status</h4>
+    <pre><code>wt status</code></pre>
+    <p>The collector starts automatically. Data appears within seconds.</p>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="requirements">Requirements</h1>
+
+<table>
+  <tr><th>Requirement</th><th>Details</th></tr>
+  <tr><td>Operating System</td><td>macOS only (uses AppKit, Quartz, launchd)</td></tr>
+  <tr><td>Python</td><td>3.9+ (installer can set up via Homebrew)</td></tr>
+  <tr><td>Xcode CLI Tools</td><td>Required for compiling Python dependencies</td></tr>
+  <tr><td>Disk Space</td><td>~50 MB base + ~5 MB/day of snapshots</td></tr>
+</table>
+
+<h2>Python Dependencies</h2>
+<table>
+  <tr><th>Package</th><th>Purpose</th></tr>
+  <tr><td><code>pyobjc-framework-Cocoa</code></td><td>macOS app detection, clipboard</td></tr>
+  <tr><td><code>pyobjc-framework-Quartz</code></td><td>Input monitoring (CGEventTap)</td></tr>
+  <tr><td><code>pyobjc-framework-EventKit</code></td><td>Calendar integration</td></tr>
+  <tr><td><code>pandas</code></td><td>Snapshot aggregation</td></tr>
+  <tr><td><code>rapidfuzz</code></td><td>Fuzzy title matching</td></tr>
+  <tr><td><code>pyyaml</code></td><td>Configuration files</td></tr>
+  <tr><td><code>flask</code></td><td>Web dashboard</td></tr>
+</table>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="install">Installation</h1>
+
+<p>The installer handles everything automatically:</p>
+<pre><code>./install.sh</code></pre>
+
+<h3>What it does</h3>
+<ol style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li>Checks prerequisites (macOS, Xcode CLI Tools, Python 3)</li>
+  <li>Offers to install Homebrew and Python if missing</li>
+  <li>Copies project to <code>~/WorkTracker</code></li>
+  <li>Creates directory structure (<code>data/</code>, <code>logs/</code>, <code>summaries/</code>)</li>
+  <li>Sets up Python virtual environment + installs dependencies</li>
+  <li>Generates 4 launchd plist files</li>
+  <li>Installs and starts launchd services</li>
+  <li>Adds shell aliases (<code>wts</code>, <code>wtl</code>, <code>wtr</code>, etc.) to your shell config</li>
+</ol>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="permissions">macOS Permissions</h1>
+
+<div class="callout callout-warn">
+  <strong>Required:</strong> WorkTracker needs two macOS permissions to function correctly. Without them, input tracking and window title detection will fail silently.
+</div>
+
+<table>
+  <tr><th>Permission</th><th>Why</th><th>Path</th></tr>
+  <tr>
+    <td><strong>Accessibility</strong></td>
+    <td>Keyboard/mouse event monitoring via CGEventTap</td>
+    <td>System Settings &rarr; Privacy & Security &rarr; Accessibility</td>
+  </tr>
+  <tr>
+    <td><strong>Screen Recording</strong></td>
+    <td>Reading window titles of other applications</td>
+    <td>System Settings &rarr; Privacy & Security &rarr; Screen Recording</td>
+  </tr>
+</table>
+
+<p>Grant access to your <strong>Terminal app</strong> (Terminal.app, iTerm2, Warp, etc.).</p>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="uninstall">Uninstall</h1>
+
+<pre><code>./uninstall.sh</code></pre>
+
+<p>Prompts to confirm, then:</p>
+<ul style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li>Stops and removes all launchd services</li>
+  <li>Removes shell aliases from your shell config</li>
+  <li>Optionally deletes collected data (or keeps it)</li>
+</ul>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="commands">CLI Commands</h1>
+
+<p>All commands are run via the <code>wt</code> CLI tool:</p>
+<pre><code>wt &lt;command&gt;</code></pre>
+
+<h2>Overview</h2>
+<table>
+  <tr><th>Command</th><th>Alias</th><th>Description</th></tr>
+  <tr><td><code>wt status</code></td><td><code>wt s</code> / <code>wts</code></td><td>Show services, data counts, and latest reports</td></tr>
+  <tr><td><code>wt tail</code></td><td><code>wtl</code></td><td>Follow collector logs live</td></tr>
+  <tr><td><code>wt help</code></td><td><code>wt h</code></td><td>Show interactive help screen</td></tr>
+</table>
+
+<h2>Collector</h2>
+<table>
+  <tr><th>Command</th><th>Alias</th><th>Description</th></tr>
+  <tr><td><code>wt restart</code></td><td><code>wt r</code> / <code>wtr</code></td><td>Restart collector daemon</td></tr>
+  <tr><td><code>wt start</code></td><td>&mdash;</td><td>Start collector</td></tr>
+  <tr><td><code>wt stop</code></td><td>&mdash;</td><td>Stop collector</td></tr>
+</table>
+
+<h2>Aggregator</h2>
+<table>
+  <tr><th>Command</th><th>Alias</th><th>Description</th></tr>
+  <tr><td><code>wt daily</code></td><td><code>wt d</code> / <code>wtd</code></td><td>Run daily aggregation now</td></tr>
+  <tr><td><code>wt weekly</code></td><td><code>wt w</code> / <code>wtw</code></td><td>Run weekly aggregation now</td></tr>
+  <tr><td><code>wt monthly</code></td><td><code>wt m</code> / <code>wtm</code></td><td>Run monthly aggregation now</td></tr>
+</table>
+
+<h2>Dashboards</h2>
+<table>
+  <tr><th>Command</th><th>Alias</th><th>Description</th></tr>
+  <tr><td><code>wt dash</code></td><td>&mdash;</td><td>Open terminal dashboard (curses UI, 2s refresh)</td></tr>
+  <tr><td><code>wt web</code></td><td>&mdash;</td><td>Start web dashboard at <code>http://127.0.0.1:7880</code></td></tr>
+  <tr><td><code>wt menubar</code></td><td><code>wt mb</code> / <code>wtmb</code></td><td>Start macOS menubar widget (requires <code>wt web</code> running)</td></tr>
+</table>
+
+<h2 id="aliases">Shell Aliases</h2>
+
+<p>Installed automatically by <code>install.sh</code> into your shell config:</p>
+
+<table>
+  <tr><th>Alias</th><th>Expands to</th></tr>
+  <tr><td><code>wts</code></td><td><code>wt status</code></td></tr>
+  <tr><td><code>wtl</code></td><td><code>wt tail</code></td></tr>
+  <tr><td><code>wtr</code></td><td><code>wt restart</code></td></tr>
+  <tr><td><code>wtd</code></td><td><code>wt daily</code></td></tr>
+  <tr><td><code>wtw</code></td><td><code>wt weekly</code></td></tr>
+  <tr><td><code>wtm</code></td><td><code>wt monthly</code></td></tr>
+  <tr><td><code>wtmb</code></td><td><code>wt menubar</code></td></tr>
+  <tr><td><code>wtrl</code></td><td><code>exec $SHELL -l</code> (reload shell)</td></tr>
+</table>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="dashboards">Dashboards</h1>
+
+<h2>Terminal Dashboard</h2>
+<p>Run <code>wt dash</code> for a real-time curses-based UI showing:</p>
+<ul style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li>Service status (running / ready / not loaded)</li>
+  <li>Current app + window title + input rates</li>
+  <li>Today's stats: active time, sessions, focus count, switches</li>
+  <li>Project breakdown with intensity bars</li>
+  <li>Recent session timeline</li>
+  <li>Latest report files</li>
+</ul>
+
+<h2>Web Dashboard</h2>
+<p>Run <code>wt web</code> to start a Flask server on <code>http://127.0.0.1:7880</code>:</p>
+<ul style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li>Same data as terminal dashboard, rendered in a browser</li>
+  <li>Hourly activity chart</li>
+  <li>Project distribution</li>
+  <li>Top apps by time</li>
+  <li>Session timeline</li>
+  <li>Service and log monitoring</li>
+</ul>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="reports">Reports</h1>
+
+<p>Reports are Markdown files generated by the aggregator. They serve as input for AI-powered summaries (e.g. via Claude Cowork).</p>
+
+<h2>Daily Report</h2>
+<p>Generated at <strong>22:00</strong> daily &rarr; <code>summaries/daily/YYYY-MM-DD.md</code></p>
+<ul style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li><strong>Overview:</strong> Active time, time range, focus sessions, app switches, idle ratio</li>
+  <li><strong>Project Distribution:</strong> Time, share, sessions, avg session, intensity</li>
+  <li><strong>App Usage:</strong> Top apps by time</li>
+  <li><strong>Timeline:</strong> Full session-by-session table</li>
+  <li><strong>Parallel Activities:</strong> Media playing during work</li>
+  <li><strong>Input Analysis:</strong> Keystroke peak hours, hourly intensity bars</li>
+  <li><strong>Git Activity:</strong> Commits per repo (if enabled)</li>
+  <li><strong>Calendar &amp; Time Classification:</strong> Meetings vs. deep work (if enabled)</li>
+  <li><strong>Previous Day Comparison:</strong> Delta metrics</li>
+</ul>
+
+<h2>Weekly Report</h2>
+<p>Generated <strong>Sunday 23:00</strong> &rarr; <code>summaries/weekly/YYYY-Wnn.md</code></p>
+<ul style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li>Aggregated stats for the full week (Mon&ndash;Sun)</li>
+  <li>Daily comparison table</li>
+  <li>Weekly project distribution</li>
+  <li>Trends: most/least productive day</li>
+  <li>Previous week comparison</li>
+</ul>
+
+<h2>Monthly Report</h2>
+<p>Generated <strong>1st of month 00:30</strong> &rarr; <code>summaries/monthly/YYYY-MM.md</code></p>
+<ul style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li>Full month aggregation</li>
+  <li>Weekly comparison table</li>
+  <li>Monthly project distribution</li>
+  <li>Long-term trend (1st half vs. 2nd half)</li>
+  <li>Previous month comparison</li>
+</ul>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="config">Configuration</h1>
+
+<p>All configuration lives in a single file:</p>
+<pre><code>~/WorkTracker/daemon/config.yaml</code></pre>
+
+<h2 id="config-collector">Collector Settings</h2>
+<table>
+  <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>interval_seconds</code></td><td><code>10</code></td><td>Snapshot interval in seconds</td></tr>
+  <tr><td><code>track_clipboard_content</code></td><td><code>true</code></td><td>Capture full clipboard text</td></tr>
+  <tr><td><code>track_input_counts</code></td><td><code>true</code></td><td>Count keystrokes, clicks, scrolls</td></tr>
+  <tr><td><code>track_media</code></td><td><code>true</code></td><td>Detect media playback (Spotify, YouTube, etc.)</td></tr>
+  <tr><td><code>track_all_windows</code></td><td><code>true</code></td><td>Monitor all visible windows</td></tr>
+  <tr><td><code>track_keystroke_content</code></td><td><code>false</code></td><td>Capture typed plaintext (privacy warning!)</td></tr>
+  <tr><td><code>track_browser_urls</code></td><td><code>true</code></td><td>Read URLs from browser history DBs</td></tr>
+  <tr><td><code>track_git</code></td><td><code>false</code></td><td>Track git commits and branches</td></tr>
+  <tr><td><code>git_repos</code></td><td><code>[]</code></td><td>List of repo paths to monitor</td></tr>
+  <tr><td><code>git_scan_interval_seconds</code></td><td><code>60</code></td><td>Git rescan interval</td></tr>
+  <tr><td><code>track_calendar</code></td><td><code>false</code></td><td>Read events from macOS Calendar</td></tr>
+</table>
+
+<h3>Distraction Notifications</h3>
+<table>
+  <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>notifications.enabled</code></td><td><code>false</code></td><td>Enable macOS distraction warnings</td></tr>
+  <tr><td><code>notifications.threshold_minutes</code></td><td><code>15</code></td><td>Minutes in distraction category before alert</td></tr>
+  <tr><td><code>notifications.cooldown_minutes</code></td><td><code>30</code></td><td>Cooldown between alerts</td></tr>
+  <tr><td><code>notifications.distraction_categories</code></td><td><code>["Social Media", "Media/Entertainment"]</code></td><td>Categories that trigger warnings</td></tr>
+</table>
+
+<h2 id="config-aggregator">Aggregator Settings</h2>
+<table>
+  <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>idle_threshold_seconds</code></td><td><code>120</code></td><td>Gap &gt;2min starts a new session</td></tr>
+  <tr><td><code>focus_session_min_seconds</code></td><td><code>1500</code></td><td>Sessions &gt;25min counted as &ldquo;focus&rdquo;</td></tr>
+  <tr><td><code>fuzzy_match_threshold</code></td><td><code>0.7</code></td><td>Levenshtein ratio for title matching</td></tr>
+  <tr><td><code>same_app_grace_period_seconds</code></td><td><code>30</code></td><td>Same-app gap &lt;30s = merge (tab switching)</td></tr>
+  <tr><td><code>min_session_snapshots</code></td><td><code>2</code></td><td>Sessions with &lt;2 snapshots get absorbed</td></tr>
+  <tr><td><code>deep_work_min_minutes</code></td><td><code>60</code></td><td>Sessions &gt;60min classified as deep work</td></tr>
+</table>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h2 id="config-patterns">Project Patterns</h2>
+
+<p>Projects are matched by window title and URL patterns in:</p>
+<pre><code>~/WorkTracker/daemon/project_patterns.yaml</code></pre>
+
+<h3>Example</h3>
+<pre><code>projects:
+  MyProject:
+    patterns: ["*myproject*", "*MyProject*"]
+    category: "Development"
+  AI Research:
+    patterns: ["*claude*", "*openai*", "*chatgpt*"]
+    category: "AI/Research"
+  Crypto:
+    patterns: ["*binance*", "*bitcoin*"]
+    url_patterns: ["*binance.com*", "*coingecko.com*"]
+    category: "Crypto"
+
+default_project: "Other"</code></pre>
+
+<p>Patterns use <strong>glob syntax</strong> (<code>*</code> = wildcard) and are matched case-insensitively against window titles. URL patterns are checked when <code>track_browser_urls</code> is enabled.</p>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="how-it-works">How It Works</h1>
+
+<p>WorkTracker follows a <strong>3-layer architecture</strong>:</p>
+
+<div class="diagram">
+<span style="color:var(--text2)">  macOS (focus, windows, input, clipboard)</span>
+                    <span style="color:var(--text2)">|</span>
+                    <span style="color:var(--text2)">v</span>
+        <span style="color:var(--green)">[Collector]</span>  <span style="color:var(--text2)">every 10s</span>
+                    <span style="color:var(--text2)">|</span>
+                    <span style="color:var(--text2)">v</span>
+     <span style="color:var(--orange)">data/snapshots/YYYY-MM-DD.jsonl</span>
+                    <span style="color:var(--text2)">|</span>
+                    <span style="color:var(--text2)">v</span>
+       <span style="color:var(--cyan)">[Aggregator]</span>  <span style="color:var(--text2)">daily / weekly / monthly</span>
+              <span style="color:var(--text2)">|              |</span>
+              <span style="color:var(--text2)">v              v</span>
+  <span style="color:var(--orange)">data/sessions/</span>    <span style="color:var(--orange)">summaries/*.md</span>
+                           <span style="color:var(--text2)">|</span>
+                           <span style="color:var(--text2)">v</span>
+                  <span style="color:var(--purple)">[AI Summary]</span>  <span style="color:var(--text2)">via Cowork</span>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="data-flow">Data Flow</h1>
+
+<h3>1. Snapshots (Collector &rarr; JSONL)</h3>
+<p>Every 10 seconds, the collector writes one JSON object to today's snapshot file. Each snapshot contains:</p>
+<ul style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li>Active app (name, bundle ID, window title)</li>
+  <li>All visible windows</li>
+  <li>Input activity (keystrokes, clicks, scroll, idle times)</li>
+  <li>Clipboard content</li>
+  <li>Browser URL (if applicable)</li>
+  <li>Media playback state</li>
+  <li>Git status (if enabled)</li>
+  <li>Calendar events (if enabled)</li>
+  <li>Sleep/wake events</li>
+</ul>
+
+<h3>2. Sessions (Aggregator &rarr; JSON)</h3>
+<p>The aggregator groups consecutive snapshots into <strong>sessions</strong> based on app continuity and idle gaps. Each session has: start/end times, duration, app, project, intensity score, input totals.</p>
+
+<h3>3. Reports (Aggregator &rarr; Markdown)</h3>
+<p>Statistics are computed from sessions and rendered into Markdown tables. These serve as structured input for AI-powered narrative summaries.</p>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="directory">Directory Structure</h1>
+
+<div class="tree">
+<span class="dir">~/WorkTracker/</span>
+├── <span class="file">wt</span>                          <span class="desc"># CLI tool</span>
+├── <span class="file">install.sh</span>                   <span class="desc"># Installer</span>
+├── <span class="file">uninstall.sh</span>                 <span class="desc"># Uninstaller</span>
+│
+├── <span class="dir">daemon/</span>
+│   ├── <span class="file">collector.py</span>             <span class="desc"># Snapshot collector (10s loop)</span>
+│   ├── <span class="file">aggregator.py</span>            <span class="desc"># Session aggregator + reports</span>
+│   ├── <span class="file">dashboard.py</span>             <span class="desc"># Terminal dashboard (curses)</span>
+│   ├── <span class="file">web_dashboard.py</span>         <span class="desc"># Web dashboard (Flask)</span>
+│   ├── <span class="file">ctl.sh</span>                   <span class="desc"># Alternative control script</span>
+│   ├── <span class="file">config.yaml</span>              <span class="desc"># Main configuration</span>
+│   ├── <span class="file">project_patterns.yaml</span>    <span class="desc"># Project matching rules</span>
+│   ├── <span class="file">learned_patterns.yaml</span>    <span class="desc"># Auto-learned patterns</span>
+│   ├── <span class="file">requirements.txt</span>         <span class="desc"># Python dependencies</span>
+│   └── <span class="dir">.venv/</span>                   <span class="desc"># Python virtual environment</span>
+│
+├── <span class="dir">data/</span>
+│   ├── <span class="dir">snapshots/</span>               <span class="desc"># YYYY-MM-DD.jsonl (1 per day)</span>
+│   └── <span class="dir">sessions/</span>                <span class="desc"># YYYY-MM-DD.json (1 per day)</span>
+│
+├── <span class="dir">logs/</span>                        <span class="desc"># All log files</span>
+│
+├── <span class="dir">summaries/</span>
+│   ├── <span class="dir">daily/</span>                   <span class="desc"># YYYY-MM-DD.md</span>
+│   ├── <span class="dir">weekly/</span>                  <span class="desc"># YYYY-Wnn.md</span>
+│   └── <span class="dir">monthly/</span>                 <span class="desc"># YYYY-MM.md</span>
+│
+├── <span class="dir">launchd/</span>                     <span class="desc"># Generated plist files</span>
+└── <span class="dir">docs/</span>                        <span class="desc"># This documentation</span>
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="services">Launchd Services</h1>
+
+<table>
+  <tr><th>Service</th><th>Label</th><th>Schedule</th><th>Behavior</th></tr>
+  <tr>
+    <td><strong>Collector</strong></td>
+    <td><code>com.peab.worktracker.collector</code></td>
+    <td>Always on</td>
+    <td>RunAtLoad + KeepAlive (auto-restarts)</td>
+  </tr>
+  <tr>
+    <td><strong>Daily Agg</strong></td>
+    <td><code>com.peab.worktracker.aggregator.daily</code></td>
+    <td>22:00 daily</td>
+    <td>Runs once, generates daily report</td>
+  </tr>
+  <tr>
+    <td><strong>Weekly Agg</strong></td>
+    <td><code>com.peab.worktracker.aggregator.weekly</code></td>
+    <td>Sunday 23:00</td>
+    <td>Runs once, generates weekly report</td>
+  </tr>
+  <tr>
+    <td><strong>Monthly Agg</strong></td>
+    <td><code>com.peab.worktracker.aggregator.monthly</code></td>
+    <td>1st of month 00:30</td>
+    <td>Runs once, generates monthly report</td>
+  </tr>
+</table>
+
+<p>All services run with <code>Nice: 10</code> (low priority) and log to <code>~/WorkTracker/logs/</code>.</p>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="collector-detail">Collector Deep Dive</h1>
+
+<p>The collector is a long-running Python daemon that takes a system snapshot every 10 seconds.</p>
+
+<h2>What It Captures</h2>
+<table>
+  <tr><th>Category</th><th>Data</th></tr>
+  <tr><td><strong>Active App</strong></td><td>Name, bundle ID, window title (via Accessibility API for true focus detection)</td></tr>
+  <tr><td><strong>Windows</strong></td><td>All visible windows with owner, title, position, layer</td></tr>
+  <tr><td><strong>Input</strong></td><td>Keystroke count, left/right clicks, scroll events, mouse distance, idle times</td></tr>
+  <tr><td><strong>Clipboard</strong></td><td>Full text content, change detection</td></tr>
+  <tr><td><strong>Browser</strong></td><td>Current URL from Safari/Chrome/Firefox/Arc history databases</td></tr>
+  <tr><td><strong>Media</strong></td><td>Playing status from Spotify, Apple Music, VLC, YouTube, Netflix, etc.</td></tr>
+  <tr><td><strong>Git</strong></td><td>Active branch, recent commits (optional)</td></tr>
+  <tr><td><strong>Calendar</strong></td><td>Current/upcoming events from macOS Calendar (optional)</td></tr>
+  <tr><td><strong>System</strong></td><td>Sleep/wake events, active display space</td></tr>
+</table>
+
+<h2>Input Monitoring</h2>
+<p>Uses <strong>CGEventTap</strong> in listen-only mode (cannot inject events). Runs on a separate thread with a CFRunLoop. Tracks:</p>
+<ul style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li>Keystroke count (and optionally plaintext content)</li>
+  <li>Mouse clicks (left, right)</li>
+  <li>Scroll events</li>
+  <li>Mouse travel distance (pixels)</li>
+</ul>
+
+<h2>Focus Detection</h2>
+<p>Uses the <strong>Accessibility API</strong> (<code>AXUIElementCopyAttributeValue</code>) instead of <code>NSWorkspace.frontmostApplication</code>. This correctly identifies the focused app even when floating overlays (like the Claude Cowork widget) hold frontmost status.</p>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="aggregator-detail">Aggregator Deep Dive</h1>
+
+<p>The aggregator transforms raw snapshots into structured sessions and Markdown reports.</p>
+
+<h2>Execution Modes</h2>
+<pre><code>python aggregator.py --mode daily          # today's report
+python aggregator.py --mode daily --date 2026-04-01   # specific date
+python aggregator.py --mode weekly
+python aggregator.py --mode monthly</code></pre>
+
+<h2>Processing Pipeline</h2>
+<ol style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li>Load JSONL snapshots into a Pandas DataFrame</li>
+  <li>Flatten nested fields (active_app, input, clipboard, system, media, git)</li>
+  <li>Detect sessions using two-tier merging (see below)</li>
+  <li>Match each session to a project via pattern rules</li>
+  <li>Calculate statistics (time distribution, intensity, focus sessions)</li>
+  <li>Render Markdown report with tables</li>
+  <li>Run pattern learning for "Other" sessions</li>
+</ol>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="sessions">Session Detection</h1>
+
+<p>Sessions group consecutive snapshots that represent a single work context.</p>
+
+<h2>Two-Tier Merging</h2>
+
+<h3>Tier 1: Same App + Small Gap (&lt;30s)</h3>
+<p>If the same app appears within 30 seconds, snapshots are always merged. This handles rapid tab switching within browsers or editors.</p>
+
+<h3>Tier 2: Same App + Larger Gap</h3>
+<p>If the gap is larger but the app is the same, fuzzy title matching (Levenshtein ratio &ge;0.7) determines whether to merge.</p>
+
+<h3>Session Split Triggers</h3>
+<ul style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li>Different app detected</li>
+  <li>Idle gap exceeds <code>idle_threshold_seconds</code> (default: 120s)</li>
+  <li>Sleep/wake event detected</li>
+  <li>Title similarity drops below threshold</li>
+</ul>
+
+<h3>Micro-Session Absorption</h3>
+<p>Sessions with fewer than <code>min_session_snapshots</code> (default: 2) are absorbed into the preceding session to reduce noise.</p>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="pattern-learning">Pattern Learning</h1>
+
+<p>WorkTracker automatically learns new project patterns from unclassified ("Other") sessions.</p>
+
+<h2>How It Works</h2>
+<ol style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li>After daily aggregation, "Other" sessions are analyzed</li>
+  <li>Window titles and URLs are grouped by keyword/domain</li>
+  <li>Groups with &ge;5 minutes total time become pattern suggestions</li>
+  <li>Suggestions are written to <code>learned_patterns.yaml</code></li>
+</ol>
+
+<h2>Priority</h2>
+<p>Static patterns (<code>project_patterns.yaml</code>) always take precedence over learned patterns. This ensures hand-curated rules are never overridden.</p>
+
+<h2>Learned Pattern Format</h2>
+<pre><code>projects:
+  github.com:
+    patterns: ["*github.com*"]
+    url_patterns: ["*github.com*"]
+    category: "auto-learned"
+    _auto_generated: true
+    _total_time_seconds: 3240
+    _first_seen: "2026-04-01"
+    _sample_titles: ["Issues - anthropics/claude-code"]</code></pre>
+
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h1 id="special-features">Special Features</h1>
+
+<h2>Sleep/Wake Detection</h2>
+<p>Two mechanisms ensure sessions are correctly split across sleep events:</p>
+<ul style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li><strong>Explicit:</strong> NSWorkspace notifications for macOS sleep/wake</li>
+  <li><strong>Heuristic:</strong> If a loop iteration takes &gt;3&times; the expected interval, a gap record is inserted</li>
+</ul>
+
+<h2>Midnight Continuity</h2>
+<p>The daily aggregator loads the tail end of the previous day's snapshots (&ge;23:55) to handle sessions spanning midnight correctly.</p>
+
+<h2>Intensity Scoring</h2>
+<p>Each session gets an intensity score based on normalized input activity (keystrokes + clicks + scrolls relative to session duration). Displayed as 10-character bar charts in reports and dashboards.</p>
+
+<h2>Focus Sessions</h2>
+<p>Sessions longer than 25 minutes (configurable via <code>focus_session_min_seconds</code>) are tracked separately as focus sessions. Sessions &gt;60 minutes are classified as <strong>deep work</strong>.</p>
+
+<h2>Browser URL Tracking</h2>
+<p>The collector reads browser history databases directly (SQLite) for Safari, Chrome, Firefox, Brave, Arc, and Edge. URLs are matched against <code>url_patterns</code> in project patterns for accurate classification.</p>
+
+<h2>Media Detection</h2>
+<p>Detects playback from Spotify, Apple Music, VLC, IINA, Podcasts (native apps) and YouTube, Netflix, Twitch, SoundCloud (browser tabs via title pattern matching). Parallel media activity is tracked alongside work sessions.</p>
+
+
+<!-- Footer -->
+<div class="footer">
+  <p>WorkTracker v0.0.1 &mdash; made in Austria with <span style="color:var(--red)">&lt;3</span> by <a href="https://peab.at">peab.at</a></p>
+</div>
+
+</main>
+</div>
+
+</body>
+</html>
