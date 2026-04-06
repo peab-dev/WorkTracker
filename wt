@@ -462,46 +462,85 @@ cmd_help() {
     printf '\033[?25l'  # hide cursor
     printf '\033[2J\033[H'  # clear screen
 
-    # ── ASCII Word Art: WORK:TRACKER (animated line-by-line) ──
-    # The colon separates WORK and TRACKER and will blink red later
-    local -a art_left=(
-        ' █     █  ██████  ██████  █   █ '
-        ' █     █  █    █  █    █  █  █  '
-        ' █  █  █  █    █  ██████  ███   '
-        ' █ █ █ █  █    █  █   █   █  █  '
-        '  ██ ██   ██████  █   ██  █   █ '
+    # ── Matrix decode effect for WORK:TRACKER ──
+    local title="WORK:TRACKER"
+    local len=${#title}
+    local glyphs='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%&*!?=+<>{}[]~^'
+    local -a matrix_colors=(
+        '\033[38;5;22m'   # dark green
+        '\033[38;5;28m'   # medium green
+        '\033[38;5;34m'   # green
+        '\033[38;5;40m'   # bright green
+        '\033[38;5;46m'   # neon green
+        '\033[38;5;82m'   # light green
+        '\033[38;5;118m'  # yellow-green
     )
-    local -a art_sep=(
-        '  ██  '
-        '  ██  '
-        '      '
-        '  ██  '
-        '  ██  '
-    )
-    local -a art_right=(
-        ' ██████ ██████   █████  ██████ █   █ ██████ ██████ '
-        '   ██   █    █  █    █  █      █  █  █      █    █ '
-        '   ██   ██████  ███████ █      ███   █████  ██████ '
-        '   ██   █   █   █    █  █      █  █  █      █   █  '
-        '   ██   █   ██  █    █  ██████ █   █ ██████ █   ██ '
-    )
+    local n_colors=${#matrix_colors[@]}
+    local -a resolved=()
+    for (( i=0; i<len; i++ )); do resolved[$i]=0; done
 
-    local banner_row=1  # first row of the banner (0-indexed from cursor)
-    printf "\n"
-    for (( r=0; r<5; r++ )); do
-        printf "  ${CYAN}${BOLD}%s${RST}" "${art_left[$r]}"
-        printf "${RED}${BOLD}%s${RST}" "${art_sep[$r]}"
-        printf "${CYAN}${BOLD}%s${RST}" "${art_right[$r]}"
-        printf "\n"
-        sleep 0.07
+    local iterations=12
+    printf "\n  "
+    # print initial random chars
+    for (( i=0; i<len; i++ )); do
+        local rc="${matrix_colors[$(( RANDOM % n_colors ))]}"
+        local rg="${glyphs:$(( RANDOM % ${#glyphs} )):1}"
+        printf "${rc}${BOLD}%s${RST}" "$rg"
     done
-    sleep 0.1
 
-    printf "\n"
-    printf "  ${GRAY_L}made in Austria with ${RED}<3${GRAY_L} by ${CYAN}${BOLD}peab.at${RST}  ${GRAY}for mac${RST} \033[38;5;196m${RST}\n"
-    printf "\n"
+    # decode loop: each iteration resolves 1-2 more characters
+    local resolved_count=0
+    for (( iter=0; iter<iterations && resolved_count<len; iter++ )); do
+        sleep 0.08
+        # resolve 1-2 random unresolved positions
+        local to_resolve=$(( (iter > 6) ? 2 : 1 ))
+        for (( t=0; t<to_resolve && resolved_count<len; t++ )); do
+            # pick random unresolved position
+            while true; do
+                local pos=$(( RANDOM % len ))
+                if [[ ${resolved[$pos]} -eq 0 ]]; then
+                    resolved[$pos]=1
+                    (( resolved_count++ ))
+                    break
+                fi
+            done
+        done
+        # redraw entire title
+        tput cup 1 2
+        for (( i=0; i<len; i++ )); do
+            local ch="${title:$i:1}"
+            if [[ ${resolved[$i]} -eq 1 ]]; then
+                if [[ "$ch" == ":" ]]; then
+                    printf "${RED}${BOLD}%s${RST}" "$ch"
+                else
+                    printf "${CYAN}${BOLD}%s${RST}" "$ch"
+                fi
+            else
+                local rc="${matrix_colors[$(( RANDOM % n_colors ))]}"
+                local rg="${glyphs:$(( RANDOM % ${#glyphs} )):1}"
+                printf "${rc}${BOLD}%s${RST}" "$rg"
+            fi
+        done
+    done
+
+    # final clean render
+    tput cup 1 2
+    for (( i=0; i<len; i++ )); do
+        local ch="${title:$i:1}"
+        if [[ "$ch" == ":" ]]; then
+            printf "${RED}${BOLD}%s${RST}" "$ch"
+        else
+            printf "${CYAN}${BOLD}%s${RST}" "$ch"
+        fi
+    done
+    printf "  ${GRAY}for mac${RST} \033[38;5;196m${RST}"
+    sleep 0.15
+    echo ""
+
+    printf "  ${GRAY_L}made in Austria with ${RED}<3${GRAY_L} by ${CYAN}${BOLD}peab.at${RST}\n"
+    echo ""
     printf "  ${WHITE}${BOLD}Usage:${RST}  ${CYAN}wt${RST} ${WHITE}<command>${RST}\n"
-    printf "\n"
+    echo ""
 
     printf "  ${CYAN}${BOLD}Overview${RST}\n"
     printf "    ${WHITE}${BOLD}status${RST}       ${GRAY_L}Show services, data & reports${RST}        ${ORANGE}wts${RST}\n"
@@ -534,10 +573,8 @@ cmd_help() {
     trap 'printf "\033[?25h\033[0m"; stty echo 2>/dev/null; exit 0' INT
     stty -echo 2>/dev/null
 
-    local sep_col=34   # column where the colon block starts (2 indent + 32 chars WORK block)
-    local apple_row=6  # row of "made in Austria..." line
-    local apple_col=57 # column of the Apple logo after "for mac "
-    local -a colon_on=('  ██  ' '  ██  ' '      ' '  ██  ' '  ██  ')
+    local colon_col=$(( 2 + 4 ))  # indent + "WORK" = position of ":"
+    local apple_col=$(( 2 + len + 2 + 8 ))  # after "for mac "
     local colon_colors=("${RED}" "${CYAN}")
     local rainbow=('\033[38;5;196m' '\033[38;5;208m' '\033[38;5;226m' '\033[38;5;46m' '\033[38;5;33m' '\033[38;5;93m')
     local ci=0
@@ -546,15 +583,8 @@ cmd_help() {
     while true; do
         local cc="${colon_colors[$ci]}"
         local ac="${rainbow[$ai]}"
-        # redraw colon block in current color
-        for (( r=0; r<5; r++ )); do
-            tput cup $(( banner_row + r )) $sep_col
-            printf "${cc}${BOLD}%s${RST}" "${colon_on[$r]}"
-        done
-        # rainbow apple
-        tput cup $apple_row $apple_col
-        printf "${ac}${RST}"
-
+        tput cup 1 $colon_col; printf "${cc}${BOLD}:${RST}"
+        tput cup 1 $apple_col; printf "${ac}${RST}"
         ci=$(( (ci + 1) % 2 ))
         ai=$(( (ai + 1) % ${#rainbow[@]} ))
 
