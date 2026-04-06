@@ -27,8 +27,8 @@ DIM='\033[2m'
 RED='\033[38;5;203m'
 GREEN='\033[38;5;114m'
 YELLOW='\033[38;5;221m'
-BLUE='\033[38;5;111m'
-CYAN='\033[38;5;117m'
+BLUE='\033[38;5;118m'
+CYAN='\033[38;5;154m'
 MAGENTA='\033[38;5;176m'
 ORANGE='\033[38;5;215m'
 WHITE='\033[38;5;252m'
@@ -37,7 +37,7 @@ GRAY_L='\033[38;5;245m'
 
 BG_GREEN='\033[48;5;22m'
 BG_RED='\033[48;5;52m'
-BG_BLUE='\033[48;5;17m'
+BG_BLUE='\033[48;5;22m'
 BG_YELLOW='\033[48;5;58m'
 
 # ── Symbols ──────────────────────────────────────────────────────────────────
@@ -462,28 +462,46 @@ cmd_help() {
     printf '\033[?25l'  # hide cursor
     printf '\033[2J\033[H'  # clear screen
 
-    # ── Typewriter animation: WORK-TRACKER ──
-    local title="WORK-TRACKER"
-    local dash_pos=4  # position of the '-' in the title
+    # ── ASCII Word Art: WORK:TRACKER (animated line-by-line) ──
+    # The colon separates WORK and TRACKER and will blink red later
+    local -a art_left=(
+        ' █     █  ██████  ██████  █   █ '
+        ' █     █  █    █  █    █  █  █  '
+        ' █  █  █  █    █  ██████  ███   '
+        ' █ █ █ █  █    █  █   █   █  █  '
+        '  ██ ██   ██████  █   ██  █   █ '
+    )
+    local -a art_sep=(
+        '  ██  '
+        '  ██  '
+        '      '
+        '  ██  '
+        '  ██  '
+    )
+    local -a art_right=(
+        ' ██████ ██████   █████  ██████ █   █ ██████ ██████ '
+        '   ██   █    █  █    █  █      █  █  █      █    █ '
+        '   ██   ██████  ███████ █      ███   █████  ██████ '
+        '   ██   █   █   █    █  █      █  █  █      █   █  '
+        '   ██   █   ██  █    █  ██████ █   █ ██████ █   ██ '
+    )
 
-    printf "\n  "
-    for (( i=0; i<${#title}; i++ )); do
-        local ch="${title:$i:1}"
-        if [[ "$ch" == "-" ]]; then
-            printf "${RED}${BOLD}%s${RST}" "$ch"
-        else
-            printf "${CYAN}${BOLD}%s${RST}" "$ch"
-        fi
-        sleep 0.06
+    local banner_row=1  # first row of the banner (0-indexed from cursor)
+    printf "\n"
+    for (( r=0; r<5; r++ )); do
+        printf "  ${CYAN}${BOLD}%s${RST}" "${art_left[$r]}"
+        printf "${RED}${BOLD}%s${RST}" "${art_sep[$r]}"
+        printf "${CYAN}${BOLD}%s${RST}" "${art_right[$r]}"
+        printf "\n"
+        sleep 0.07
     done
-    printf "  ${GRAY}for mac${RST}"
-    sleep 0.15
-    echo ""
+    sleep 0.1
 
-    printf "  ${GRAY_L}made in Austria with ${RED}<3${GRAY_L} by ${CYAN}${BOLD}peab.at${RST}\n"
-    echo ""
+    printf "\n"
+    printf "  ${GRAY_L}made in Austria with ${RED}<3${GRAY_L} by ${CYAN}${BOLD}peab.at${RST}  ${GRAY}for mac${RST} \033[38;5;196m${RST}\n"
+    printf "\n"
     printf "  ${WHITE}${BOLD}Usage:${RST}  ${CYAN}wt${RST} ${WHITE}<command>${RST}\n"
-    echo ""
+    printf "\n"
 
     printf "  ${CYAN}${BOLD}Overview${RST}\n"
     printf "    ${WHITE}${BOLD}status${RST}       ${GRAY_L}Show services, data & reports${RST}        ${ORANGE}wts${RST}\n"
@@ -512,20 +530,35 @@ cmd_help() {
     printf "  ${GRAY_L}wtrl${RST} ${GRAY}= reload shell (activate aliases)${RST}\n"
     echo ""
 
-    # ── Blinkender Dash: rot ↔ cyan im Sekundentakt ──
+    # ── Blinking colon (cyan/red) + Rainbow Apple ──
     trap 'printf "\033[?25h\033[0m"; stty echo 2>/dev/null; exit 0' INT
     stty -echo 2>/dev/null
 
-    local dash_col=$(( 2 + dash_pos ))  # column of '-' in the title line (row 1)
-    local colors=("${RED}" "${CYAN}")
-    local i=0
+    local sep_col=34   # column where the colon block starts (2 indent + 32 chars WORK block)
+    local apple_row=6  # row of "made in Austria..." line
+    local apple_col=57 # column of the Apple logo after "for mac "
+    local -a colon_on=('  ██  ' '  ██  ' '      ' '  ██  ' '  ██  ')
+    local colon_colors=("${RED}" "${CYAN}")
+    local rainbow=('\033[38;5;196m' '\033[38;5;208m' '\033[38;5;226m' '\033[38;5;46m' '\033[38;5;33m' '\033[38;5;93m')
+    local ci=0
+    local ai=0
 
     while true; do
-        local c="${colors[$i]}"
-        tput cup 1 $dash_col; printf "${c}${BOLD}-${RST}"
-        i=$(( (i + 1) % 2 ))
+        local cc="${colon_colors[$ci]}"
+        local ac="${rainbow[$ai]}"
+        # redraw colon block in current color
+        for (( r=0; r<5; r++ )); do
+            tput cup $(( banner_row + r )) $sep_col
+            printf "${cc}${BOLD}%s${RST}" "${colon_on[$r]}"
+        done
+        # rainbow apple
+        tput cup $apple_row $apple_col
+        printf "${ac}${RST}"
 
-        if read -t 2.5 -n 1 -s 2>/dev/null; then
+        ci=$(( (ci + 1) % 2 ))
+        ai=$(( (ai + 1) % ${#rainbow[@]} ))
+
+        if read -t 1 -n 1 -s 2>/dev/null; then
             break
         fi
     done

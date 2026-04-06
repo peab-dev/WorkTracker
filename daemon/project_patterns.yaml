@@ -81,10 +81,19 @@ projects:
     app_patterns: ["*fotos*", "*photos*"]
     category: "System"
   System:
-    app_patterns: ["*system*einstellungen*", "*system settings*", "*system preferences*", "*aktivit*tsanzeige*", "*activity monitor*", "*rechner*", "*calculator*", "*finder*", "*app store*", "*spotlight*", "*pages*"]
+    app_patterns: ["*system*einstellungen*", "*system settings*", "*system preferences*", "*aktivit*tsanzeige*", "*activity monitor*", "*rechner*", "*calculator*", "*finder*", "*app store*", "*spotlight*", "*pages*", "*loginwindow*", "*coreservicesuiagent*", "*lexikon*", "*air*"]
     category: "System"
+  Notizen:
+    app_patterns: ["*notizen*", "*notes*"]
+    category: "System"
+  Musik:
+    app_patterns: ["*musik*", "*music*"]
+    category: "Media/Entertainment"
+  Codex:
+    app_patterns: ["*codex*"]
+    category: "AI"
   Development:
-    app_patterns: ["*webstorm*", "*intellij*", "*xcode*", "*vscode*", "*visual studio*", "*terminal*"]
+    app_patterns: ["*webstorm*", "*intellij*", "*xcode*", "*vscode*", "*visual studio*", "*terminal*", "*python*"]
     category: "Development"
 
 default_project: "Other"
