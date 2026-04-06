@@ -22,9 +22,11 @@ cd WorkTracker
 ./install.sh
 ```
 
-### 2. Grant Permissions
+### 2. Grant Permissions for Terminal app
 
-Grant permissions in **macOS Settings → Privacy & Security → Accessibility + Screen Recording** to Terminal.
+Grant permissions in **macOS Settings → Privacy & Security:
+**1. Accessibility** (to Terminal)
+**2. Screen Recording** (to Terminal)
 
 ### 3. Run
 
