@@ -11,6 +11,8 @@ Track all your activities on Mac -- automatically. Analyze and learn how you do 
 
 `Runs Locally` `Open Source` `No Blackbox` `App Tracking` `Flow Insights`
 
+[Full Documentation](https://peab.at/work-tracker/docs/)
+
 ## Quick Start
 
 ### Install
