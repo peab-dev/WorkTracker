@@ -24,9 +24,9 @@ cd WorkTracker
 
 ### 2. Grant Permissions for Terminal app
 
-Grant permissions in **macOS Settings → Privacy & Security:
-**1. Accessibility** (to Terminal)
-**2. Screen Recording** (to Terminal)
+Grant permissions in macOS **System Settings** → **Privacy & Security**:
+**-  Accessibility** (to Terminal)
+**-  Screen Recording** (to Terminal)
 
 ### 3. Run
 
