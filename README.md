@@ -8,7 +8,7 @@ Analyze and learn how you do things in detail. 100% open source. Privacy always 
 ![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-open%20source-green)
 
-`Runs Locally` · `Open Source` · `No Blackbox` · `App Tracking` · `Flow Insights`
+`Runs Locally` · `Open Source` · `No Blackbox - No Fees` · `Detailed App Tracking` · `Workflow Insights`
 
 ---
 
