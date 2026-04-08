@@ -66,6 +66,9 @@ SYSTEM_APPS = {
     "Spotlight", "Passwords",
 }
 
+# Apps that represent inactive/lock-screen state — excluded from active time stats
+INACTIVE_APPS = {"loginwindow"}
+
 WEEKDAYS = {
     0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday",
     4: "Friday", 5: "Saturday", 6: "Sunday",
@@ -524,16 +527,20 @@ def calc_daily_stats(df: pd.DataFrame, sessions: list[dict], cfg: Optional[dict]
     sdf["end_dt"] = pd.to_datetime(sdf["end"], format="ISO8601")
     sdf["start_hour"] = sdf["start_dt"].dt.hour
 
+    # Filter out lock-screen / inactive apps from active time stats
+    active_sdf = sdf[~sdf["app_name"].isin(INACTIVE_APPS)]
+
     # --- Overview ---
-    total_active_sec = sdf["duration_seconds"].sum()
-    first_ts = sdf["start_dt"].min()
-    last_ts = sdf["end_dt"].max()
-    focus_sessions = sdf[sdf["duration_seconds"] > 1500]
+    total_active_sec = active_sdf["duration_seconds"].sum()
+    first_ts = active_sdf["start_dt"].min() if not active_sdf.empty else sdf["start_dt"].min()
+    last_ts = active_sdf["end_dt"].max() if not active_sdf.empty else sdf["end_dt"].max()
+    focus_sessions = active_sdf[active_sdf["duration_seconds"] > 1500]
     focus_count = len(focus_sessions)
     focus_total_sec = focus_sessions["duration_seconds"].sum() if focus_count > 0 else 0
 
-    # App switches in raw data
-    app_switches = (df["app_name"] != df["app_name"].shift(1)).sum() - 1
+    # App switches in raw data (exclude loginwindow from switch counting)
+    active_df = df[~df["app_name"].isin(INACTIVE_APPS)]
+    app_switches = (active_df["app_name"] != active_df["app_name"].shift(1)).sum() - 1
     app_switches = max(0, app_switches)
     hours_span = max(1, (last_ts - first_ts).total_seconds() / 3600)
     switches_per_hour = round(app_switches / hours_span)
@@ -571,26 +578,26 @@ def calc_daily_stats(df: pd.DataFrame, sessions: list[dict], cfg: Optional[dict]
         "media_ratio": round(media_ratio, 2),
     }
 
-    # --- Project distribution ---
-    proj_group = sdf.groupby("project").agg(
+    # --- Project distribution (excluding inactive apps) ---
+    proj_group = active_sdf.groupby("project").agg(
         total_seconds=("duration_seconds", "sum"),
         session_count=("duration_seconds", "count"),
         avg_duration=("duration_seconds", "mean"),
         avg_intensity=("intensity_score", "mean"),
     ).sort_values("total_seconds", ascending=False)
-    proj_group["pct"] = proj_group["total_seconds"] / total_active_sec
+    proj_group["pct"] = proj_group["total_seconds"] / max(total_active_sec, 1)
     stats["projects"] = proj_group.reset_index().to_dict("records")
 
-    # --- App usage ---
-    app_group = sdf.groupby("app_name").agg(
+    # --- App usage (excluding inactive apps) ---
+    app_group = active_sdf.groupby("app_name").agg(
         total_seconds=("duration_seconds", "sum"),
         top_project=("project", lambda x: x.mode().iloc[0] if len(x.mode()) > 0 else ""),
     ).sort_values("total_seconds", ascending=False)
-    app_group["pct"] = app_group["total_seconds"] / total_active_sec
+    app_group["pct"] = app_group["total_seconds"] / max(total_active_sec, 1)
     stats["apps"] = app_group.reset_index().to_dict("records")
 
-    # --- Timeline ---
-    stats["timeline"] = sessions
+    # --- Timeline (excluding inactive apps) ---
+    stats["timeline"] = [s for s in sessions if s.get("app_name") not in INACTIVE_APPS]
 
     # --- Parallel media ---
     media_entries = []
@@ -641,9 +648,9 @@ def calc_daily_stats(df: pd.DataFrame, sessions: list[dict], cfg: Optional[dict]
             f"Longest focus session: {fmt_duration(longest_focus['duration_seconds'])} "
             f"({longest_focus['app_name']} — {longest_focus['project']})"
         )
-    # Highest app switch rate per hour
-    if "app_name" in df.columns:
-        hourly_switches = df.groupby(df["ts"].dt.hour)["app_name"].apply(
+    # Highest app switch rate per hour (excluding inactive apps)
+    if "app_name" in active_df.columns:
+        hourly_switches = active_df.groupby(active_df["ts"].dt.hour)["app_name"].apply(
             lambda x: (x != x.shift(1)).sum()
         )
         if not hourly_switches.empty:

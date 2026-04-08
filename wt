@@ -398,6 +398,10 @@ cmd_dashboard() {
     exec "$VENV" "$DAEMON/dashboard.py"
 }
 
+cmd_rhythm() {
+    "$VENV" "$DAEMON/rhythm_heatmap.py" "${2:-1}"
+}
+
 cmd_web() {
     header "WEB DASHBOARD"
     msg_info "Starting on ${CYAN}${BOLD}http://127.0.0.1:7880${RST}"
@@ -561,6 +565,7 @@ cmd_help() {
 
     printf "  ${CYAN}${BOLD}Dashboard${RST}\n"
     printf "    ${WHITE}${BOLD}dash${RST}         ${GRAY_L}Open terminal dashboard${RST}\n"
+    printf "    ${WHITE}${BOLD}rhythm${RST}       ${GRAY_L}Weekly activity heatmap${RST}                 ${ORANGE}wtrh${RST}\n"
     printf "    ${WHITE}${BOLD}web${RST}          ${GRAY_L}Start web dashboard (port 7880)${RST}\n"
     printf "    ${WHITE}${BOLD}menubar${RST}      ${GRAY_L}Start macOS menubar widget${RST}              ${ORANGE}wtmb${RST}\n"
     printf "    ${WHITE}${BOLD}docs${RST}         ${GRAY_L}Open documentation in browser${RST}           ${ORANGE}wtdocs${RST}\n"
@@ -654,6 +659,7 @@ case "${1:-help}" in
     w|weekly)     cmd_agg weekly;;
     m|monthly)    cmd_agg monthly;;
     dash)         _wt_timed=false; cmd_dashboard;;
+    rhythm|rh)    cmd_rhythm;;
     web)          _wt_timed=false; cmd_web;;
     menubar|mb)   _wt_timed=false; cmd_menubar;;
     docs|docu|documentation)  cmd_docs;;
