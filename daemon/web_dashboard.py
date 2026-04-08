@@ -17,6 +17,9 @@ DATA_SESS = BASE / "data" / "sessions"
 SUMMARIES = BASE / "summaries"
 LOGS = BASE / "logs"
 
+# Apps that represent inactive/lock-screen state — excluded from stats
+INACTIVE_APPS = {"loginwindow"}
+
 
 # ── Daten ────────────────────────────────────────────────────
 
@@ -230,22 +233,23 @@ def api_live():
             "ts": latest.get("ts"),
         }
 
-    # Daily statistics
+    # Daily statistics (exclude lock-screen / inactive apps)
     day_stats = None
-    if sessions:
-        total_sec = sum(s.get("duration_seconds", 0) for s in sessions)
-        focus = [s for s in sessions if s.get("duration_seconds", 0) >= 1500]
+    active_sessions = [s for s in sessions if s.get("app_name") not in INACTIVE_APPS]
+    if active_sessions:
+        total_sec = sum(s.get("duration_seconds", 0) for s in active_sessions)
+        focus = [s for s in active_sessions if s.get("duration_seconds", 0) >= 1500]
         focus_sec = sum(s.get("duration_seconds", 0) for s in focus)
-        apps = [s.get("app_name", "") for s in sessions]
+        apps = [s.get("app_name", "") for s in active_sessions]
         switches = sum(1 for i in range(1, len(apps)) if apps[i] != apps[i - 1])
-        clip = sum(len(s.get("clipboard_events", [])) for s in sessions)
-        keys = sum(s.get("keystrokes_total", 0) for s in sessions)
-        clicks = sum(s.get("mouse_clicks_total", 0) for s in sessions)
-        scrolls = sum(s.get("scroll_events_total", 0) for s in sessions)
+        clip = sum(len(s.get("clipboard_events", [])) for s in active_sessions)
+        keys = sum(s.get("keystrokes_total", 0) for s in active_sessions)
+        clicks = sum(s.get("mouse_clicks_total", 0) for s in active_sessions)
+        scrolls = sum(s.get("scroll_events_total", 0) for s in active_sessions)
 
         # Projects
         projects = {}
-        for s in sessions:
+        for s in active_sessions:
             p = s.get("project", "Other")
             if p not in projects:
                 projects[p] = {"sec": 0, "n": 0, "intensity": []}
@@ -268,7 +272,7 @@ def api_live():
 
         # Apps
         app_times = {}
-        for s in sessions:
+        for s in active_sessions:
             a = s.get("app_name", "Unknown")
             app_times[a] = app_times.get(a, 0) + s.get("duration_seconds", 0)
         app_list = [
@@ -278,7 +282,7 @@ def api_live():
 
         # Hourly activity
         hourly = [0] * 24
-        for s in sessions:
+        for s in active_sessions:
             try:
                 h = datetime.fromisoformat(s["start"]).hour
                 hourly[h] += s.get("duration_seconds", 0)
@@ -289,7 +293,7 @@ def api_live():
 
         day_stats = {
             "total_sec": total_sec,
-            "sessions": len(sessions),
+            "sessions": len(active_sessions),
             "focus_count": len(focus),
             "focus_sec": focus_sec,
             "switches": switches,
@@ -303,9 +307,9 @@ def api_live():
             "hourly": hourly,
         }
 
-    # Recent Sessions
+    # Recent Sessions (exclude inactive apps)
     recent_sess = []
-    for s in reversed(sessions[-12:]):
+    for s in reversed(active_sessions[-12:]):
         try:
             t = datetime.fromisoformat(s["start"]).strftime("%H:%M")
         except Exception:
@@ -345,6 +349,57 @@ def api_live():
         "reports": reports,
         "report_groups": report_groups,
         "logs": logs,
+    })
+
+
+@app.route("/api/rhythm")
+@app.route("/api/rhythm/<int:weeks>")
+def api_rhythm(weeks=2):
+    """Return heatmap data for the last N weeks."""
+    from rhythm_heatmap import get_active_hours, HEALTHY_START, HEALTHY_END
+    from datetime import timedelta as td
+
+    weeks = min(weeks, 8)
+    today = datetime.now()
+    days = weeks * 7
+    result = []
+
+    for i in range(days - 1, -1, -1):
+        day = today - td(days=i)
+        ds = day.strftime("%Y-%m-%d")
+        filepath = SUMMARIES / "daily" / f"{ds}.md"
+        hours = get_active_hours(filepath)
+        cells = []
+        for h in range(24):
+            if h in hours:
+                cells.append("healthy" if HEALTHY_START <= h < HEALTHY_END else "unhealthy")
+            else:
+                cells.append("missed" if HEALTHY_START <= h < HEALTHY_END else "rest")
+        result.append({
+            "date": ds,
+            "weekday": day.strftime("%a"),
+            "weekend": day.weekday() >= 5,
+            "today": i == 0,
+            "hours": cells,
+            "active": len(hours),
+            "healthy": sum(1 for h in hours if HEALTHY_START <= h < HEALTHY_END),
+            "unhealthy": sum(1 for h in hours if h < HEALTHY_START or h >= HEALTHY_END),
+        })
+
+    total_active = sum(d["active"] for d in result if d["active"])
+    total_healthy = sum(d["healthy"] for d in result)
+    days_tracked = sum(1 for d in result if d["active"])
+
+    return jsonify({
+        "days": result,
+        "healthy_start": HEALTHY_START,
+        "healthy_end": HEALTHY_END,
+        "stats": {
+            "avg_active": round(total_active / days_tracked, 1) if days_tracked else 0,
+            "healthy_pct": round(total_healthy / total_active * 100) if total_active else 0,
+            "days_tracked": days_tracked,
+            "total_days": days,
+        }
     })
 
 
@@ -559,6 +614,43 @@ h2 {
 /* System */
 .sys-row { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--fg2); margin-top: 6px; }
 
+/* Rhythm Heatmap */
+.heatmap { margin-top: 6px; }
+.heatmap-row { display: flex; align-items: center; gap: 0; margin-bottom: 1px; }
+.heatmap-label {
+  width: 70px; flex-shrink: 0; font-size: 11px; color: var(--fg2);
+  text-align: right; padding-right: 8px;
+}
+.heatmap-label.today { color: var(--fg); font-weight: 600; }
+.heatmap-label.weekend { color: var(--yellow); }
+.heatmap-cell {
+  width: 12px; height: 12px; margin: 0.5px; border-radius: 2px;
+  transition: opacity 0.3s;
+}
+.heatmap-cell.rest { background: transparent; }
+.heatmap-cell.missed { background: var(--bg3); }
+.heatmap-cell.healthy { background: var(--green); opacity: 0.85; }
+.heatmap-cell.unhealthy { background: var(--red); opacity: 0.75; }
+.heatmap-cell:hover { opacity: 1; outline: 1px solid var(--fg2); }
+.heatmap-hours { display: flex; margin-left: 78px; margin-bottom: 4px; }
+.heatmap-hours span { width: 13px; font-size: 8px; color: var(--fg3); text-align: center; }
+.heatmap-legend {
+  display: flex; gap: 16px; margin-top: 8px; margin-left: 78px; font-size: 11px; color: var(--fg2);
+}
+.heatmap-legend-dot {
+  display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+  vertical-align: middle; margin-right: 4px;
+}
+.heatmap-stats {
+  display: flex; gap: 20px; margin-top: 10px; margin-left: 78px; font-size: 12px;
+}
+.heatmap-stats .stat-val { font-size: 18px; }
+.heatmap-sep { border: none; border-top: 1px solid var(--bg3); margin: 2px 0 2px 78px; }
+.heatmap-day-total {
+  width: 30px; flex-shrink: 0; font-size: 10px; color: var(--fg3);
+  text-align: right; padding-left: 4px;
+}
+
 /* Idle overlay */
 .idle-banner {
   background: #1c2333; border: 1px solid var(--blue); border-radius: 6px;
@@ -635,6 +727,12 @@ h2 {
   <div class="card">
     <h2>Activity per Hour</h2>
     <div class="chart-wrap" id="hourly-chart"></div>
+  </div>
+
+  <!-- Rhythm Heatmap -->
+  <div class="card wide">
+    <h2>Rhythm Heatmap</h2>
+    <div class="heatmap" id="rhythm-heatmap"></div>
   </div>
 
   <!-- Apps -->
@@ -926,8 +1024,68 @@ async function refresh() {
   }
 }
 
+// Rhythm Heatmap
+async function loadRhythm() {
+  try {
+    const r = await fetch('/api/rhythm/2');
+    if (!r.ok) return;
+    const data = await r.json();
+    renderHeatmap(data);
+  } catch(e) { console.error('Rhythm error:', e); }
+}
+
+function renderHeatmap(data) {
+  const el = $('rhythm-heatmap');
+  if (!el) return;
+  let html = '';
+
+  // Hour labels
+  html += '<div class="heatmap-hours">';
+  for (let h = 0; h < 24; h++) {
+    html += '<span>' + (h % 3 === 0 ? h : '') + '</span>';
+  }
+  html += '</div>';
+
+  let prevSun = false;
+  data.days.forEach((d, i) => {
+    // Week separator
+    if (new Date(d.date).getDay() === 1 && i > 0) {
+      html += '<hr class="heatmap-sep">';
+    }
+
+    const cls = d.today ? 'today' : d.weekend ? 'weekend' : '';
+    const dd = d.date.slice(5); // MM-DD
+    html += '<div class="heatmap-row">';
+    html += '<div class="heatmap-label ' + cls + '">' + d.weekday + ' ' + dd.replace('-', '.') + '</div>';
+    d.hours.forEach((c, h) => {
+      html += '<div class="heatmap-cell ' + c + '" title="' + d.date + ' ' + h + ':00 — ' + c + '"></div>';
+    });
+    html += '<div class="heatmap-day-total">' + (d.active > 0 ? d.active + 'h' : '') + '</div>';
+    html += '</div>';
+  });
+
+  // Legend
+  html += '<div class="heatmap-legend">';
+  html += '<span><span class="heatmap-legend-dot" style="background:var(--green)"></span>Active (good)</span>';
+  html += '<span><span class="heatmap-legend-dot" style="background:var(--red)"></span>Active (late/early)</span>';
+  html += '<span><span class="heatmap-legend-dot" style="background:var(--bg3)"></span>Missed core time</span>';
+  html += '</div>';
+
+  // Stats
+  const s = data.stats;
+  html += '<div class="heatmap-stats">';
+  html += '<div class="stat"><div class="stat-val">' + s.avg_active + 'h</div><div class="stat-label">Avg/Day</div></div>';
+  html += '<div class="stat"><div class="stat-val" style="color:var(--green)">' + s.healthy_pct + '%</div><div class="stat-label">Healthy</div></div>';
+  html += '<div class="stat"><div class="stat-val">' + s.days_tracked + '/' + s.total_days + '</div><div class="stat-label">Days tracked</div></div>';
+  html += '</div>';
+
+  el.innerHTML = html;
+}
+
 refresh();
+loadRhythm();
 setInterval(refresh, REFRESH);
+setInterval(loadRhythm, 60000);
 </script>
 </body>
 </html>"""

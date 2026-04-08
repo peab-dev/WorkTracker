@@ -12,12 +12,15 @@ Requires: pyobjc-framework-Cocoa (already in WorkTracker deps)
 """
 
 import json
+import os
+import re
 import signal
 import sys
 import threading
 import time
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 
 import objc
 from AppKit import (
@@ -277,6 +280,9 @@ class WorkTrackerMenubar(NSObject):
 
         self._add_separator()
 
+        # Rhythm heatmap
+        self._build_rhythm_section()
+
         # Actions
         self._add_action("Dashboard öffnen", "openDashboard:")
         self._add_action("Jetzt aktualisieren", "refresh:")
@@ -295,6 +301,85 @@ class WorkTrackerMenubar(NSObject):
         self._add_action("Erneut versuchen", "refresh:")
         self._add_separator()
         self._add_action("Beenden", "terminate:")
+
+    def _build_rhythm_section(self):
+        """Add a compact 7-day rhythm heatmap to the menu."""
+        SUMMARY_DIR = Path.home() / "WorkTracker" / "summaries" / "daily"
+        HEALTHY_START, HEALTHY_END = 9, 22
+        today = datetime.now()
+
+        self._add_header("Rhythm (7 Tage)")
+
+        # Compact: show 6h-23h range only (18 hours)
+        # Header line with hour markers
+        hdr = "         "
+        for h in range(6, 24):
+            hdr += f"{h:>2}" if h % 3 == 0 else "  "
+        self._add_item(hdr, enabled=False, dim=True)
+
+        for i in range(6, -1, -1):
+            day = today - timedelta(days=i)
+            ds = day.strftime("%Y-%m-%d")
+            filepath = SUMMARY_DIR / f"{ds}.md"
+
+            # Get active hours (inline to avoid import issues)
+            INACTIVE_APPS = {"loginwindow"}
+            hours = set()
+            try:
+                in_timeline = False
+                with open(filepath) as f:
+                    for line in f:
+                        if "## Timeline" in line:
+                            in_timeline = True
+                            continue
+                        if in_timeline and line.startswith("##"):
+                            break
+                        if not in_timeline:
+                            continue
+                        m = re.match(r'\|\s*(\d{2}):(\d{2})\s*\|\s*(\d{2}):(\d{2})\s*\|', line)
+                        if m:
+                            # Skip inactive/lock-screen apps
+                            cols = [c.strip() for c in line.split("|")]
+                            app_name = cols[4] if len(cols) > 4 else ""
+                            if app_name in INACTIVE_APPS:
+                                continue
+                            sh, eh = int(m.group(1)), int(m.group(3))
+                            if sh <= eh:
+                                for hh in range(sh, eh + 1):
+                                    hours.add(hh)
+                            else:
+                                for hh in range(sh, 24):
+                                    hours.add(hh)
+                                for hh in range(0, eh + 1):
+                                    hours.add(hh)
+            except FileNotFoundError:
+                pass
+
+            weekday = day.strftime("%a")
+            label = f"{weekday:>3} "
+
+            row = ""
+            for h in range(6, 24):
+                if h in hours:
+                    row += " █" if HEALTHY_START <= h < HEALTHY_END else " ▓"
+                else:
+                    row += " ·" if HEALTHY_START <= h < HEALTHY_END else "  "
+
+            active = len(hours)
+            suffix = f" {active}h" if active else ""
+
+            is_today = (i == 0)
+            is_weekend = day.weekday() >= 5
+            color = None
+            if is_today:
+                color = None  # default (white)
+            elif is_weekend:
+                color = "orange"
+
+            self._add_item(f"  {label}{row}{suffix}", enabled=False, dim=(not is_today and not hours), color=color)
+
+        self._add_item("  █ gut  ▓ spät/früh  · verpasst", enabled=False, dim=True)
+        self._add_separator()
 
     # ── Menu helpers ────────────────────────────────────────────
 
