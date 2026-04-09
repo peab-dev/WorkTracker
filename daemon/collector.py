@@ -439,7 +439,16 @@ class SleepWakeMonitor:
 
 
 class BrowserHistoryReader:
-    """Reads URLs from browser history SQLite databases."""
+    """Reads URLs from browser — AppleScript for active tab, history DB as fallback."""
+
+    # AppleScript commands to get active tab URL
+    BROWSER_APPLESCRIPT = {
+        "com.apple.Safari": 'tell application "Safari" to get URL of current tab of front window',
+        "com.google.Chrome": 'tell application "Google Chrome" to get URL of active tab of front window',
+        "com.brave.Browser": 'tell application "Brave Browser" to get URL of active tab of front window',
+        "com.microsoft.edgemac": 'tell application "Microsoft Edge" to get URL of active tab of front window',
+        "company.thebrowser.Browser": 'tell application "Arc" to get URL of active tab of front window',
+    }
 
     BROWSER_DB_PATHS = {
         "com.google.Chrome": ("~/Library/Application Support/Google/Chrome/Default/History", "chromium"),
@@ -494,7 +503,26 @@ class BrowserHistoryReader:
         except Exception:
             return None
 
-    def get_url(self, bundle_id: str, window_title: str) -> Optional[str]:
+    def _get_url_via_applescript(self, bundle_id: str) -> Optional[str]:
+        """Get the active tab URL via AppleScript (fast, accurate)."""
+        script = self.BROWSER_APPLESCRIPT.get(bundle_id)
+        if not script:
+            return None
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True, text=True, timeout=2,
+            )
+            if result.returncode == 0:
+                url = result.stdout.strip()
+                if url and url != "missing value":
+                    return url
+        except Exception:
+            pass
+        return None
+
+    def _get_url_via_history(self, bundle_id: str, window_title: str) -> Optional[str]:
+        """Fallback: get URL from browser history database."""
         if bundle_id not in self.BROWSER_DB_PATHS:
             return None
         _, db_type = self.BROWSER_DB_PATHS[bundle_id]
@@ -505,7 +533,6 @@ class BrowserHistoryReader:
             conn = sqlite3.connect(tmp_db, timeout=2)
             conn.execute("PRAGMA journal_mode=OFF")
             url = None
-            # Extract a meaningful title fragment for matching
             title_frag = window_title.split(" — ")[0].split(" - ")[0].strip()[:80] if window_title else ""
 
             if db_type == "chromium":
@@ -544,7 +571,6 @@ class BrowserHistoryReader:
                         (title_frag[:40],),
                     ).fetchone()
                 else:
-                    # No window title — get most recently visited URL by timestamp
                     row = conn.execute(
                         "SELECT hi.url FROM history_items hi "
                         "JOIN history_visits hv ON hi.id = hv.history_item "
@@ -556,6 +582,15 @@ class BrowserHistoryReader:
             return url
         except Exception:
             return None
+
+    def get_url(self, bundle_id: str, window_title: str) -> Optional[str]:
+        """Get URL of the active browser tab. AppleScript first, history DB fallback."""
+        # Primary: AppleScript — returns the actual active tab URL
+        url = self._get_url_via_applescript(bundle_id)
+        if url:
+            return url
+        # Fallback: history database lookup
+        return self._get_url_via_history(bundle_id, window_title)
 
     def cleanup(self):
         try:
@@ -838,6 +873,35 @@ def _window_title_for_pid(pid: int) -> Optional[str]:
     return None
 
 
+# AppleScript templates to get the active tab *title* from browsers.
+_BROWSER_TITLE_APPLESCRIPT: dict[str, str] = {
+    "com.apple.Safari": 'tell application "Safari" to get name of current tab of front window',
+    "com.google.Chrome": 'tell application "Google Chrome" to get title of active tab of front window',
+    "com.brave.Browser": 'tell application "Brave Browser" to get title of active tab of front window',
+    "com.microsoft.edgemac": 'tell application "Microsoft Edge" to get title of active tab of front window',
+    "company.thebrowser.Browser": 'tell application "Arc" to get title of active tab of front window',
+}
+
+
+def _browser_title_via_applescript(bundle_id: str) -> Optional[str]:
+    """Fallback: get active tab title via AppleScript when CGWindowList fails."""
+    script = _BROWSER_TITLE_APPLESCRIPT.get(bundle_id)
+    if not script:
+        return None
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=2,
+        )
+        if result.returncode == 0:
+            title = result.stdout.strip()
+            if title and title != "missing value":
+                return title
+    except Exception:
+        pass
+    return None
+
+
 def collect_active_app() -> Optional[dict]:
     # Primary: use Accessibility API for true keyboard-focus owner.
     # This correctly ignores floating overlays (e.g. Claude Cowork widget)
@@ -845,6 +909,8 @@ def collect_active_app() -> Optional[dict]:
     ax = _get_focused_app_via_ax()
     if ax is not None:
         title = _window_title_for_pid(ax["pid"])
+        if not title and ax["bundle_id"] in BROWSER_BUNDLES:
+            title = _browser_title_via_applescript(ax["bundle_id"])
         return {"name": ax["name"], "bundle_id": ax["bundle_id"], "window_title": title}
 
     # Fallback: NSWorkspace frontmostApplication (original behaviour)
@@ -857,6 +923,8 @@ def collect_active_app() -> Optional[dict]:
         name = str(app.localizedName() or "")
         bundle_id = str(app.bundleIdentifier() or "")
         title = _window_title_for_pid(pid)
+        if not title and bundle_id in BROWSER_BUNDLES:
+            title = _browser_title_via_applescript(bundle_id)
 
         return {"name": name, "bundle_id": bundle_id, "window_title": title}
     except Exception:

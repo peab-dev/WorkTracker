@@ -387,6 +387,11 @@ cmd_agg() {
             kb=$(echo "scale=1; $size / 1024" | bc 2>/dev/null || echo "?")
             msg_info "Report: ${WHITE}${BOLD}$name${RST} ${GRAY}(${kb} KB)${RST}"
         fi
+
+        # Review learned patterns (daily only, interactive terminal)
+        if [[ "$mode" == "daily" && -t 0 ]]; then
+            "$VENV" "$DAEMON/review_patterns.py"
+        fi
     else
         msg_err "${label_name} aggregation failed $(badge_err "exit=$exit_code")"
         msg_info "Check: ${DIM}$LOG_DIR/aggregator.log${RST}"
@@ -561,14 +566,16 @@ cmd_help() {
     printf "    ${WHITE}${BOLD}daily${RST}        ${GRAY_L}Run daily aggregation${RST}                ${ORANGE}wtd${RST}\n"
     printf "    ${WHITE}${BOLD}weekly${RST}       ${GRAY_L}Run weekly aggregation${RST}               ${ORANGE}wtw${RST}\n"
     printf "    ${WHITE}${BOLD}monthly${RST}      ${GRAY_L}Run monthly aggregation${RST}              ${ORANGE}wtm${RST}\n"
+    printf "    ${WHITE}${BOLD}all${RST}          ${GRAY_L}Run all aggregations${RST}                 ${ORANGE}wtx${RST}\n"
+    printf "    ${WHITE}${BOLD}reprocess${RST}    ${GRAY_L}Re-run all days with current patterns${RST} ${ORANGE}wtrp${RST}\n"
     echo ""
 
     printf "  ${CYAN}${BOLD}Dashboard${RST}\n"
-    printf "    ${WHITE}${BOLD}dash${RST}         ${GRAY_L}Open terminal dashboard${RST}\n"
-    printf "    ${WHITE}${BOLD}rhythm${RST}       ${GRAY_L}Weekly activity heatmap${RST}                 ${ORANGE}wtrh${RST}\n"
-    printf "    ${WHITE}${BOLD}web${RST}          ${GRAY_L}Start web dashboard (port 7880)${RST}\n"
-    printf "    ${WHITE}${BOLD}menubar${RST}      ${GRAY_L}Start macOS menubar widget${RST}              ${ORANGE}wtmb${RST}\n"
-    printf "    ${WHITE}${BOLD}docs${RST}         ${GRAY_L}Open documentation in browser${RST}           ${ORANGE}wtdocs${RST}\n"
+    printf "    ${WHITE}${BOLD}dash${RST}         ${GRAY_L}Open terminal dashboard${RST}              ${ORANGE}wtdash${RST}\n"
+    printf "    ${WHITE}${BOLD}rhythm${RST}       ${GRAY_L}Weekly activity heatmap${RST}              ${ORANGE}wtrh${RST}\n"
+    printf "    ${WHITE}${BOLD}web${RST}          ${GRAY_L}Start web dashboard (port 7880)${RST}      ${ORANGE}wtweb${RST}\n"
+    printf "    ${WHITE}${BOLD}menubar${RST}      ${GRAY_L}Start macOS menubar widget${RST}           ${ORANGE}wtmb${RST}\n"
+    printf "    ${WHITE}${BOLD}docs${RST}         ${GRAY_L}Open documentation in browser${RST}        ${ORANGE}wtdocs${RST}\n"
     echo ""
 
     printf "  ${GRAY_L}wtrl${RST} ${GRAY}= reload shell (activate aliases)${RST}\n"
@@ -642,6 +649,50 @@ cmd_docs() {
     fi
 }
 
+cmd_reprocess() {
+    header "REPROCESS SESSIONS"
+
+    local snap_dir="$BASE/data/snapshots"
+    local dates=()
+
+    # Collect all dates with snapshot files
+    for f in "$snap_dir"/*.jsonl; do
+        [[ -f "$f" ]] || continue
+        local d
+        d=$(basename "$f" .jsonl)
+        dates+=("$d")
+    done
+
+    if [[ ${#dates[@]} -eq 0 ]]; then
+        msg_err "No snapshot data found"
+        echo ""
+        return
+    fi
+
+    # Sort dates
+    IFS=$'\n' dates=($(sort <<<"${dates[*]}")); unset IFS
+
+    msg_info "Reprocessing ${WHITE}${BOLD}${#dates[@]}${RST} days with current patterns..."
+    echo ""
+
+    local ok=0
+    local fail=0
+    for d in "${dates[@]}"; do
+        printf "  ${GRAY_L}%s${RST} " "$d"
+        if "$VENV" "$DAEMON/aggregator.py" --mode daily --date "$d" >/dev/null 2>&1; then
+            printf "${GREEN}${SYM_CHECK}${RST}\n"
+            ((ok++))
+        else
+            printf "${RED}${SYM_CROSS}${RST}\n"
+            ((fail++))
+        fi
+    done
+
+    echo ""
+    msg_ok "Reprocessed: ${WHITE}${BOLD}${ok}${RST} OK, ${fail} failed"
+    echo ""
+}
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Main
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -662,6 +713,7 @@ case "${1:-help}" in
     rhythm|rh)    cmd_rhythm;;
     web)          _wt_timed=false; cmd_web;;
     menubar|mb)   _wt_timed=false; cmd_menubar;;
+    reprocess|rp)  cmd_reprocess;;
     docs|docu|documentation)  cmd_docs;;
     tail|log)     _wt_timed=false; cmd_tail;;
     h|help|-h|--help)  _wt_timed=false; cmd_help;;
