@@ -4,6 +4,7 @@
 import argparse
 import fnmatch
 import json
+import re
 import logging
 import logging.handlers
 import math
@@ -19,6 +20,8 @@ from urllib.parse import urlparse
 import pandas as pd
 import yaml
 from rapidfuzz.fuzz import ratio as levenshtein_ratio
+
+from web_categories import classify_url, build_web_category_tree
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -111,29 +114,176 @@ def load_config() -> dict:
         return yaml.safe_load(f) or {}
 
 
-def load_patterns() -> tuple[dict[str, dict], str]:
-    """Return (projects_dict, default_project).
+def load_patterns() -> tuple[dict[str, dict], str, dict[str, list[str]]]:
+    """Return (projects_dict, default_project, app_categories).
 
-    Loads static patterns from *project_patterns.yaml* and, if it exists,
-    merges learned patterns from *learned_patterns.yaml* (static wins on
-    conflict).
+    Loads only static patterns from *project_patterns.yaml*.
+    Learned patterns in *learned_patterns.yaml* are suggestions only —
+    they are NOT auto-merged. Use review_patterns.py to adopt them.
     """
     with open(PATTERNS_PATH) as f:
         data = yaml.safe_load(f) or {}
 
-    # Merge learned patterns (auto-generated suggestions)
-    learned_path = PATTERNS_PATH.parent / "learned_patterns.yaml"
-    if learned_path.exists():
-        try:
-            with open(learned_path) as f:
-                learned = yaml.safe_load(f) or {}
-            for proj_name, proj_info in learned.get("projects", {}).items():
-                if proj_name not in data.get("projects", {}):
-                    data.setdefault("projects", {})[proj_name] = proj_info
-        except Exception:
-            log.warning("Failed to load learned_patterns.yaml", exc_info=True)
+    app_categories = data.get("app_categories", {})
+    return data.get("projects", {}), data.get("default_project", "Other"), app_categories
 
-    return data.get("projects", {}), data.get("default_project", "Other")
+
+def match_app_category(app_name: str, app_categories: dict) -> str:
+    """Match app name against app_categories. Always returns a category string.
+
+    Supports both flat (list) and structured (dict with 'apps') formats.
+    """
+    if not app_name:
+        return "Other"
+    app_lower = app_name.lower()
+    for category, cat_info in app_categories.items():
+        if category == "Other":
+            continue
+        # Support both formats: list or dict with "apps" key
+        apps_list = cat_info if isinstance(cat_info, list) else cat_info.get("apps", [])
+        for pattern in apps_list:
+            if fnmatch.fnmatch(app_lower, pattern.lower()):
+                return category
+    return "Other"
+
+
+# Browser subcategory mapping: project category → browser subcategory
+_BROWSER_SUBCAT_MAP = {
+    "Development": "Development",
+    "AI": "AI",
+    "News": "News",
+    "Social Media": "Social Media",
+    "Media/Entertainment": "Entertainment",
+    "Entertainment": "Entertainment",
+    "Finance": "Finance",
+    "Crypto": "Finance",
+    "Communication": "Communication",
+    "Research": "Searching",
+    "Business": "Business",
+    "Creative": "Creative",
+    "Music": "Music",
+}
+
+# Media app → subcategory mapping
+_MEDIA_SUBCAT_MAP = {
+    "spotify": "Music", "musik": "Music",
+    "podcasts": "Podcasts",
+    "vlc": "Video", "iina": "Video", "quicktime player": "Video",
+    "fotos": "Photos", "photos": "Photos", "photo booth": "Photos",
+}
+
+# Development app → subcategory mapping
+_DEV_SUBCAT_MAP = {
+    "webstorm": "IDE", "xcode": "IDE",
+    "terminal": "Terminal",
+    "docker desktop": "Dev Tools", "mongodb compass": "Dev Tools",
+    "filezilla": "Dev Tools", "github desktop": "Dev Tools",
+    "bambu studio": "Dev Tools", "jetbrains toolbox": "Dev Tools",
+}
+
+# Communication app → subcategory mapping
+_COMM_SUBCAT_MAP = {
+    "mail": "Mail",
+    "nachrichten": "Chat", "whatsapp": "Chat", "slack": "Chat", "telegram": "Chat",
+}
+
+# Productivity app → subcategory mapping
+_PROD_SUBCAT_MAP = {
+    "notizen": "Notes",
+    "pages": "Office", "numbers": "Office", "textEdit": "Office",
+    "ticktick": "Tasks", "erinnerungen": "Tasks",
+    "vorschau": "Office",
+}
+
+# Mapping tables per category
+_SUBCAT_MAPS: dict[str, dict[str, str]] = {
+    "Media": _MEDIA_SUBCAT_MAP,
+    "Development": _DEV_SUBCAT_MAP,
+    "Communication": _COMM_SUBCAT_MAP,
+    "Productivity": _PROD_SUBCAT_MAP,
+}
+
+
+def _resolve_subcategory(app_category: str, app_name: str,
+                          project_category: str) -> str:
+    """Determine the subcategory for a session.
+
+    For Browser: derived from the *project* category (News, AI, etc.).
+    For other categories: derived from the *app* name.
+    """
+    if app_category == "Browser":
+        return _BROWSER_SUBCAT_MAP.get(project_category, project_category or "Other")
+
+    subcat_map = _SUBCAT_MAPS.get(app_category)
+    if subcat_map:
+        app_lower = app_name.lower()
+        for pattern, sub in subcat_map.items():
+            if fnmatch.fnmatch(app_lower, pattern.lower()):
+                return sub
+        # fnmatch fallback for IDE patterns like "IntelliJ*"
+        for pattern, sub in subcat_map.items():
+            if "*" in pattern and fnmatch.fnmatch(app_lower, pattern.lower()):
+                return sub
+
+    return ""
+
+
+_FORGE_DOMAINS = {"github.com", "gitlab.com", "bitbucket.org"}
+
+
+def _extract_repo_from_url(url: str) -> str | None:
+    """Extract repository name from GitHub/GitLab/Bitbucket URLs."""
+    try:
+        host = urlparse(url).netloc.replace("www.", "").lower()
+        if host not in _FORGE_DOMAINS:
+            return None
+        parts = [p for p in urlparse(url).path.split("/") if p]
+        return parts[1] if len(parts) >= 2 else None
+    except Exception:
+        return None
+
+
+def _parse_terminal_title(title: str) -> dict:
+    """Extract CWD, command and arguments from Terminal window titles.
+
+    Typical formats:
+      "daemon — -zsh — 120×30"          → cwd=daemon,  command=zsh
+      "peter — menubar.py — 120×30"     → cwd=peter,   command=menubar.py
+      "peter — python ◂ wt daily — 120×30" → command=wt daily
+      "WorkTracker — sleep ◂ wt — 120×30"  → cwd=WorkTracker, command=wt
+    """
+    parts = re.split(r"\s+—\s+", title)
+    result: dict[str, str] = {"cwd": "", "command": "", "raw": title}
+
+    if len(parts) >= 2:
+        # Last segment is usually dimensions (e.g. "120×30") → drop it
+        if re.match(r"^\d+[×x]\d+$", parts[-1].strip()):
+            parts = parts[:-1]
+        result["cwd"] = parts[0].strip()
+        if len(parts) >= 2:
+            cmd_part = parts[1].strip()
+            # "python ◂ wt daily" → parent command = "wt daily"
+            if "◂" in cmd_part:
+                _sub, parent = cmd_part.split("◂", 1)
+                result["command"] = parent.strip()
+            else:
+                result["command"] = cmd_part.lstrip("-")  # "-zsh" → "zsh"
+
+    return result
+
+
+def _parse_ide_title(title: str) -> list[str]:
+    """Extract meaningful segments from IDE window titles.
+
+    Returns list of stripped segments split on common IDE delimiters.
+    """
+    return [s.strip() for s in re.split(r"\s+[—\-|]\s+", title) if s.strip()]
+
+
+def _extract_filename(title: str) -> str:
+    """Extract a filename (with extension) from a window title."""
+    m = re.search(r"[\w.-]+\.\w{1,5}", title)
+    return m.group(0) if m else ""
 
 
 def match_project(
@@ -142,36 +292,110 @@ def match_project(
     default: str,
     url: str = "",
     app_name: str = "",
+    git_repo: str = "",
+    app_category: str = "",
 ) -> tuple[str, str]:
-    """Match window title, URL, and app name against project patterns.
+    """Multi-signal project matching.
 
-    Returns *(project_name, category)*.  Priority: title → url → app_name.
+    Returns *(project_name, category)*.
+    Priority: git_repo → URL-repo extraction → title patterns → url patterns
+              → terminal signals → IDE signals → filename → default.
     """
     title = _safe_str(title)
     url = _safe_str(url)
-    app_name = _safe_str(app_name)
-    if not title and not url and not app_name:
+    git_repo = _safe_str(git_repo)
+    if not title and not url and not git_repo:
         return default, ""
     title_lower = title.lower()
     url_lower = url.lower()
-    app_lower = app_name.lower()
+
+    # --- Tier 1: Git repo (highest priority) ---
+    if git_repo:
+        git_lower = git_repo.lower()
+        for proj_name, proj_info in projects.items():
+            for repo_pat in proj_info.get("git_repos", []):
+                if fnmatch.fnmatch(git_lower, repo_pat.lower()):
+                    return proj_name, proj_info.get("category", "")
+
+    # --- Tier 2: URL repo extraction (GitHub/GitLab/Bitbucket) ---
+    if url:
+        extracted = _extract_repo_from_url(url)
+        if extracted:
+            ext_lower = extracted.lower()
+            for proj_name, proj_info in projects.items():
+                if ext_lower == proj_name.lower():
+                    return proj_name, proj_info.get("category", "")
+                for gr in proj_info.get("git_repos", []):
+                    if ext_lower == gr.lower():
+                        return proj_name, proj_info.get("category", "")
+
+    # --- Tier 3: Title patterns (existing) ---
     for proj_name, proj_info in projects.items():
-        # Title patterns
         for pattern in proj_info.get("patterns", []):
             if fnmatch.fnmatch(title_lower, pattern.lower()):
                 return proj_name, proj_info.get("category", "")
-        # URL patterns
-        if url_lower:
+
+    # --- Tier 4: URL patterns (existing) ---
+    if url_lower:
+        for proj_name, proj_info in projects.items():
             for pattern in proj_info.get("url_patterns", []):
                 if fnmatch.fnmatch(url_lower, pattern.lower()):
                     return proj_name, proj_info.get("category", "")
-        # App name patterns
-        if app_lower:
-            for pattern in proj_info.get("app_patterns", []):
-                if fnmatch.fnmatch(app_lower, pattern.lower()):
+
+    # --- Tier 5: Terminal signal matching (CWD, command, files) ---
+    if app_category == "Terminal" and title:
+        parsed = _parse_terminal_title(title)
+        cwd = parsed["cwd"].lower()
+        cmd = parsed["command"].lower()
+
+        for proj_name, proj_info in projects.items():
+            # CWD against directories list
+            for d in proj_info.get("directories", []):
+                if fnmatch.fnmatch(cwd, d.lower()):
                     return proj_name, proj_info.get("category", "")
-    if app_name:
-        return f"{default} ({app_name})", ""
+            # Command against commands list
+            for c in proj_info.get("commands", []):
+                if fnmatch.fnmatch(cmd, c.lower()):
+                    return proj_name, proj_info.get("category", "")
+            # Command against files list
+            for f in proj_info.get("files", []):
+                if fnmatch.fnmatch(cmd, f.lower()):
+                    return proj_name, proj_info.get("category", "")
+
+    # --- Tier 6: IDE signal matching (project dir from title segments) ---
+    if app_category == "IDE" and title:
+        segments = _parse_ide_title(title)
+        for segment in segments:
+            seg_lower = segment.lower().strip("~/")
+            for proj_name, proj_info in projects.items():
+                # Check against directories list
+                for d in proj_info.get("directories", []):
+                    if d.lower() in seg_lower:
+                        return proj_name, proj_info.get("category", "")
+                # Check against project name
+                if proj_name.lower() in seg_lower:
+                    return proj_name, proj_info.get("category", "")
+
+    # --- Tier 7: Filename matching (TextEdit, Vorschau, etc.) ---
+    if title:
+        filename = _extract_filename(title)
+        if filename:
+            fn_lower = filename.lower()
+            for proj_name, proj_info in projects.items():
+                for f in proj_info.get("files", []):
+                    if fnmatch.fnmatch(fn_lower, f.lower()):
+                        return proj_name, proj_info.get("category", "")
+
+    # --- Tier 8: Directory name matching (Finder, any app showing a folder name) ---
+    if title and not " " in title.strip():
+        # Single-word title → could be a directory name (e.g. Finder showing "daemon")
+        title_clean = title.strip().lower()
+        if title_clean and len(title_clean) >= 3:
+            for proj_name, proj_info in projects.items():
+                for d in proj_info.get("directories", []):
+                    if fnmatch.fnmatch(title_clean, d.lower()):
+                        return proj_name, proj_info.get("category", "")
+
     return default, ""
 
 
@@ -291,7 +515,7 @@ def detect_sessions(df: pd.DataFrame, cfg: dict) -> list[dict]:
     same_app_grace = agg_cfg.get("same_app_grace_period_seconds", 30)
     min_snapshots = agg_cfg.get("min_session_snapshots", 2)
 
-    projects, default_project = load_patterns()
+    projects, default_project, app_categories = load_patterns()
     interval = cfg.get("collector", {}).get("interval_seconds", 10)
 
     sessions: list[dict] = []
@@ -303,7 +527,7 @@ def detect_sessions(df: pd.DataFrame, cfg: dict) -> list[dict]:
         ts = row["ts"]
 
         if current is None:
-            current = _new_session(row, projects, default_project)
+            current = _new_session(row, projects, default_project, app_categories)
             continue
 
         # Sleep/wake event → always split
@@ -319,7 +543,7 @@ def detect_sessions(df: pd.DataFrame, cfg: dict) -> list[dict]:
         if has_gap:
             # Force split on sleep/wake gap
             sessions.append(_finalize_session(current))
-            current = _new_session(row, projects, default_project)
+            current = _new_session(row, projects, default_project, app_categories)
         elif same_app and time_gap < same_app_grace and not is_idle:
             # Tier 1: same app + small gap → merge (tab switching)
             current["end"] = ts
@@ -333,7 +557,7 @@ def detect_sessions(df: pd.DataFrame, cfg: dict) -> list[dict]:
         else:
             # Different app, long gap, or idle → split
             sessions.append(_finalize_session(current))
-            current = _new_session(row, projects, default_project)
+            current = _new_session(row, projects, default_project, app_categories)
 
     if current is not None:
         sessions.append(_finalize_session(current))
@@ -384,17 +608,27 @@ def _merge_micro_sessions(sessions: list[dict], min_snapshots: int) -> list[dict
     return merged
 
 
-def _new_session(row: pd.Series, projects: dict, default_project: str) -> dict:
+def _new_session(row: pd.Series, projects: dict, default_project: str,
+                  app_categories: dict[str, list[str]] | None = None) -> dict:
     title = _safe_str(row.get("app_window_title"))
     url = _safe_str(row.get("app_url"))
     app_name = _safe_str(row.get("app_name"))
-    proj, cat = match_project(title, projects, default_project, url=url, app_name=app_name)
+    app_cat = match_app_category(app_name, app_categories or {})
+    git_repo_val = _safe_str(row.get("git_repo"))
+    proj, cat = match_project(
+        title, projects, default_project,
+        url=url, app_name=app_name,
+        git_repo=git_repo_val, app_category=app_cat,
+    )
+    app_subcat = _resolve_subcategory(app_cat, app_name, cat)
     interval = 10
     return {
         "start": row["ts"],
         "end": row["ts"],
         "app_name": row.get("app_name") or "",
         "app_bundle_id": row.get("app_bundle_id") or "",
+        "app_category": app_cat,
+        "app_subcategory": app_subcat,
         "_titles": [title],
         "_last_title": title,
         "_last_ts": row["ts"],
@@ -490,6 +724,8 @@ def _finalize_session(session: dict) -> dict:
         "duration_seconds": round(duration),
         "app_name": session["app_name"],
         "app_bundle_id": session["app_bundle_id"],
+        "app_category": session.get("app_category", "Other"),
+        "app_subcategory": session.get("app_subcategory", ""),
         "window_title": window_title,
         "project": session["project"],
         "category": session["category"],
@@ -503,10 +739,69 @@ def _finalize_session(session: dict) -> dict:
     }
     if url:
         result["url"] = url
+        # Web category classification for browser sessions
+        if session.get("app_category") == "Browser":
+            wc_main, wc_sub = classify_url(url)
+            result["web_category"] = wc_main
+            result["web_subcategory"] = wc_sub
     if git_repo:
         result["git_repo"] = git_repo
         result["git_branch"] = git_branch
     return result
+
+
+# ---------------------------------------------------------------------------
+# Temporal Context Propagation
+# ---------------------------------------------------------------------------
+
+
+def _find_nearby_project(sessions: list[dict], idx: int, direction: int,
+                          max_gap_sec: float) -> tuple[str, str] | None:
+    """Find the nearest non-Other project in the given direction.
+
+    Returns (project, category) or None if no match within *max_gap_sec*.
+    """
+    anchor_ts = sessions[idx]["start"] if direction < 0 else sessions[idx]["end"]
+    i = idx + direction
+    while 0 <= i < len(sessions):
+        s = sessions[i]
+        if s.get("project", "Other") != "Other":
+            # Check time distance
+            ref_ts = s["end"] if direction < 0 else s["start"]
+            try:
+                gap = abs(pd.Timestamp(anchor_ts) - pd.Timestamp(ref_ts)).total_seconds()
+            except Exception:
+                gap = 9999
+            if gap <= max_gap_sec:
+                return s["project"], s.get("category", "")
+            return None  # too far
+        i += direction
+    return None
+
+
+def propagate_project_context(sessions: list[dict],
+                               window_minutes: int = 5) -> list[dict]:
+    """Propagate project context onto short 'Other' sessions.
+
+    A short Other session surrounded by the same project on both sides
+    (within *window_minutes*) gets assigned to that project.
+    """
+    max_gap = window_minutes * 60
+    for i, session in enumerate(sessions):
+        if session.get("project", "Other") != "Other":
+            continue
+        if session.get("duration_seconds", 0) > max_gap:
+            continue  # don't auto-assign long sessions
+
+        prev = _find_nearby_project(sessions, i, direction=-1, max_gap_sec=max_gap)
+        nxt = _find_nearby_project(sessions, i, direction=1, max_gap_sec=max_gap)
+
+        if prev and nxt and prev == nxt:
+            session["project"] = prev[0]
+            session["category"] = prev[1]
+            session["_context_propagated"] = True
+
+    return sessions
 
 
 # ---------------------------------------------------------------------------
@@ -578,21 +873,50 @@ def calc_daily_stats(df: pd.DataFrame, sessions: list[dict], cfg: Optional[dict]
         "media_ratio": round(media_ratio, 2),
     }
 
-    # --- Project distribution (excluding inactive apps) ---
-    proj_group = active_sdf.groupby("project").agg(
-        total_seconds=("duration_seconds", "sum"),
-        session_count=("duration_seconds", "count"),
-        avg_duration=("duration_seconds", "mean"),
-        avg_intensity=("intensity_score", "mean"),
-    ).sort_values("total_seconds", ascending=False)
-    proj_group["pct"] = proj_group["total_seconds"] / max(total_active_sec, 1)
-    stats["projects"] = proj_group.reset_index().to_dict("records")
+    # --- Project distribution (excluding inactive apps, excluding unmatched) ---
+    matched_sdf = active_sdf[~active_sdf["project"].str.startswith("Other", na=False)] if "project" in active_sdf.columns else active_sdf
+    if not matched_sdf.empty:
+        proj_group = matched_sdf.groupby("project").agg(
+            total_seconds=("duration_seconds", "sum"),
+            session_count=("duration_seconds", "count"),
+            avg_duration=("duration_seconds", "mean"),
+            avg_intensity=("intensity_score", "mean"),
+        ).sort_values("total_seconds", ascending=False)
+        proj_group["pct"] = proj_group["total_seconds"] / max(total_active_sec, 1)
+        stats["projects"] = proj_group.reset_index().to_dict("records")
+    else:
+        stats["projects"] = []
+
+    # --- App category distribution (excluding inactive apps) ---
+    if "app_category" in active_sdf.columns:
+        cat_group = active_sdf.groupby("app_category").agg(
+            total_seconds=("duration_seconds", "sum"),
+            session_count=("duration_seconds", "count"),
+        ).sort_values("total_seconds", ascending=False)
+        cat_group["pct"] = cat_group["total_seconds"] / max(total_active_sec, 1)
+        stats["app_categories"] = cat_group.reset_index().to_dict("records")
+    else:
+        stats["app_categories"] = []
+
+    # --- App subcategory distribution (excluding inactive apps) ---
+    if "app_category" in active_sdf.columns and "app_subcategory" in active_sdf.columns:
+        sub_group = active_sdf.groupby(["app_category", "app_subcategory"]).agg(
+            total_seconds=("duration_seconds", "sum"),
+            session_count=("duration_seconds", "count"),
+        ).sort_values("total_seconds", ascending=False)
+        sub_group["pct"] = sub_group["total_seconds"] / max(total_active_sec, 1)
+        stats["app_subcategories"] = sub_group.reset_index().to_dict("records")
+    else:
+        stats["app_subcategories"] = []
 
     # --- App usage (excluding inactive apps) ---
-    app_group = active_sdf.groupby("app_name").agg(
-        total_seconds=("duration_seconds", "sum"),
-        top_project=("project", lambda x: x.mode().iloc[0] if len(x.mode()) > 0 else ""),
-    ).sort_values("total_seconds", ascending=False)
+    app_agg = {
+        "total_seconds": ("duration_seconds", "sum"),
+        "top_project": ("project", lambda x: x.mode().iloc[0] if len(x.mode()) > 0 else ""),
+    }
+    if "app_category" in active_sdf.columns:
+        app_agg["app_category"] = ("app_category", "first")
+    app_group = active_sdf.groupby("app_name").agg(**app_agg).sort_values("total_seconds", ascending=False)
     app_group["pct"] = app_group["total_seconds"] / max(total_active_sec, 1)
     stats["apps"] = app_group.reset_index().to_dict("records")
 
@@ -677,6 +1001,9 @@ def calc_daily_stats(df: pd.DataFrame, sessions: list[dict], cfg: Optional[dict]
         {"domain": k, "total_seconds": v}
         for k, v in sorted(url_domains.items(), key=lambda x: -x[1])
     ]
+
+    # --- Web categories ---
+    stats["web_categories"] = build_web_category_tree(sessions)
 
     # --- Git activity ---
     git_commits = []
@@ -876,24 +1203,40 @@ def render_daily_md(date: datetime, stats: dict, comparison: list[dict]) -> str:
     lines.append(f"- Parallel media: {ov.get('media_ratio', 0):.0%} of work time")
     lines.append("")
 
+    # --- App Categories ---
+    app_cats = stats.get("app_categories", [])
+    if app_cats:
+        lines.append("## App Categories")
+        lines.append("| Category | Time | Share | Sessions |")
+        lines.append("|----------|------|--------|----------|")
+        for c in app_cats:
+            lines.append(
+                f"| {c['app_category']} | {fmt_duration(c['total_seconds'])} "
+                f"| {pct_str(c['pct'])} | {c['session_count']} |"
+            )
+        lines.append("")
+
     # --- Project Distribution ---
-    lines.append("## Project Distribution")
-    lines.append("| Project | Time | Share | Sessions | Avg Session | Intensity |")
-    lines.append("|---------|------|--------|----------|-----------|------------|")
-    for p in stats.get("projects", []):
-        lines.append(
-            f"| {p['project']} | {fmt_duration(p['total_seconds'])} | {pct_str(p['pct'])} "
-            f"| {p['session_count']} | {fmt_duration(p['avg_duration'])} "
-            f"| {intensity_bar(p['avg_intensity'])} |"
-        )
-    lines.append("")
+    projects_list = stats.get("projects", [])
+    if projects_list:
+        lines.append("## Project Distribution")
+        lines.append("| Project | Time | Share | Sessions | Avg Session | Intensity |")
+        lines.append("|---------|------|--------|----------|-----------|------------|")
+        for p in projects_list:
+            lines.append(
+                f"| {p['project']} | {fmt_duration(p['total_seconds'])} | {pct_str(p['pct'])} "
+                f"| {p['session_count']} | {fmt_duration(p['avg_duration'])} "
+                f"| {intensity_bar(p['avg_intensity'])} |"
+            )
+        lines.append("")
 
     # --- App Usage ---
     lines.append("## App Usage")
-    lines.append("| App | Time | Share | Top Project |")
-    lines.append("|-----|------|--------|-------------|")
+    lines.append("| App | Category | Time | Share | Top Project |")
+    lines.append("|-----|----------|------|--------|-------------|")
     for a in stats.get("apps", []):
-        lines.append(f"| {a['app_name']} | {fmt_duration(a['total_seconds'])} | {pct_str(a['pct'])} | {a['top_project']} |")
+        cat = a.get('app_category', '')
+        lines.append(f"| {a['app_name']} | {cat} | {fmt_duration(a['total_seconds'])} | {pct_str(a['pct'])} | {a['top_project']} |")
     lines.append("")
 
     # --- Timeline ---
@@ -1326,7 +1669,12 @@ def run_daily(date: datetime) -> None:
             s["duration_seconds"] = (end_ts - midnight).total_seconds()
         clipped.append(s)
     sessions = clipped
-    log.info("%d Sessions erkannt", len(sessions))
+
+    # Propagate project context onto short 'Other' sessions
+    other_before = sum(1 for s in sessions if s.get("project", "Other") == "Other")
+    sessions = propagate_project_context(sessions)
+    propagated = other_before - sum(1 for s in sessions if s.get("project", "Other") == "Other")
+    log.info("%d Sessions erkannt (%d via Kontext propagiert)", len(sessions), propagated)
 
     # Save sessions
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
@@ -1373,26 +1721,50 @@ def run_daily(date: datetime) -> None:
 
 
 def suggest_patterns(sessions: list[dict], date: datetime) -> None:
-    """Analyze 'Other' sessions and write suggestions to learned_patterns.yaml."""
+    """Analyze unmatched sessions and write suggestions to learned_patterns.yaml."""
     sonstiges = [s for s in sessions if s.get("project", "").startswith("Other")]
     if not sonstiges:
-        log.info("No 'Other' sessions — no suggestions needed.")
+        log.info("No unmatched sessions — no suggestions needed.")
         return
 
     # Group by extracted keyword / domain
     from urllib.parse import urlparse as _urlparse
 
     groups: dict[str, dict] = defaultdict(
-        lambda: {"count": 0, "total_seconds": 0.0, "titles": set(), "urls": set()}
+        lambda: {"count": 0, "total_seconds": 0.0, "titles": set(), "urls": set(),
+                 "directories": set(), "files": set(), "commands": set()}
     )
+
+    os_user = os.environ.get("USER", "").lower()
+    stopwords = {
+        # English
+        "the", "and", "for", "with", "this", "from", "that", "about",
+        "which", "their", "there", "where", "would", "could", "should",
+        "every", "after", "before", "between", "through", "during",
+        "search", "welcome", "untitled", "neuer",
+        # German
+        "oder", "und", "der", "die", "das", "ein", "eine", "nicht",
+        "keine", "unter", "über", "nach", "auch", "wenn", "wird",
+        "haben", "werden", "diese", "dieser", "dieses", "andere",
+        "suchen", "startseite", "willkommen",
+        # System / app names (already covered by app_categories)
+        "sleep", "python", "rechner", "musik", "mediathek", "fotos",
+        "photos", "finder", "safari", "terminal", "notizen",
+        "ticktick", "containers", "compass", "aktivitätsanzeige",
+    }
+    if os_user:
+        stopwords.add(os_user)
 
     for s in sonstiges:
         title = _safe_str(s.get("window_title"))
         url = _safe_str(s.get("url"))
         dur = s.get("duration_seconds", 0)
+        app_cat = s.get("app_category", "")
 
-        # Extract domain from URL if available
         key = None
+        extra_fields: dict[str, list[str]] = {}
+
+        # 1. URL domain extraction
         if url:
             try:
                 domain = _urlparse(url).netloc.replace("www.", "")
@@ -1401,14 +1773,43 @@ def suggest_patterns(sessions: list[dict], date: datetime) -> None:
             except Exception:
                 pass
 
-        # Fall back to significant title words
+        # 2. Terminal-specific: extract CWD and command
+        if not key and app_cat == "Terminal" and title:
+            parsed = _parse_terminal_title(title)
+            cwd = parsed["cwd"].strip()
+            cmd = parsed["command"].strip()
+            if cwd and cwd.lower() != os_user and cwd.lower() not in stopwords:
+                key = cwd.lower()
+                extra_fields["directories"] = [cwd]
+            elif cmd and cmd.lower() not in ("zsh", "bash", "fish", "sh"):
+                # Extract command base name
+                cmd_base = cmd.split()[0] if cmd else ""
+                if cmd_base and cmd_base.lower() not in stopwords and len(cmd_base) > 2:
+                    key = cmd_base.lower()
+                    extra_fields["commands"] = [cmd_base]
+
+        # 3. Filename extraction
         if not key and title:
-            # Take the first meaningful word (>4 chars, not common)
-            stopwords = {"the", "and", "for", "with", "this", "from", "that", "oder",
-                         "und", "der", "die", "das", "ein", "eine"}
-            words = [w for w in title.split() if len(w) > 4 and w.lower() not in stopwords]
+            filename = _extract_filename(title)
+            if filename and len(filename) > 4:
+                key = filename.lower()
+                extra_fields["files"] = [filename]
+
+        # 4. Significant title words (fallback)
+        if not key and title:
+            clean_title = title
+            if " — " in clean_title:
+                parts = clean_title.split(" — ", 1)
+                if len(parts[0].split()) == 1:
+                    clean_title = parts[1]
+            words = [w for w in clean_title.split() if len(w) > 5 and w.lower() not in stopwords]
             if words:
-                key = words[0].lower().strip("…·|—-:,.")
+                candidate = words[0].lower().strip("…·|—-:,.")
+                if re.match(r"^\d+[×x]\d+$", candidate):
+                    continue
+                if re.match(r"^[\d.]+$", candidate):
+                    continue
+                key = candidate
 
         if not key:
             continue
@@ -1419,9 +1820,12 @@ def suggest_patterns(sessions: list[dict], date: datetime) -> None:
             groups[key]["titles"].add(title[:60])
         if url:
             groups[key]["urls"].add(url)
+        for field in ("directories", "files", "commands"):
+            for val in extra_fields.get(field, []):
+                groups[key][field].add(val)
 
     # Only keep groups with significant time (>5 minutes)
-    significant = {k: v for k, v in groups.items() if v["total_seconds"] >= 300}
+    significant = {k: v for k, v in groups.items() if v["total_seconds"] >= 30}
     if not significant:
         log.info("No significant 'Other' groups found.")
         return
@@ -1433,12 +1837,29 @@ def suggest_patterns(sessions: list[dict], date: datetime) -> None:
         with open(learned_path) as f:
             existing = yaml.safe_load(f) or {}
 
+    # Load static patterns to skip already-adopted suggestions
+    with open(PATTERNS_PATH) as f:
+        static_data = yaml.safe_load(f) or {}
+    static_projects = static_data.get("projects", {})
+    # Also build a set of all existing pattern strings for fuzzy dedup
+    static_pattern_keys = set()
+    for pi in static_projects.values():
+        for pat in pi.get("patterns", []) + pi.get("url_patterns", []):
+            static_pattern_keys.add(pat.lower().strip("*"))
+
     projects = existing.setdefault("projects", {})
     date_str = date.strftime("%Y-%m-%d")
 
     for key, info in significant.items():
         # Create project name from key
         proj_name = key.replace(".", " ").title()
+
+        # Skip if already in static project_patterns.yaml (by name or by pattern key)
+        if proj_name in static_projects:
+            continue
+        if key.lower() in static_pattern_keys:
+            continue
+
         if proj_name in projects:
             # Update existing entry
             projects[proj_name]["_total_time_seconds"] = round(
@@ -1457,6 +1878,12 @@ def suggest_patterns(sessions: list[dict], date: datetime) -> None:
         }
         if info["urls"]:
             entry["url_patterns"] = [f"*{key}*"]
+        if info.get("directories"):
+            entry["directories"] = sorted(info["directories"])
+        if info.get("files"):
+            entry["files"] = sorted(info["files"])
+        if info.get("commands"):
+            entry["commands"] = sorted(info["commands"])
         projects[proj_name] = entry
 
     with open(learned_path, "w") as f:

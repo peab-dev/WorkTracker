@@ -9,11 +9,30 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 BASE = Path.home() / "WorkTracker"
 DATA_SNAP = BASE / "data" / "snapshots"
 DATA_SESS = BASE / "data" / "sessions"
 SUMMARIES = BASE / "summaries"
 LOGS = BASE / "logs"
+CONFIG_PATH = BASE / "daemon" / "config.yaml"
+
+
+def load_config():
+    """Load config.yaml and return relevant values."""
+    try:
+        with open(CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+        col = cfg.get("collector", {})
+        agg = cfg.get("aggregator", {})
+        return {
+            "interval": col.get("interval_seconds", 10),
+            "min_snapshots": agg.get("min_session_snapshots", 2),
+            "idle_threshold": agg.get("idle_threshold_seconds", 120),
+        }
+    except Exception:
+        return {"interval": 10, "min_snapshots": 2, "idle_threshold": 120}
 
 REFRESH_MS = 2000
 
@@ -219,6 +238,8 @@ def draw(stdscr):
             continue
 
         # ── Daten sammeln ──
+        cfg = load_config()
+        interval = cfg["interval"]
         snaps = tail_jsonl(DATA_SNAP / f"{today}.jsonl", 6)
         latest = snaps[-1] if snaps else None
         sessions = load_sessions(today)
@@ -253,11 +274,11 @@ def draw(stdscr):
             if pid:
                 put(stdscr, r, 2, "●", GRN | B)
                 put(stdscr, r, 4, "Collector", WHT | B)
-                put(stdscr, r, 22, f"running  PID {pid}", GRN)
+                put(stdscr, r, 22, f"{interval}s interval  PID {pid}", GRN)
             else:
                 put(stdscr, r, 2, "●", GRN)
                 put(stdscr, r, 4, "Collector", WHT | B)
-                put(stdscr, r, 22, "loaded (idle)", YEL)
+                put(stdscr, r, 22, f"{interval}s interval  (idle)", YEL)
         else:
             put(stdscr, r, 2, "○", RED)
             put(stdscr, r, 4, "Collector", WHT)
@@ -318,7 +339,7 @@ def draw(stdscr):
             # Input-Raten
             inp = latest.get("input", {})
             if len(snaps) >= 2:
-                span = len(snaps) * 10  # Sekunden
+                span = len(snaps) * interval
                 tot_keys = sum(s.get("input", {}).get("keystrokes", 0) for s in snaps)
                 tot_clicks = sum(
                     s.get("input", {}).get("mouse_clicks_left", 0)
@@ -375,6 +396,15 @@ def draw(stdscr):
             if git and isinstance(git, dict) and git.get("repo"):
                 put(stdscr, r, 2, f"Git: {git['repo']}/{git.get('branch', '—')}", BLU | D)
                 r += 1
+
+            # Config values
+            r += 1
+            min_ses = cfg["min_snapshots"]
+            min_dur = min_ses * interval
+            put(stdscr, r, 2, f"Interval: {interval}s", D)
+            put(stdscr, r, 18, f"Min Session: {min_ses}×{interval}s = {min_dur}s", D)
+            put(stdscr, r, 46, f"Idle: {cfg['idle_threshold']}s", D)
+            r += 1
         else:
             put(stdscr, r, 2, "No snapshot data", YEL)
             r += 2

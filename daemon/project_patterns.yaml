@@ -1,36 +1,60 @@
+app_categories:
+  Browser: ["Safari", "Google Chrome", "Firefox", "Arc", "Brave Browser", "Microsoft Edge"]
+  IDE: ["WebStorm", "IntelliJ*", "Xcode", "Visual Studio*"]
+  Communication: ["Mail", "Nachrichten", "WhatsApp", "Slack", "Telegram"]
+  AI Assistant: ["Claude", "Codex", "LM Studio"]
+  Media: ["Spotify", "Musik", "Podcasts", "VLC", "IINA", "QuickTime Player", "Fotos", "Photos", "Photo Booth"]
+  Dev Tools: ["Docker Desktop", "MongoDB Compass", "FileZilla", "JetBrains Toolbox", "GitHub Desktop", "BambuStudio", "Terminal", "iTerm*"]
+  Productivity: ["TickTick", "Notizen", "Pages", "Numbers", "TextEdit", "Vorschau", "Erinnerungen"]
+  System: ["Finder", "Systemeinstellungen", "Datenschutz*", "Rechner", "Spotlight", "App Store", "Lexikon", "Air", "UserNotificationCenter", "Aktivitätsanzeige"]
+  Other: ["*"]
+
 projects:
   easyAMS:
     patterns: ["*easyams*", "*easyAMS*", "*easy-ams*"]
+    directories: ["easyams", "easy-ams", "easyAMS"]
+    git_repos: ["easyams", "easy-ams"]
     category: "Development"
   Austro Intelligence:
     patterns: ["*austro*intelligence*", "*ai.peab*", "*austro*intel*"]
+    url_patterns: ["*ai.peab.at*"]
+    directories: ["austro-intelligence", "austro_intelligence"]
     category: "Business"
   Hippieparty:
     patterns: ["*hippieparty*", "*hippie*party*"]
     url_patterns: ["*hippieparty*"]
+    directories: ["hippieparty"]
     category: "Creative"
   Psychedelic Animals:
     patterns: ["*psychedelic*animal*"]
+    directories: ["psychedelic-animals"]
     category: "Creative"
   PEAB:
     patterns: ["*peab.at*", "*peab*"]
+    directories: ["peab", "peab.at"]
+    git_repos: ["peab", "peab.at"]
     category: "Development"
   Dr. Überflieger:
-    patterns: ["*überflieger*", "*ueberflieger*", "*suno*"]
+    patterns: ["*überflieger*", "*ueberflieger*", "*hulapalu*", "*dr.überflieger*", "*brass knuckle*", "*soundsystem*"]
+    url_patterns: ["*soundcloud.com/drueberflieger*"]
+    directories: ["drueberflieger", "hulapalu"]
     category: "Music"
   Psydrosch:
-    patterns: ["*psydrosch*",]
+    patterns: ["*psydrosch*"]
     category: "Music"
   Suno:
-    patterns: ["*suno*",]
+    patterns: ["*suno*"]
+    url_patterns: ["*suno.com*"]
     category: "Music"
   WorkTracker:
-    patterns: ["*worktracker*", "*work*tracker*"]
+    patterns: ["*worktracker*", "*work*tracker*", "*◂ wt *", "*◂ wt", "*/WorkTracker/*", "*snapshots*jsonl*"]
     url_patterns: ["*localhost:7880*", "*127.0.0.1:7880*"]
+    commands: ["wt", "wt *"]
+    git_repos: ["WorkTracker"]
     category: "Development"
   Claude:
     patterns: ["*claude*", "*anthropic*"]
-    url_patterns: ["*claude.com*"]
+    url_patterns: ["*claude.ai*", "*claude.com*", "*anthropic.com*"]
     category: "AI"
   Gemini:
     patterns: ["*gemini*", "*googleai*"]
@@ -46,8 +70,7 @@ projects:
     category: "AI"
   Communication:
     patterns: ["*gmail*", "*slack*", "*whatsapp*", "*telegram*"]
-    url_patterns: ["*gmail.com*", "*slack*", "*whatsapp*", "*telegram*"]
-    app_patterns: ["*mail*", "*whatsapp*"]
+    url_patterns: ["*gmail.com*", "*mail.google.com*", "*slack*", "*whatsapp*", "*telegram*"]
     category: "Communication"
   Social Media:
     patterns: ["*instagram*", "*twitter*", "*x.com*", "*reddit*", "*tiktok*", "*facebook*"]
@@ -71,28 +94,18 @@ projects:
     category: "News"
   Media:
     patterns: ["*youtube*", "*netflix*", "*twitch*", "*spotify*"]
-    url_patterns: ["*youtube.com*", "*netflix.com*", "*twitch.tv*", "*spotify.com*"]
-    app_patterns: ["*spotify*"]
+    url_patterns: ["*youtube.com*", "*music.youtube.com*", "*netflix.com*", "*twitch.tv*", "*spotify.com*", "*soundcloud.com*"]
     category: "Media/Entertainment"
   Stocks:
     patterns: ["*aktien*", "*stocks*", "*trading*", "*trade republic*", "*scalable capital*"]
     url_patterns: ["*traderepublic.com*", "*scalable.capital*"]
-    app_patterns: ["*aktien*", "*stocks*"]
     category: "Finance"
-  Photos:
-    app_patterns: ["*fotos*", "*photos*"]
-    category: "System"
-  System:
-    app_patterns: ["*system*einstellungen*", "*system settings*", "*system preferences*", "*aktivit*tsanzeige*", "*activity monitor*", "*rechner*", "*calculator*", "*finder*", "*app store*", "*spotlight*", "*pages*", "*loginwindow*", "*coreservicesuiagent*", "*lexikon*", "*air*"]
-    category: "System"
-  Notizen:
-    app_patterns: ["*notizen*", "*notes*"]
-    category: "System"
-  Musik:
-    app_patterns: ["*musik*", "*music*"]
-    category: "Media/Entertainment"
+  Banking:
+    url_patterns: ["*bank99.at*", "*george.at*", "*sparkasse.at*", "*raiffeisen.at*"]
+    category: "Finance"
   Nanobot:
     patterns: ["*nanobot*"]
+    commands: ["nanobot", "nanobot *"]
     category: "AI"
   OpenRouter:
     patterns: ["*openrouter*"]
@@ -114,14 +127,66 @@ projects:
     patterns: ["*ersties*"]
     url_patterns: ["*ersties.com*"]
     category: "Entertainment"
-  Codex:
-    app_patterns: ["*codex*"]
-    category: "AI"
-  TextEdit:
-    app_patterns: ["*textedit*"]
-    category: "System"
-  Development:
-    app_patterns: ["*webstorm*", "*intellij*", "*xcode*", "*vscode*", "*visual studio*", "*terminal*", "*python*"]
+  ORF:
+    patterns: ["*orf.at*", "*willkommen*österreich*", "*stermann*", "*grissemann*", "*armin*wolf*", "*ORF ON*"]
+    url_patterns: ["*on.orf.at*", "*tvthek.orf.at*"]
+    category: "Media/Entertainment"
+  MongoDB:
+    patterns: ["*mongodb*"]
+    url_patterns: ["*mongodb.com*"]
     category: "Development"
+  Development:
+    url_patterns: ["*github.com*", "*gitlab.com*", "*stackoverflow.com*", "*stackexchange.com*", "*developer.apple.com*", "*npmjs.com*", "*pypi.org*"]
+    category: "Development"
+  Search:
+    url_patterns: ["*google.com/search*", "*google.at/search*", "*bing.com/search*", "*duckduckgo.com*"]
+    category: "Research"
+
+  Frauen:
+    patterns: ["*frauen*"]
+    category: "Uncategorized"
+
+  Docker:
+    patterns: ["*docker*"]
+    category: "Uncategorized"
+
+  Linz At:
+    patterns: ["*linz.at*"]
+    url_patterns: ["*linz.at*"]
+    category: "Uncategorized"
+
+  Krimineller:
+    patterns: ["*krimineller*"]
+    category: "Uncategorized"
+
+  De Wikipedia Org:
+    patterns: ["*de.wikipedia.org*"]
+    url_patterns: ["*de.wikipedia.org*"]
+    category: "Uncategorized"
+
+  Verschworen:
+    patterns: ["*verschworen*"]
+    category: "Uncategorized"
+
+  Websiteaktivität:
+    patterns: ["*websiteaktivität*"]
+    category: "Uncategorized"
+
+  Leopoldstadt:
+    patterns: ["*leopoldstadt*"]
+    category: "Uncategorized"
+
+  Downloads:
+    patterns: ["*downloads*"]
+    category: "Uncategorized"
+
+  Chatgpt Com:
+    patterns: ["*chatgpt.com*"]
+    url_patterns: ["*chatgpt.com*"]
+    category: "Uncategorized"
+
+  City-Snake-Agent-Pack:
+    patterns: ["*city-snake-agent-pack*"]
+    category: "Uncategorized"
 
 default_project: "Other"
