@@ -47,15 +47,15 @@ projects:
   Communication:
     patterns: ["*gmail*", "*slack*", "*whatsapp*", "*telegram*"]
     url_patterns: ["*gmail.com*", "*slack*", "*whatsapp*", "*telegram*"]
-    app_patterns: ["*mail*"]
+    app_patterns: ["*mail*", "*whatsapp*"]
     category: "Communication"
   Social Media:
     patterns: ["*instagram*", "*twitter*", "*x.com*", "*reddit*", "*tiktok*", "*facebook*"]
-    url_patterns: ["*instagram*", "*twitter*", "*x.com*", "*reddit*", "*tiktok*", "*facebook*"]
+    url_patterns: ["*instagram*", "*twitter*", "*x.com*", "*reddit*", "*tiktok*", "*facebook.com*"]
     category: "Social Media"
   Crypto:
     patterns: ["*binance*", "*coinbase*", "*coingecko*", "*tradingview*", "*btc*", "*bitcoin*", "*ethereum*", "*crypto*"]
-    url_patterns: ["*binance*", "*coinbase*", "*coingecko*", "*tradingview*"]
+    url_patterns: ["*binance*", "*coinbase*", "*coingecko*", "*tradingview*", "*cryptobubbles*"]
     category: "Crypto"
   Prediction Markets:
     patterns: ["*kalshi*", "*polymarket*", "*prediction*market*", "*odds*prediction*", "*prognosemarkt*"]
@@ -70,11 +70,13 @@ projects:
     url_patterns: ["*orf.at*", "*derstandard.at*", "*diepresse.com*", "*kurier.at*"]
     category: "News"
   Media:
-    patterns: ["*youtube*", "*netflix*", "*twitch*"]
+    patterns: ["*youtube*", "*netflix*", "*twitch*", "*spotify*"]
+    url_patterns: ["*youtube.com*", "*netflix.com*", "*twitch.tv*", "*spotify.com*"]
     app_patterns: ["*spotify*"]
     category: "Media/Entertainment"
   Stocks:
-    patterns: ["*aktien*", "*stocks*", "*trading*"]
+    patterns: ["*aktien*", "*stocks*", "*trading*", "*trade republic*", "*scalable capital*"]
+    url_patterns: ["*traderepublic.com*", "*scalable.capital*"]
     app_patterns: ["*aktien*", "*stocks*"]
     category: "Finance"
   Photos:
@@ -89,9 +91,35 @@ projects:
   Musik:
     app_patterns: ["*musik*", "*music*"]
     category: "Media/Entertainment"
+  Nanobot:
+    patterns: ["*nanobot*"]
+    category: "AI"
+  OpenRouter:
+    patterns: ["*openrouter*"]
+    url_patterns: ["*openrouter.ai*"]
+    category: "AI"
+  ElevenLabs:
+    patterns: ["*elevenlabs*", "*eleven labs*"]
+    url_patterns: ["*elevenlabs.io*"]
+    category: "AI"
+  FLUX:
+    patterns: ["*flux*playground*", "*black forest labs*"]
+    url_patterns: ["*bfl.ai*"]
+    category: "AI"
+  Google AI Studio:
+    patterns: ["*ai studio*"]
+    url_patterns: ["*aistudio.google*"]
+    category: "AI"
+  Ersties:
+    patterns: ["*ersties*"]
+    url_patterns: ["*ersties.com*"]
+    category: "Entertainment"
   Codex:
     app_patterns: ["*codex*"]
     category: "AI"
+  TextEdit:
+    app_patterns: ["*textedit*"]
+    category: "System"
   Development:
     app_patterns: ["*webstorm*", "*intellij*", "*xcode*", "*vscode*", "*visual studio*", "*terminal*", "*python*"]
     category: "Development"
