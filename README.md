@@ -11,7 +11,9 @@ Built for macOS (Apple Silicon), designed as a fully local, private productivity
 
 `Runs Locally` · `Open Source` · `No Blackbox` · `App Tracking` · `Flow Insights`
 
-[Got To Full Documentation][https://peab.at/WorkTracker/docs/index.html]
+
+[Got To Full Documentation](https://peab.at/WorkTracker/docs/index.html)
+
 
 ---
 
@@ -68,3 +70,9 @@ Level up your Work:Tracker output. Uncover unseen activity patterns & time-wasti
 ## Made in Austria
 
 WorkTracker v0.0.1 — made with <3 by [peab.at](https://peab.at)
+
+---
+
+[Got To Full Documentation](https://peab.at/WorkTracker/docs/index.html)
+
+
