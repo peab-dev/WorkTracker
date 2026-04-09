@@ -28,8 +28,17 @@ env/
 
 # Data (private tracking data — never commit)
 data/
+summaries/
+logs/
 *.jsonl
 *.log
+
+# Runtime / learned patterns
+daemon/learned_patterns.yaml
+
+# Codex / misc
+docs/.codex/
+README\ *.md
 
 # Excalidraw / planning docs
 WorkTracker-Uebersicht.excalidraw
