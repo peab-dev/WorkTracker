@@ -495,7 +495,7 @@ class BrowserHistoryReader:
             return None
 
     def get_url(self, bundle_id: str, window_title: str) -> Optional[str]:
-        if not window_title or bundle_id not in self.BROWSER_DB_PATHS:
+        if bundle_id not in self.BROWSER_DB_PATHS:
             return None
         _, db_type = self.BROWSER_DB_PATHS[bundle_id]
         tmp_db = self._get_cached_copy(bundle_id)
@@ -506,35 +506,50 @@ class BrowserHistoryReader:
             conn.execute("PRAGMA journal_mode=OFF")
             url = None
             # Extract a meaningful title fragment for matching
-            title_frag = window_title.split(" — ")[0].split(" - ")[0].strip()[:80]
-            if not title_frag:
-                conn.close()
-                return None
+            title_frag = window_title.split(" — ")[0].split(" - ")[0].strip()[:80] if window_title else ""
 
             if db_type == "chromium":
-                row = conn.execute(
-                    "SELECT url FROM urls WHERE title LIKE ? ORDER BY last_visit_time DESC LIMIT 1",
-                    (f"%{title_frag}%",),
-                ).fetchone()
+                if title_frag:
+                    row = conn.execute(
+                        "SELECT url FROM urls WHERE title LIKE ? ORDER BY last_visit_time DESC LIMIT 1",
+                        (f"%{title_frag}%",),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT url FROM urls ORDER BY last_visit_time DESC LIMIT 1",
+                    ).fetchone()
                 if row:
                     url = row[0]
             elif db_type == "firefox":
-                row = conn.execute(
-                    "SELECT url FROM moz_places WHERE title LIKE ? ORDER BY last_visit_date DESC LIMIT 1",
-                    (f"%{title_frag}%",),
-                ).fetchone()
+                if title_frag:
+                    row = conn.execute(
+                        "SELECT url FROM moz_places WHERE title LIKE ? ORDER BY last_visit_date DESC LIMIT 1",
+                        (f"%{title_frag}%",),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT url FROM moz_places ORDER BY last_visit_date DESC LIMIT 1",
+                    ).fetchone()
                 if row:
                     url = row[0]
             elif db_type == "safari":
-                row = conn.execute(
-                    "SELECT hi.url FROM history_items hi "
-                    "JOIN history_visits hv ON hi.id = hv.history_item "
-                    "WHERE hi.url LIKE '%' || ? || '%' OR hi.url IN "
-                    "(SELECT url FROM history_items WHERE id IN "
-                    "(SELECT history_item FROM history_visits ORDER BY visit_time DESC LIMIT 50)) "
-                    "ORDER BY hv.visit_time DESC LIMIT 1",
-                    (title_frag[:40],),
-                ).fetchone()
+                if title_frag:
+                    row = conn.execute(
+                        "SELECT hi.url FROM history_items hi "
+                        "JOIN history_visits hv ON hi.id = hv.history_item "
+                        "WHERE hi.url LIKE '%' || ? || '%' OR hi.url IN "
+                        "(SELECT url FROM history_items WHERE id IN "
+                        "(SELECT history_item FROM history_visits ORDER BY visit_time DESC LIMIT 50)) "
+                        "ORDER BY hv.visit_time DESC LIMIT 1",
+                        (title_frag[:40],),
+                    ).fetchone()
+                else:
+                    # No window title — get most recently visited URL by timestamp
+                    row = conn.execute(
+                        "SELECT hi.url FROM history_items hi "
+                        "JOIN history_visits hv ON hi.id = hv.history_item "
+                        "ORDER BY hv.visit_time DESC LIMIT 1",
+                    ).fetchone()
                 if row:
                     url = row[0]
             conn.close()
