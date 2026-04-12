@@ -567,6 +567,7 @@ cmd_help() {
     printf "    ${WHITE}${BOLD}weekly${RST}       ${GRAY_L}Run weekly aggregation${RST}               ${ORANGE}wtw${RST}\n"
     printf "    ${WHITE}${BOLD}monthly${RST}      ${GRAY_L}Run monthly aggregation${RST}              ${ORANGE}wtm${RST}\n"
     printf "    ${WHITE}${BOLD}all${RST}          ${GRAY_L}Run all aggregations${RST}                 ${ORANGE}wtx${RST}\n"
+    printf "    ${WHITE}${BOLD}past${RST}         ${GRAY_L}Backfill missing daily/weekly reports${RST} ${ORANGE}wtp${RST}\n"
     printf "    ${WHITE}${BOLD}reprocess${RST}    ${GRAY_L}Re-run all days with current patterns${RST} ${ORANGE}wtrp${RST}\n"
     echo ""
 
@@ -693,6 +694,126 @@ cmd_reprocess() {
     echo ""
 }
 
+cmd_backfill() {
+    header "BACKFILL MISSING REPORTS"
+
+    local snap_dir="$BASE/data/snapshots"
+    local daily_dir="$SUMMARIES/daily"
+    local weekly_dir="$SUMMARIES/weekly"
+    local today
+    today=$(date '+%Y-%m-%d')
+
+    # ── Collect snapshot dates (exclude today — today's report runs at 22:00) ──
+    local snap_dates=()
+    for f in "$snap_dir"/*.jsonl; do
+        [[ -f "$f" ]] || continue
+        local d
+        d=$(basename "$f" .jsonl)
+        [[ "$d" == "$today" ]] && continue
+        snap_dates+=("$d")
+    done
+    IFS=$'\n' snap_dates=($(sort <<<"${snap_dates[*]}")); unset IFS
+
+    if [[ ${#snap_dates[@]} -eq 0 ]]; then
+        msg_info "Keine vergangenen Snapshots gefunden"
+        echo ""
+        return
+    fi
+
+    # ── Check missing daily reports ──
+    section "Tagesberichte"
+
+    local missing_daily=()
+    for d in "${snap_dates[@]}"; do
+        if [[ ! -f "$daily_dir/${d}.md" ]]; then
+            missing_daily+=("$d")
+        fi
+    done
+
+    if [[ ${#missing_daily[@]} -eq 0 ]]; then
+        msg_ok "Alle ${WHITE}${BOLD}${#snap_dates[@]}${RST} Tagesberichte vorhanden"
+    else
+        msg_warn "${WHITE}${BOLD}${#missing_daily[@]}${RST} fehlende Tagesberichte gefunden"
+        echo ""
+
+        local ok=0
+        local fail=0
+        for d in "${missing_daily[@]}"; do
+            printf "  ${GRAY_L}%s${RST} " "$d"
+            if "$VENV" "$DAEMON/aggregator.py" --mode daily --date "$d" >/dev/null 2>&1; then
+                printf "${GREEN}${SYM_CHECK} generiert${RST}\n"
+                ((ok++))
+            else
+                printf "${RED}${SYM_CROSS} fehlgeschlagen${RST}\n"
+                ((fail++))
+            fi
+        done
+
+        echo ""
+        if [[ $fail -eq 0 ]]; then
+            msg_ok "Alle ${WHITE}${BOLD}${ok}${RST} fehlenden Tagesberichte nachgeholt"
+        else
+            msg_warn "${WHITE}${BOLD}${ok}${RST} OK, ${RED}${fail}${RST} fehlgeschlagen"
+        fi
+    fi
+
+    # ── Check missing weekly reports ──
+    section "Wochenberichte"
+
+    # Collect unique ISO weeks from snapshot dates (exclude current incomplete week)
+    local current_week
+    current_week=$(date "+%G-W%V")
+    local all_weeks
+    all_weeks=$(for d in "${snap_dates[@]}"; do
+        date -j -f "%Y-%m-%d" "$d" "+%G-W%V" 2>/dev/null
+    done | sort -u | grep -v "^${current_week}$" || true)
+
+    local missing_weekly=()
+    local total_weeks=0
+    for wk in $all_weeks; do
+        ((total_weeks++))
+        if [[ ! -f "$weekly_dir/${wk}.md" ]]; then
+            missing_weekly+=("$wk")
+        fi
+    done
+
+    if [[ ${#missing_weekly[@]} -eq 0 ]]; then
+        msg_ok "Alle ${WHITE}${BOLD}${total_weeks}${RST} Wochenberichte vorhanden"
+    else
+        msg_warn "${WHITE}${BOLD}${#missing_weekly[@]}${RST} fehlende Wochenberichte gefunden"
+        echo ""
+
+        local ok=0
+        local fail=0
+        for wk in "${missing_weekly[@]}"; do
+            # Extract a date from that week (Monday) to pass to aggregator
+            local iso_year="${wk%%-W*}"
+            local iso_wnum="${wk##*W}"
+            # Get Monday of that ISO week
+            local monday
+            monday=$("$VENV" -c "from datetime import datetime; d=datetime.fromisocalendar($iso_year,$((10#$iso_wnum)),1); print(d.strftime('%Y-%m-%d'))")
+
+            printf "  ${GRAY_L}%s${RST} ${GRAY}(%s)${RST} " "$wk" "$monday"
+            if "$VENV" "$DAEMON/aggregator.py" --mode weekly --date "$monday" >/dev/null 2>&1; then
+                printf "${GREEN}${SYM_CHECK} generiert${RST}\n"
+                ((ok++))
+            else
+                printf "${RED}${SYM_CROSS} fehlgeschlagen${RST}\n"
+                ((fail++))
+            fi
+        done
+
+        echo ""
+        if [[ $fail -eq 0 ]]; then
+            msg_ok "Alle ${WHITE}${BOLD}${ok}${RST} fehlenden Wochenberichte nachgeholt"
+        else
+            msg_warn "${WHITE}${BOLD}${ok}${RST} OK, ${RED}${fail}${RST} fehlgeschlagen"
+        fi
+    fi
+
+    echo ""
+}
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Main
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -713,6 +834,7 @@ case "${1:-help}" in
     rhythm|rh)    cmd_rhythm;;
     web)          _wt_timed=false; cmd_web;;
     menubar|mb)   _wt_timed=false; cmd_menubar;;
+    past|p)        cmd_backfill;;
     reprocess|rp)  cmd_reprocess;;
     docs|docu|documentation)  cmd_docs;;
     tail|log)     _wt_timed=false; cmd_tail;;
