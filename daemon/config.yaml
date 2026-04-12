@@ -11,26 +11,26 @@ collector:
   track_all_windows: true
 
   # Keystroke content — WARNING: Captures typed plaintext
-  track_keystroke_content: false
+  track_keystroke_content: true
 
   # Browser history — URLs instead of just window titles
   track_browser_urls: true
 
   # Git integration — Track commits and branches
-  track_git: false
+  track_git: true
   git_repos: []
   #  - ~/Projects/easyams
   #  - ~/WorkTracker
-  git_scan_interval_seconds: 60
+  git_scan_interval_seconds: 333
 
   # Calendar integration — Read meetings from macOS Calendar
-  track_calendar: false
+  track_calendar: true
 
   # Distraction warning — macOS notification on prolonged distraction
   notifications:
-    enabled: false
-    threshold_minutes: 15
-    cooldown_minutes: 30
+    enabled: true
+    threshold_minutes: 1
+    cooldown_minutes: 10
     distraction_categories:
       - "Social Media"
       - "Media/Entertainment"
@@ -38,13 +38,13 @@ collector:
 aggregator:
   sessions_dir: ~/WorkTracker/data/sessions
   summaries_dir: ~/WorkTracker/summaries
-  idle_threshold_seconds: 120
-  focus_session_min_seconds: 1500
-  fuzzy_match_threshold: 0.7
-  same_app_grace_period_seconds: 30   # Tab switch within same app → merge
-  min_session_snapshots: 4            # Micro-sessions (<4 snapshots / <20s) get absorbed
+  idle_threshold_seconds: 300
+  focus_session_min_seconds: 1200
+  fuzzy_match_threshold: 0.66
+  same_app_grace_period_seconds: 15   # Tab switch within same app → merge
+  min_session_snapshots: 3            # Micro-sessions (<4 snapshots / <20s) get absorbed
 
   # Calendar time classification
   calendar_classification:
     meeting_keywords: ["Meeting", "Call", "Standup", "Review", "Sync", "1:1"]
-    deep_work_min_minutes: 60
+    deep_work_min_minutes: 45

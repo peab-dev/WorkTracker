@@ -189,4 +189,64 @@ projects:
     patterns: ["*city-snake-agent-pack*"]
     category: "Uncategorized"
 
+  Kalender:
+    patterns: ["*kalender*"]
+    category: "Uncategorized"
+
+  Manager:
+    patterns: ["*manager*"]
+    url_patterns: ["*manager*"]
+    category: "Uncategorized"
+
+  Softwareupdate:
+    patterns: ["*softwareupdate*"]
+    category: "Uncategorized"
+
+  Booking-Widget:
+    patterns: ["*booking-widget*"]
+    category: "Uncategorized"
+
+  Studio:
+    patterns: ["*studio*"]
+    category: "Uncategorized"
+
+  Anthropic Skilljar Com:
+    patterns: ["*anthropic.skilljar.com*"]
+    url_patterns: ["*anthropic.skilljar.com*"]
+    category: "Uncategorized"
+
+  Hintergrundbild:
+    patterns: ["*hintergrundbild*"]
+    category: "Uncategorized"
+
+  Festplatte:
+    patterns: ["*festplatte*"]
+    category: "Uncategorized"
+
+  Kickstarter Com:
+    patterns: ["*kickstarter.com*"]
+    url_patterns: ["*kickstarter.com*"]
+    category: "Uncategorized"
+
+  2026-04-09 Md:
+    patterns: ["*2026-04-09.md*"]
+    category: "Uncategorized"
+
+  Icloud:
+    patterns: ["*icloud*"]
+    category: "Uncategorized"
+
+  Linz-Map:
+    patterns: ["*linz-map*"]
+    category: "Uncategorized"
+
+  Einstellungen:
+    patterns: ["*einstellungen*"]
+    category: "Uncategorized"
+
+  Science Orf At:
+    patterns: ["*science.orf.at*"]
+    url_patterns: ["*science.orf.at*"]
+    category: "Uncategorized"
+
 default_project: "Other"
