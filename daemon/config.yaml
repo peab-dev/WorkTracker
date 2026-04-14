@@ -29,11 +29,17 @@ collector:
   # Distraction warning — macOS notification on prolonged distraction
   notifications:
     enabled: true
-    threshold_minutes: 1
+    threshold_minutes: 3           # Default threshold (used when category has no override)
     cooldown_minutes: 10
+    # Categories that trigger warnings. Two forms supported:
+    #   - List form: all categories share `threshold_minutes`
+    #       distraction_categories:
+    #         - "Social Media"
+    #         - "Media/Entertainment"
+    #   - Dict form: per-category threshold in minutes (overrides the default)
     distraction_categories:
-      - "Social Media"
-      - "Media/Entertainment"
+      "Social Media": 3
+      "Media/Entertainment": 3
 
 aggregator:
   sessions_dir: ~/WorkTracker/data/sessions

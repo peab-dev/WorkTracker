@@ -785,9 +785,25 @@ class DistractionNotifier:
     def __init__(self, config: dict, patterns_path: Path):
         notif_cfg = config.get("collector", {}).get("notifications", {})
         self._enabled = notif_cfg.get("enabled", False)
-        self._threshold = notif_cfg.get("threshold_minutes", 15) * 60
+        default_threshold = notif_cfg.get("threshold_minutes", 15) * 60
+        self._default_threshold = default_threshold
         self._cooldown = notif_cfg.get("cooldown_minutes", 30) * 60
-        self._distraction_cats = set(notif_cfg.get("distraction_categories", []))
+
+        # distraction_categories supports two forms:
+        #   - list: [ "Social Media", "Media/Entertainment" ] → uses default_threshold
+        #   - dict: { "Social Media": 10, "Media/Entertainment": 20 } → per-category minutes
+        raw_cats = notif_cfg.get("distraction_categories", [])
+        self._category_thresholds: dict[str, float] = {}
+        if isinstance(raw_cats, dict):
+            for cat, minutes in raw_cats.items():
+                try:
+                    self._category_thresholds[cat] = float(minutes) * 60
+                except (TypeError, ValueError):
+                    self._category_thresholds[cat] = default_threshold
+        else:
+            for cat in raw_cats:
+                self._category_thresholds[cat] = default_threshold
+        self._distraction_cats = set(self._category_thresholds.keys())
 
         # Load project patterns for category matching
         self._projects: dict = {}
@@ -829,7 +845,8 @@ class DistractionNotifier:
                 self._notified_current = False
 
             elapsed = now - self._streak_start
-            if (elapsed >= self._threshold
+            threshold = self._category_thresholds.get(category, self._default_threshold)
+            if (elapsed >= threshold
                     and not self._notified_current
                     and now - self._last_notification_time >= self._cooldown):
                 minutes = int(elapsed / 60)
