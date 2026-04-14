@@ -766,9 +766,9 @@ wt status</code></pre>
 <table>
   <tr><th>Key</th><th>Default</th><th>Description</th></tr>
   <tr><td><code>notifications.enabled</code></td><td><code>false</code></td><td>Enable macOS distraction warnings</td></tr>
-  <tr><td><code>notifications.threshold_minutes</code></td><td><code>15</code></td><td>Minutes in distraction category before alert</td></tr>
+  <tr><td><code>notifications.threshold_minutes</code></td><td><code>15</code></td><td>Default minutes in distraction category before alert (fallback when no per-category override)</td></tr>
   <tr><td><code>notifications.cooldown_minutes</code></td><td><code>30</code></td><td>Cooldown between alerts</td></tr>
-  <tr><td><code>notifications.distraction_categories</code></td><td><code>["Social Media", "Media/Entertainment"]</code></td><td>Categories that trigger warnings</td></tr>
+  <tr><td><code>notifications.distraction_categories</code></td><td><code>{"Social Media": 10, "Media/Entertainment": 20}</code></td><td>Categories that trigger warnings. Accepts a list (all share <code>threshold_minutes</code>) or a dict mapping category&nbsp;→&nbsp;minutes for per-category thresholds.</td></tr>
 </table>
 
 <h2 id="config-aggregator">Aggregator Settings</h2>
