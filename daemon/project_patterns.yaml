@@ -249,4 +249,60 @@ projects:
     url_patterns: ["*science.orf.at*"]
     category: "Uncategorized"
 
+  Teamviewer:
+    patterns: ["*teamviewer*"]
+    category: "Uncategorized"
+
+  Supersplat:
+    patterns: ["*supersplat*"]
+    url_patterns: ["*supersplat*"]
+    category: "Uncategorized"
+
+  Wienerlinien At:
+    patterns: ["*wienerlinien.at*"]
+    url_patterns: ["*wienerlinien.at*"]
+    category: "Uncategorized"
+
+  Wingsforlifeworldrun Com:
+    patterns: ["*wingsforlifeworldrun.com*"]
+    url_patterns: ["*wingsforlifeworldrun.com*"]
+    category: "Uncategorized"
+
+  Tribuene-Linz At:
+    patterns: ["*tribuene-linz.at*"]
+    url_patterns: ["*tribuene-linz.at*"]
+    category: "Uncategorized"
+
+  Schiff:
+    patterns: ["*schiff*"]
+    category: "Uncategorized"
+
+  Postskriptum At:
+    patterns: ["*postskriptum.at*"]
+    url_patterns: ["*postskriptum.at*"]
+    category: "Uncategorized"
+
+  Snapshots:
+    patterns: ["*snapshots*"]
+    category: "Uncategorized"
+
+  Grok Com:
+    patterns: ["*grok.com*"]
+    url_patterns: ["*grok.com*"]
+    category: "Uncategorized"
+
+  Superspl At:
+    patterns: ["*superspl.at*"]
+    url_patterns: ["*superspl.at*"]
+    category: "Uncategorized"
+
+  Playcanvas Com:
+    patterns: ["*playcanvas.com*"]
+    url_patterns: ["*playcanvas.com*"]
+    category: "Uncategorized"
+
+  Passwörter:
+    patterns: ["*passwörter*"]
+    category: "Uncategorized"
+
 default_project: "Other"
