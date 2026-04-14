@@ -1,0 +1,87 @@
+# WorkTracker — Default project patterns (committed to git)
+#
+# This file ships generic, non-personal matching infrastructure:
+#   - app_categories:             maps macOS app names to broad categories
+#   - tool_apps / *_url_hosts:    apps whose own name must never win the
+#                                 project match (e.g. Claude, ChatGPT)
+#   - tool_app_title_suffixes:    suffixes stripped from window titles
+#                                 before pattern matching
+#   - default_project:            fallback label for unmatched sessions
+#
+# This file must NOT contain personal `projects:` entries. User-specific
+# project patterns live in the gitignored companion file
+# `daemon/project_patterns.yaml`, which is auto-created on first run and
+# grown over time via `review_patterns.py` (which adopts suggestions from
+# `daemon/learned_patterns.yaml`).
+#
+# The aggregator loads this file first, then overlays the user file.
+# Merge strategy:
+#   app_categories           — user dict extends/overrides per key
+#   tool_apps / _url_hosts   — union, deduped
+#   tool_app_title_suffixes  — union, order preserved
+#   projects                 — user dict adds/overrides per project name
+#   default_project          — user wins if set
+
+app_categories:
+  Browser: ["Safari", "Google Chrome", "Firefox", "Arc", "Brave Browser", "Microsoft Edge"]
+  IDE: ["WebStorm", "IntelliJ*", "Xcode", "Visual Studio*"]
+  Communication: ["Mail", "Nachrichten", "WhatsApp", "Slack", "Telegram"]
+  AI Assistant: ["Claude", "Codex", "LM Studio"]
+  Media: ["Spotify", "Musik", "Podcasts", "VLC", "IINA", "QuickTime Player", "Fotos", "Photos", "Photo Booth"]
+  Dev Tools: ["Docker Desktop", "MongoDB Compass", "FileZilla", "JetBrains Toolbox", "GitHub Desktop", "BambuStudio", "Terminal", "iTerm*"]
+  Productivity: ["TickTick", "Notizen", "Pages", "Numbers", "TextEdit", "Vorschau", "Erinnerungen"]
+  System: ["Finder", "Systemeinstellungen", "Datenschutz*", "Rechner", "Spotlight", "App Store", "Lexikon", "Air", "UserNotificationCenter", "Aktivitätsanzeige"]
+  Other: ["*"]
+
+# Tool-Apps: apps whose name/URL must NEVER win the project match.
+# For sessions in these apps the title is stripped of the tool suffix
+# and matching falls through to filename / git / calendar / neighbors /
+# clipboard signals.
+tool_apps:
+  - "Claude"
+  - "ChatGPT"
+  - "Chat GPT"
+  - "Gemini"
+  - "Grok"
+  - "Photopea"
+  - "Preview"
+  - "Vorschau"
+  - "TextEdit"
+  - "Finder"
+  - "LM Studio"
+
+# Browser URLs that trigger tool-app behaviour (Claude.ai in a browser etc.)
+tool_app_url_hosts:
+  - "claude.ai"
+  - "claude.com"
+  - "chatgpt.com"
+  - "chat.openai.com"
+  - "gemini.google.com"
+  - "aistudio.google.com"
+  - "grok.com"
+  - "x.ai"
+  - "photopea.com"
+
+# Title suffixes stripped before pattern matching.
+# The remainder is the "semantic title" used for pattern matching and
+# topic extraction.
+tool_app_title_suffixes:
+  - " — Claude"
+  - " - Claude"
+  - " — ChatGPT"
+  - " - ChatGPT"
+  - " — Gemini"
+  - " - Gemini"
+  - " — Grok"
+  - " - Grok"
+  - " — Photopea"
+  - " - Photopea"
+  - " — Vorschau"
+  - " - Preview"
+  - " — TextEdit"
+  - " - TextEdit"
+
+# No default projects — the user file starts empty and grows over time.
+projects: {}
+
+default_project: "Other"

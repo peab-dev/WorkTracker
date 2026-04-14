@@ -34,19 +34,37 @@ DATA_SESS = BASE / "data" / "sessions"
 SUMMARIES = BASE / "summaries"
 LOGS = BASE / "logs"
 PATTERNS_FILE = BASE / "daemon" / "project_patterns.yaml"
+PATTERNS_DEFAULT_FILE = BASE / "daemon" / "project_patterns.default.yaml"
+CONFIG_FILE = BASE / "daemon" / "config.yaml"
+CONFIG_DEFAULT_FILE = BASE / "daemon" / "config.default.yaml"
 
 # Apps that represent inactive/lock-screen state — excluded from stats
 INACTIVE_APPS = {"loginwindow"}
 
 
+def _ensure_user_config() -> None:
+    """Bootstrap config.yaml from config.default.yaml on first run."""
+    if CONFIG_FILE.exists() or not CONFIG_DEFAULT_FILE.exists():
+        return
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_FILE.write_text(CONFIG_DEFAULT_FILE.read_text())
+
+
 def _load_app_categories():
-    """Load app_categories from project_patterns.yaml."""
-    try:
-        with open(PATTERNS_FILE) as f:
-            data = yaml.safe_load(f) or {}
-        return data.get("app_categories", {})
-    except Exception:
-        return {}
+    """Load app_categories from default + user project_patterns files.
+
+    Default values provide the baseline; any user-file keys override
+    per category name.
+    """
+    merged: dict = {}
+    for path in (PATTERNS_DEFAULT_FILE, PATTERNS_FILE):
+        try:
+            with open(path) as f:
+                data = yaml.safe_load(f) or {}
+            merged.update(data.get("app_categories") or {})
+        except Exception:
+            continue
+    return merged
 
 
 import unicodedata
@@ -245,10 +263,11 @@ def api_live():
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")
 
-    # Load config for interval
+    # Load config for interval (bootstraps user file on first run)
     try:
+        _ensure_user_config()
         import yaml as _yaml
-        with open(BASE / "daemon" / "config.yaml") as _cf:
+        with open(CONFIG_FILE) as _cf:
             _cfg = _yaml.safe_load(_cf) or {}
         interval = _cfg.get("collector", {}).get("interval_seconds", 10)
     except Exception:

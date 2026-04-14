@@ -30,7 +30,41 @@ from topic_extractor import extract_topics
 
 BASE_DIR = Path.home() / "WorkTracker"
 CONFIG_PATH = BASE_DIR / "daemon" / "config.yaml"
+CONFIG_DEFAULT_PATH = BASE_DIR / "daemon" / "config.default.yaml"
 PATTERNS_PATH = BASE_DIR / "daemon" / "project_patterns.yaml"
+PATTERNS_DEFAULT_PATH = BASE_DIR / "daemon" / "project_patterns.default.yaml"
+
+# Template written to a missing user project_patterns.yaml on first load.
+_USER_PATTERNS_TEMPLATE = """\
+# WorkTracker — User project patterns (PRIVATE, gitignored)
+#
+# This file is machine-local and must never be committed to git. Add
+# personal project matchers here. The committed file
+# `daemon/project_patterns.default.yaml` provides the generic matching
+# infrastructure (app_categories, tool_apps, …); at runtime the
+# aggregator merges the default file with this one, with your entries
+# winning per key.
+#
+# Typical usage: add entries under `projects:`. Example:
+#
+# projects:
+#   MyProject:
+#     patterns: ["*myproject*", "*my-project*"]
+#     url_patterns: ["*myproject.com*"]
+#     directories: ["myproject"]
+#     git_repos: ["myproject"]
+#     category: "Development"
+#
+# You can also override `app_categories`, `tool_apps`,
+# `tool_app_url_hosts`, `tool_app_title_suffixes`, or `default_project`
+# here. Lists are unioned with the default; dicts are merged per key
+# (user wins).
+#
+# Tip: `wt review` promotes auto-discovered patterns from
+# `daemon/learned_patterns.yaml` into this file.
+
+projects: {}
+"""
 SNAPSHOTS_DIR = BASE_DIR / "data" / "snapshots"
 SESSIONS_DIR = BASE_DIR / "data" / "sessions"
 DAILY_DIR = BASE_DIR / "summaries" / "daily"
@@ -110,15 +144,74 @@ log = setup_logging()
 # ---------------------------------------------------------------------------
 
 
+def _ensure_user_config() -> None:
+    """Copy config.default.yaml → config.yaml on first run."""
+    if CONFIG_PATH.exists():
+        return
+    if not CONFIG_DEFAULT_PATH.exists():
+        return
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(CONFIG_DEFAULT_PATH.read_text())
+
+
+def _ensure_user_patterns() -> None:
+    """Write the commented user-patterns template on first run."""
+    if PATTERNS_PATH.exists():
+        return
+    PATTERNS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PATTERNS_PATH.write_text(_USER_PATTERNS_TEMPLATE)
+
+
 def load_config() -> dict:
+    _ensure_user_config()
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f) or {}
+
+
+def _merge_patterns(default: dict, user: dict) -> dict:
+    """Overlay *user* onto *default* with per-section merge semantics."""
+    merged: dict = {}
+
+    # app_categories: dict of name → list. User keys override default keys.
+    merged["app_categories"] = {
+        **(default.get("app_categories") or {}),
+        **(user.get("app_categories") or {}),
+    }
+
+    # List fields: union, deduped, default first then user extras.
+    for key in ("tool_apps", "tool_app_url_hosts", "tool_app_title_suffixes"):
+        seen: set = set()
+        out: list = []
+        for src in (default.get(key) or [], user.get(key) or []):
+            for item in src:
+                if item is None:
+                    continue
+                marker = str(item)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                out.append(item)
+        merged[key] = out
+
+    # projects: dict of project-name → dict. User overrides per project name.
+    merged["projects"] = {
+        **(default.get("projects") or {}),
+        **(user.get("projects") or {}),
+    }
+
+    # default_project: user wins if set, otherwise default.
+    merged["default_project"] = (
+        user.get("default_project") or default.get("default_project") or "Other"
+    )
+
+    return merged
 
 
 def load_patterns() -> tuple[dict[str, dict], str, dict[str, list[str]], dict]:
     """Return (projects_dict, default_project, app_categories, tool_ctx).
 
-    Loads only static patterns from *project_patterns.yaml*.
+    Reads the committed *project_patterns.default.yaml* first, then
+    overlays the gitignored, machine-local *project_patterns.yaml*.
     Learned patterns in *learned_patterns.yaml* are suggestions only —
     they are NOT auto-merged. Use review_patterns.py to adopt them.
 
@@ -130,8 +223,18 @@ def load_patterns() -> tuple[dict[str, dict], str, dict[str, list[str]], dict]:
       - tool_app_title_suffixes: list of suffixes to strip from the window
         title before matching (e.g. " — Claude").
     """
-    with open(PATTERNS_PATH) as f:
-        data = yaml.safe_load(f) or {}
+    default_data: dict = {}
+    if PATTERNS_DEFAULT_PATH.exists():
+        with open(PATTERNS_DEFAULT_PATH) as f:
+            default_data = yaml.safe_load(f) or {}
+
+    _ensure_user_patterns()
+    user_data: dict = {}
+    if PATTERNS_PATH.exists():
+        with open(PATTERNS_PATH) as f:
+            user_data = yaml.safe_load(f) or {}
+
+    data = _merge_patterns(default_data, user_data)
 
     app_categories = data.get("app_categories", {})
     tool_ctx = {

@@ -33,8 +33,10 @@ logs/
 *.jsonl
 *.log
 
-# Runtime / learned patterns
+# Runtime / user-local files (generated from *.default.yaml on first run)
 daemon/learned_patterns.yaml
+daemon/project_patterns.yaml
+daemon/config.yaml
 
 # Codex / misc
 docs/.codex/

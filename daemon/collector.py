@@ -100,11 +100,92 @@ MEDIA_URL_PATTERNS = [
 WINDOW_FILTER_BUNDLES = {"com.apple.WindowManager"}
 
 # ---------------------------------------------------------------------------
-# Config
+# Config & patterns bootstrap
 # ---------------------------------------------------------------------------
+
+_DAEMON_DIR = Path("~/WorkTracker/daemon").expanduser()
+CONFIG_PATH = _DAEMON_DIR / "config.yaml"
+CONFIG_DEFAULT_PATH = _DAEMON_DIR / "config.default.yaml"
+PATTERNS_PATH = _DAEMON_DIR / "project_patterns.yaml"
+PATTERNS_DEFAULT_PATH = _DAEMON_DIR / "project_patterns.default.yaml"
+
+_USER_PATTERNS_TEMPLATE = """\
+# WorkTracker — User project patterns (PRIVATE, gitignored)
+#
+# Machine-local file; never commit. Add personal project matchers
+# under `projects:`. Merges on top of
+# daemon/project_patterns.default.yaml at runtime (user wins per key).
+#
+# Example:
+#
+# projects:
+#   MyProject:
+#     patterns: ["*myproject*"]
+#     git_repos: ["myproject"]
+#     category: "Development"
+
+projects: {}
+"""
+
+
+def _ensure_user_config() -> None:
+    if CONFIG_PATH.exists() or not CONFIG_DEFAULT_PATH.exists():
+        return
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(CONFIG_DEFAULT_PATH.read_text())
+
+
+def _ensure_user_patterns() -> None:
+    if PATTERNS_PATH.exists():
+        return
+    PATTERNS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PATTERNS_PATH.write_text(_USER_PATTERNS_TEMPLATE)
+
+
+def _load_merged_patterns_data() -> dict:
+    """Read default + user project_patterns and merge (user overlays)."""
+    default_data: dict = {}
+    if PATTERNS_DEFAULT_PATH.exists():
+        with open(PATTERNS_DEFAULT_PATH) as f:
+            default_data = yaml.safe_load(f) or {}
+    _ensure_user_patterns()
+    user_data: dict = {}
+    if PATTERNS_PATH.exists():
+        with open(PATTERNS_PATH) as f:
+            user_data = yaml.safe_load(f) or {}
+
+    merged: dict = {}
+    merged["app_categories"] = {
+        **(default_data.get("app_categories") or {}),
+        **(user_data.get("app_categories") or {}),
+    }
+    for key in ("tool_apps", "tool_app_url_hosts", "tool_app_title_suffixes"):
+        seen: set = set()
+        out: list = []
+        for src in (default_data.get(key) or [], user_data.get(key) or []):
+            for item in src:
+                if item is None:
+                    continue
+                marker = str(item)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                out.append(item)
+        merged[key] = out
+    merged["projects"] = {
+        **(default_data.get("projects") or {}),
+        **(user_data.get("projects") or {}),
+    }
+    merged["default_project"] = (
+        user_data.get("default_project")
+        or default_data.get("default_project")
+        or "Other"
+    )
+    return merged
 
 
 def load_config(path: Path) -> dict:
+    _ensure_user_config()
     with open(path) as f:
         return yaml.safe_load(f) or {}
 
@@ -821,7 +902,7 @@ class CalendarMonitor:
 class DistractionNotifier:
     """Sends macOS notifications when user spends too long on distraction categories."""
 
-    def __init__(self, config: dict, patterns_path: Path):
+    def __init__(self, config: dict, patterns_path: Path | None = None):
         notif_cfg = config.get("collector", {}).get("notifications", {})
         self._enabled = notif_cfg.get("enabled", False)
         default_threshold = notif_cfg.get("threshold_minutes", 15) * 60
@@ -844,12 +925,14 @@ class DistractionNotifier:
                 self._category_thresholds[cat] = default_threshold
         self._distraction_cats = set(self._category_thresholds.keys())
 
-        # Load project patterns for category matching
+        # Load merged project patterns (default + user overlay) for
+        # category matching. `patterns_path` is accepted for backwards
+        # compatibility but ignored — the merged loader always reads
+        # both files from the canonical daemon directory.
         self._projects: dict = {}
         self._default_project = "Other"
         try:
-            with open(patterns_path) as f:
-                data = yaml.safe_load(f) or {}
+            data = _load_merged_patterns_data()
             self._projects = data.get("projects", {})
             self._default_project = data.get("default_project", "Other")
         except Exception:

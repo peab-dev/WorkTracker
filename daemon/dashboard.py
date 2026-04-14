@@ -17,11 +17,21 @@ DATA_SESS = BASE / "data" / "sessions"
 SUMMARIES = BASE / "summaries"
 LOGS = BASE / "logs"
 CONFIG_PATH = BASE / "daemon" / "config.yaml"
+CONFIG_DEFAULT_PATH = BASE / "daemon" / "config.default.yaml"
+
+
+def _ensure_user_config() -> None:
+    """Bootstrap the gitignored user config from the committed default."""
+    if CONFIG_PATH.exists() or not CONFIG_DEFAULT_PATH.exists():
+        return
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(CONFIG_DEFAULT_PATH.read_text())
 
 
 def load_config():
     """Load config.yaml and return relevant values."""
     try:
+        _ensure_user_config()
         with open(CONFIG_PATH) as f:
             cfg = yaml.safe_load(f) or {}
         col = cfg.get("collector", {})
