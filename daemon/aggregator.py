@@ -1848,6 +1848,11 @@ def suggest_patterns(sessions: list[dict], date: datetime) -> None:
             static_pattern_keys.add(pat.lower().strip("*"))
 
     projects = existing.setdefault("projects", {})
+    dismissed = set(existing.get("dismissed", []) or [])
+    # Purge any dismissed entries that may still be lingering in projects
+    for _dn in list(projects.keys()):
+        if _dn in dismissed:
+            projects.pop(_dn, None)
     date_str = date.strftime("%Y-%m-%d")
 
     for key, info in significant.items():
@@ -1858,6 +1863,9 @@ def suggest_patterns(sessions: list[dict], date: datetime) -> None:
         if proj_name in static_projects:
             continue
         if key.lower() in static_pattern_keys:
+            continue
+        # Skip suggestions the user has previously adopted or removed
+        if proj_name in dismissed:
             continue
 
         if proj_name in projects:

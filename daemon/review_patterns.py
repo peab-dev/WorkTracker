@@ -137,6 +137,7 @@ def apply_decisions(suggestions: list[dict], states: list[int]) -> None:
     """Apply adopt/remove/skip decisions."""
     learned = load_yaml(LEARNED_PATH)
     learned_projects = learned.get("projects", {})
+    dismissed = set(learned.get("dismissed", []) or [])
 
     # Read project_patterns.yaml as raw text to preserve formatting
     text = PROJECT_PATH.read_text()
@@ -161,15 +162,18 @@ def apply_decisions(suggestions: list[dict], states: list[int]) -> None:
 
             adopted.append(name)
             learned_projects.pop(name, None)
+            dismissed.add(name)
 
         elif state == REMOVE:
             removed.append(name)
             learned_projects.pop(name, None)
+            dismissed.add(name)
 
     # Save
     if adopted:
         PROJECT_PATH.write_text(text)
     learned["projects"] = learned_projects
+    learned["dismissed"] = sorted(dismissed)
     save_yaml(LEARNED_PATH, learned)
 
     # Print summary
@@ -188,9 +192,13 @@ def main() -> None:
 
     learned = load_yaml(LEARNED_PATH)
     projects = learned.get("projects", {})
+    dismissed = set(learned.get("dismissed", []) or [])
 
-    # Filter for auto-generated entries only
-    auto = {k: v for k, v in projects.items() if v.get("_auto_generated")}
+    # Filter for auto-generated entries only, excluding previously dismissed ones
+    auto = {
+        k: v for k, v in projects.items()
+        if v.get("_auto_generated") and k not in dismissed
+    }
 
     if not auto:
         return
