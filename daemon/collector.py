@@ -323,6 +323,39 @@ class InputMonitor(threading.Thread):
 # ---------------------------------------------------------------------------
 
 
+_SECRET_PATTERNS = [
+    re.compile(r"-----BEGIN [A-Z ]+-----"),              # PEM keys
+    re.compile(r"\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{5,}"),  # JWT
+    re.compile(r"(?i)password\s*[:=]"),                  # password: foo
+    re.compile(r"(?i)api[_-]?key\s*[:=]"),               # api_key: foo
+    re.compile(r"(?i)secret\s*[:=]"),
+    re.compile(r"(?i)authorization\s*:\s*bearer"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                 # AWS Access Key ID
+    re.compile(r"\bghp_[A-Za-z0-9]{30,}"),               # GitHub PAT
+    re.compile(r"\bsk-[A-Za-z0-9]{20,}"),                # OpenAI/Anthropic-style keys
+    re.compile(r"\b[A-Za-z0-9+/=]{40,}\b"),              # Base64-ish blob
+]
+
+
+def _sanitize_clipboard_text(text: str, max_len: int = 200) -> str:
+    """Return a short matching-safe clipboard sample, or '' if secrets detected.
+
+    Drops the entire sample when anything secret-looking is matched, to avoid
+    accidentally writing passwords/tokens/keys to disk. Otherwise keeps the
+    first *max_len* characters.
+    """
+    if not text:
+        return ""
+    head = text[: max_len * 4]  # scan a bit beyond, in case long token at start
+    for pat in _SECRET_PATTERNS:
+        if pat.search(head):
+            return ""
+    sample = text[:max_len].strip()
+    # Normalize whitespace for predictable matching
+    sample = re.sub(r"\s+", " ", sample)
+    return sample
+
+
 class ClipboardMonitor:
     def __init__(self):
         pb = NSPasteboard.generalPasteboard()
@@ -355,6 +388,11 @@ class ClipboardMonitor:
             result["type"] = "file"
             result["content"] = list(filenames) if filenames else []
             result["length"] = len(result["content"])
+            # file names are safe to expose as matching hint
+            if result["content"]:
+                result["text_sample"] = _sanitize_clipboard_text(
+                    " ".join(str(x) for x in result["content"])
+                )
             return result
 
         # Text
@@ -363,6 +401,7 @@ class ClipboardMonitor:
             result["type"] = "text"
             result["content"] = str(text)
             result["length"] = len(result["content"])
+            result["text_sample"] = _sanitize_clipboard_text(str(text))
             return result
 
         # Image

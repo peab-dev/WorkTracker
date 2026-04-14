@@ -22,6 +22,7 @@ import yaml
 from rapidfuzz.fuzz import ratio as levenshtein_ratio
 
 from web_categories import classify_url, build_web_category_tree
+from topic_extractor import extract_topics
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -114,18 +115,36 @@ def load_config() -> dict:
         return yaml.safe_load(f) or {}
 
 
-def load_patterns() -> tuple[dict[str, dict], str, dict[str, list[str]]]:
-    """Return (projects_dict, default_project, app_categories).
+def load_patterns() -> tuple[dict[str, dict], str, dict[str, list[str]], dict]:
+    """Return (projects_dict, default_project, app_categories, tool_ctx).
 
     Loads only static patterns from *project_patterns.yaml*.
     Learned patterns in *learned_patterns.yaml* are suggestions only —
     they are NOT auto-merged. Use review_patterns.py to adopt them.
+
+    *tool_ctx* carries context for Tool-App handling:
+      - tool_apps: set of app names (case-insensitive) whose own name must
+        never win the project match.
+      - tool_app_url_hosts: set of host substrings that mark browser tabs
+        as Tool-App sessions (e.g. claude.ai in Safari).
+      - tool_app_title_suffixes: list of suffixes to strip from the window
+        title before matching (e.g. " — Claude").
     """
     with open(PATTERNS_PATH) as f:
         data = yaml.safe_load(f) or {}
 
     app_categories = data.get("app_categories", {})
-    return data.get("projects", {}), data.get("default_project", "Other"), app_categories
+    tool_ctx = {
+        "tool_apps": {str(a).strip().lower() for a in data.get("tool_apps", []) if a},
+        "tool_app_url_hosts": {str(h).strip().lower() for h in data.get("tool_app_url_hosts", []) if h},
+        "tool_app_title_suffixes": [str(s) for s in data.get("tool_app_title_suffixes", []) if s],
+    }
+    return (
+        data.get("projects", {}),
+        data.get("default_project", "Other"),
+        app_categories,
+        tool_ctx,
+    )
 
 
 def match_app_category(app_name: str, app_categories: dict) -> str:
@@ -286,6 +305,30 @@ def _extract_filename(title: str) -> str:
     return m.group(0) if m else ""
 
 
+def _strip_tool_app_suffix(title: str, suffixes: "list[str] | tuple[str, ...]") -> str:
+    """Remove known tool-app suffixes from a window title.
+
+    E.g. "Fix MyProject login — Claude" → "Fix MyProject login".
+    Returns the semantic title used for further matching.
+    """
+    for suffix in suffixes or ():
+        if title.endswith(suffix):
+            return title[: -len(suffix)].strip()
+    return title
+
+
+def _is_tool_app(app_name: str, url: str, tool_ctx: dict) -> bool:
+    app_l = (app_name or "").strip().lower()
+    if app_l and app_l in tool_ctx.get("tool_apps", set()):
+        return True
+    url_l = (url or "").lower()
+    if url_l:
+        for host in tool_ctx.get("tool_app_url_hosts", set()):
+            if host and host in url_l:
+                return True
+    return False
+
+
 def match_project(
     title: str,
     projects: dict[str, dict],
@@ -294,109 +337,181 @@ def match_project(
     app_name: str = "",
     git_repo: str = "",
     app_category: str = "",
-) -> tuple[str, str]:
+    *,
+    git_branch: str = "",
+    calendar_event: str = "",
+    clipboard_text: str = "",
+    ambient_titles: "list[str] | tuple[str, ...]" = (),
+    tool_ctx: "dict | None" = None,
+) -> tuple[str, str, str]:
     """Multi-signal project matching.
 
-    Returns *(project_name, category)*.
-    Priority: git_repo → URL-repo extraction → title patterns → url patterns
-              → terminal signals → IDE signals → filename → default.
+    Returns *(project_name, category, match_reason)*.
+
+    Tier order (new):
+      1  git_repo
+      2  git_branch
+      3  URL repo extraction
+      4  calendar event title
+      5  filename in semantic title (file_prefixes, files, fuzzy project name)
+      6  ambient parallel window titles (only when is_tool_app)
+      7  title patterns              (SKIPPED when is_tool_app)
+      8  url patterns                (SKIPPED when is_tool_app)
+      9  terminal signals
+      10 IDE signals
+      11 clipboard keywords
+      12 single-word directory name
+      →  default
     """
+    tool_ctx = tool_ctx or {}
     title = _safe_str(title)
     url = _safe_str(url)
     git_repo = _safe_str(git_repo)
-    if not title and not url and not git_repo:
-        return default, ""
-    title_lower = title.lower()
+    git_branch = _safe_str(git_branch)
+    calendar_event = _safe_str(calendar_event)
+    clipboard_text = _safe_str(clipboard_text)
+
+    if not any([title, url, git_repo, git_branch, calendar_event, clipboard_text, ambient_titles]):
+        return default, "", "empty"
+
+    is_tool_app = _is_tool_app(app_name, url, tool_ctx)
+    semantic_title = _strip_tool_app_suffix(
+        title, tool_ctx.get("tool_app_title_suffixes", ())
+    )
+    sem_lower = semantic_title.lower()
     url_lower = url.lower()
 
-    # --- Tier 1: Git repo (highest priority) ---
+    # --- Tier 1: Git repo ---
     if git_repo:
         git_lower = git_repo.lower()
         for proj_name, proj_info in projects.items():
             for repo_pat in proj_info.get("git_repos", []):
                 if fnmatch.fnmatch(git_lower, repo_pat.lower()):
-                    return proj_name, proj_info.get("category", "")
+                    return proj_name, proj_info.get("category", ""), f"git_repo:{git_repo}"
 
-    # --- Tier 2: URL repo extraction (GitHub/GitLab/Bitbucket) ---
+    # --- Tier 2: Git branch ---
+    if git_branch:
+        gb_lower = git_branch.lower()
+        for proj_name, proj_info in projects.items():
+            for b_pat in proj_info.get("git_branches", []):
+                if fnmatch.fnmatch(gb_lower, b_pat.lower()):
+                    return proj_name, proj_info.get("category", ""), f"git_branch:{git_branch}"
+
+    # --- Tier 3: URL repo extraction (GitHub/GitLab/Bitbucket) ---
     if url:
         extracted = _extract_repo_from_url(url)
         if extracted:
             ext_lower = extracted.lower()
             for proj_name, proj_info in projects.items():
                 if ext_lower == proj_name.lower():
-                    return proj_name, proj_info.get("category", "")
+                    return proj_name, proj_info.get("category", ""), f"url_repo:{extracted}"
                 for gr in proj_info.get("git_repos", []):
                     if ext_lower == gr.lower():
-                        return proj_name, proj_info.get("category", "")
+                        return proj_name, proj_info.get("category", ""), f"url_repo:{extracted}"
 
-    # --- Tier 3: Title patterns (existing) ---
+    # --- Tier 4: Calendar event title ---
+    if calendar_event:
+        cal_lower = calendar_event.lower()
+        for proj_name, proj_info in projects.items():
+            for pat in proj_info.get("calendar_patterns", []):
+                if fnmatch.fnmatch(cal_lower, pat.lower()):
+                    return proj_name, proj_info.get("category", ""), f"calendar:{calendar_event[:40]}"
+
+    # --- Tier 5: Filename in (semantic) title ---
+    if semantic_title:
+        filename = _extract_filename(semantic_title)
+        if filename:
+            fn_lower = filename.lower()
+            for proj_name, proj_info in projects.items():
+                # explicit files list
+                for f in proj_info.get("files", []):
+                    if fnmatch.fnmatch(fn_lower, f.lower()):
+                        return proj_name, proj_info.get("category", ""), f"filename:{filename}"
+                # file_prefixes (new)
+                for prefix in proj_info.get("file_prefixes", []):
+                    if fn_lower.startswith(prefix.lower()):
+                        return proj_name, proj_info.get("category", ""), f"file_prefix:{prefix}"
+                # Fuzzy: project name substring in filename
+                pn = proj_name.lower()
+                if len(pn) >= 4 and pn in fn_lower:
+                    return proj_name, proj_info.get("category", ""), f"filename_fuzzy:{filename}"
+
+    # --- Tier 6: Ambient parallel window titles (only for tool-apps) ---
+    if is_tool_app and ambient_titles:
+        for amb in ambient_titles:
+            amb_str = _safe_str(amb)
+            if not amb_str:
+                continue
+            amb_lower = amb_str.lower()
+            for proj_name, proj_info in projects.items():
+                for pat in proj_info.get("patterns", []):
+                    if fnmatch.fnmatch(amb_lower, pat.lower()):
+                        return proj_name, proj_info.get("category", ""), f"ambient:{amb_str[:40]}"
+
+    # --- Tier 7: Title patterns (on semantic_title) ---
+    # For tool-apps the tool's own name has already been removed from the
+    # YAML, so matching on the (possibly suffix-stripped) title is safe.
     for proj_name, proj_info in projects.items():
         for pattern in proj_info.get("patterns", []):
-            if fnmatch.fnmatch(title_lower, pattern.lower()):
-                return proj_name, proj_info.get("category", "")
+            if fnmatch.fnmatch(sem_lower, pattern.lower()):
+                reason = "title_pattern_semantic" if is_tool_app else "title_pattern"
+                return proj_name, proj_info.get("category", ""), reason
 
-    # --- Tier 4: URL patterns (existing) ---
-    if url_lower:
+    # --- Tier 8: URL patterns — skipped for tool-apps ---
+    if not is_tool_app and url_lower:
         for proj_name, proj_info in projects.items():
             for pattern in proj_info.get("url_patterns", []):
                 if fnmatch.fnmatch(url_lower, pattern.lower()):
-                    return proj_name, proj_info.get("category", "")
+                    return proj_name, proj_info.get("category", ""), "url_pattern"
 
-    # --- Tier 5: Terminal signal matching (CWD, command, files) ---
+    # --- Tier 9: Terminal signal matching (CWD, command, files) ---
     if app_category == "Terminal" and title:
         parsed = _parse_terminal_title(title)
         cwd = parsed["cwd"].lower()
         cmd = parsed["command"].lower()
-
         for proj_name, proj_info in projects.items():
-            # CWD against directories list
             for d in proj_info.get("directories", []):
                 if fnmatch.fnmatch(cwd, d.lower()):
-                    return proj_name, proj_info.get("category", "")
-            # Command against commands list
+                    return proj_name, proj_info.get("category", ""), f"terminal_cwd:{cwd}"
             for c in proj_info.get("commands", []):
                 if fnmatch.fnmatch(cmd, c.lower()):
-                    return proj_name, proj_info.get("category", "")
-            # Command against files list
+                    return proj_name, proj_info.get("category", ""), f"terminal_cmd:{cmd}"
             for f in proj_info.get("files", []):
                 if fnmatch.fnmatch(cmd, f.lower()):
-                    return proj_name, proj_info.get("category", "")
+                    return proj_name, proj_info.get("category", ""), f"terminal_file:{cmd}"
 
-    # --- Tier 6: IDE signal matching (project dir from title segments) ---
+    # --- Tier 10: IDE signal matching ---
     if app_category == "IDE" and title:
         segments = _parse_ide_title(title)
         for segment in segments:
             seg_lower = segment.lower().strip("~/")
             for proj_name, proj_info in projects.items():
-                # Check against directories list
                 for d in proj_info.get("directories", []):
                     if d.lower() in seg_lower:
-                        return proj_name, proj_info.get("category", "")
-                # Check against project name
+                        return proj_name, proj_info.get("category", ""), f"ide_dir:{d}"
                 if proj_name.lower() in seg_lower:
-                    return proj_name, proj_info.get("category", "")
+                    return proj_name, proj_info.get("category", ""), f"ide_name:{proj_name}"
 
-    # --- Tier 7: Filename matching (TextEdit, Vorschau, etc.) ---
-    if title:
-        filename = _extract_filename(title)
-        if filename:
-            fn_lower = filename.lower()
-            for proj_name, proj_info in projects.items():
-                for f in proj_info.get("files", []):
-                    if fnmatch.fnmatch(fn_lower, f.lower()):
-                        return proj_name, proj_info.get("category", "")
+    # --- Tier 11: Clipboard keywords (privacy-sensitive, never logged) ---
+    if clipboard_text:
+        cb_lower = clipboard_text.lower()
+        for proj_name, proj_info in projects.items():
+            for kw in proj_info.get("clipboard_keywords", []):
+                if kw and kw.lower() in cb_lower:
+                    return proj_name, proj_info.get("category", ""), "clipboard_kw"
 
-    # --- Tier 8: Directory name matching (Finder, any app showing a folder name) ---
-    if title and not " " in title.strip():
-        # Single-word title → could be a directory name (e.g. Finder showing "daemon")
-        title_clean = title.strip().lower()
-        if title_clean and len(title_clean) >= 3:
+    # --- Tier 12: Single-word directory name (Finder etc.) ---
+    if semantic_title and " " not in semantic_title.strip():
+        tc = semantic_title.strip().lower()
+        if tc and len(tc) >= 3:
             for proj_name, proj_info in projects.items():
                 for d in proj_info.get("directories", []):
-                    if fnmatch.fnmatch(title_clean, d.lower()):
-                        return proj_name, proj_info.get("category", "")
+                    if fnmatch.fnmatch(tc, d.lower()):
+                        return proj_name, proj_info.get("category", ""), f"dir_name:{tc}"
 
-    return default, ""
+    if is_tool_app:
+        return default, "", "tool_app_unresolved"
+    return default, "", "default"
 
 
 # ---------------------------------------------------------------------------
@@ -490,6 +605,34 @@ def flatten_df(df: pd.DataFrame) -> pd.DataFrame:
     # sleep_wake — keep as-is (list or None), no flattening needed
     # The column is used directly by _row_has_sleep_wake()
 
+    # visible_windows → ambient_titles (list of non-active window titles)
+    def _ambient_from_windows(wins):
+        if not isinstance(wins, list):
+            return []
+        out = []
+        for w in wins:
+            if not isinstance(w, dict):
+                continue
+            if w.get("is_active"):
+                continue
+            t = str(w.get("title") or "").strip()
+            if not t or len(t) < 3:
+                continue
+            if t not in out:
+                out.append(t)
+            if len(out) >= 5:
+                break
+        return out
+
+    if "visible_windows" in df.columns:
+        df["ambient_titles"] = df["visible_windows"].apply(_ambient_from_windows)
+    else:
+        df["ambient_titles"] = [[] for _ in range(len(df))]
+
+    # Ensure clip_text_sample column exists (may be absent in older snapshots)
+    if "clip_text_sample" not in df.columns:
+        df["clip_text_sample"] = ""
+
     return df
 
 
@@ -515,7 +658,7 @@ def detect_sessions(df: pd.DataFrame, cfg: dict) -> list[dict]:
     same_app_grace = agg_cfg.get("same_app_grace_period_seconds", 30)
     min_snapshots = agg_cfg.get("min_session_snapshots", 2)
 
-    projects, default_project, app_categories = load_patterns()
+    projects, default_project, app_categories, tool_ctx = load_patterns()
     interval = cfg.get("collector", {}).get("interval_seconds", 10)
 
     sessions: list[dict] = []
@@ -527,7 +670,7 @@ def detect_sessions(df: pd.DataFrame, cfg: dict) -> list[dict]:
         ts = row["ts"]
 
         if current is None:
-            current = _new_session(row, projects, default_project, app_categories)
+            current = _new_session(row, projects, default_project, app_categories, tool_ctx)
             continue
 
         # Sleep/wake event → always split
@@ -543,7 +686,7 @@ def detect_sessions(df: pd.DataFrame, cfg: dict) -> list[dict]:
         if has_gap:
             # Force split on sleep/wake gap
             sessions.append(_finalize_session(current))
-            current = _new_session(row, projects, default_project, app_categories)
+            current = _new_session(row, projects, default_project, app_categories, tool_ctx)
         elif same_app and time_gap < same_app_grace and not is_idle:
             # Tier 1: same app + small gap → merge (tab switching)
             current["end"] = ts
@@ -557,7 +700,7 @@ def detect_sessions(df: pd.DataFrame, cfg: dict) -> list[dict]:
         else:
             # Different app, long gap, or idle → split
             sessions.append(_finalize_session(current))
-            current = _new_session(row, projects, default_project, app_categories)
+            current = _new_session(row, projects, default_project, app_categories, tool_ctx)
 
     if current is not None:
         sessions.append(_finalize_session(current))
@@ -609,19 +752,34 @@ def _merge_micro_sessions(sessions: list[dict], min_snapshots: int) -> list[dict
 
 
 def _new_session(row: pd.Series, projects: dict, default_project: str,
-                  app_categories: dict[str, list[str]] | None = None) -> dict:
+                  app_categories: dict[str, list[str]] | None = None,
+                  tool_ctx: "dict | None" = None) -> dict:
     title = _safe_str(row.get("app_window_title"))
     url = _safe_str(row.get("app_url"))
     app_name = _safe_str(row.get("app_name"))
     app_cat = match_app_category(app_name, app_categories or {})
     git_repo_val = _safe_str(row.get("git_repo"))
-    proj, cat = match_project(
+    git_branch_val = _safe_str(row.get("git_branch"))
+    cal_event_val = _safe_str(row.get("cal_event_title"))
+    clip_text_val = _safe_str(row.get("clip_text_sample"))
+    ambient = row.get("ambient_titles")
+    if isinstance(ambient, float) and math.isnan(ambient):
+        ambient = []
+    if ambient is None:
+        ambient = []
+    if not isinstance(ambient, (list, tuple)):
+        ambient = []
+    proj, cat, reason = match_project(
         title, projects, default_project,
         url=url, app_name=app_name,
         git_repo=git_repo_val, app_category=app_cat,
+        git_branch=git_branch_val,
+        calendar_event=cal_event_val,
+        clipboard_text=clip_text_val,
+        ambient_titles=ambient,
+        tool_ctx=tool_ctx or {},
     )
     app_subcat = _resolve_subcategory(app_cat, app_name, cat)
-    interval = 10
     return {
         "start": row["ts"],
         "end": row["ts"],
@@ -634,6 +792,8 @@ def _new_session(row: pd.Series, projects: dict, default_project: str,
         "_last_ts": row["ts"],
         "project": proj,
         "category": cat,
+        "_match_reason": reason,
+        "_is_tool_app": _is_tool_app(app_name, url, tool_ctx or {}),
         "keystrokes_total": _safe_int(row.get("input_keystrokes")),
         "mouse_clicks_total": _safe_int(row.get("input_mouse_clicks_left"))
                               + _safe_int(row.get("input_mouse_clicks_right")),
@@ -644,6 +804,9 @@ def _new_session(row: pd.Series, projects: dict, default_project: str,
         "_urls": [url] if url and pd.notna(url) else [],
         "_git_repo": row.get("git_repo", ""),
         "_git_branch": row.get("git_branch", ""),
+        "_cal_event": cal_event_val,
+        "_clip_text_samples": [clip_text_val] if clip_text_val else [],
+        "_ambient_titles": list(ambient) if ambient else [],
     }
 
 
@@ -684,6 +847,27 @@ def _accumulate_session(session: dict, row: pd.Series, interval: int) -> None:
             "app": row.get("media_app", ""),
             "service": row.get("media_service", ""),
         })
+
+    # Calendar event (most recent wins)
+    cal_event = row.get("cal_event_title")
+    if cal_event and pd.notna(cal_event):
+        session["_cal_event"] = _safe_str(cal_event)
+
+    # Clipboard text samples (privacy-sensitive: never written to reports)
+    clip_text = row.get("clip_text_sample")
+    if clip_text and pd.notna(clip_text):
+        lst = session.setdefault("_clip_text_samples", [])
+        if len(lst) < 20:
+            lst.append(_safe_str(clip_text))
+
+    # Ambient titles from parallel windows
+    amb = row.get("ambient_titles")
+    if isinstance(amb, (list, tuple)) and amb:
+        bag = session.setdefault("_ambient_titles", [])
+        for t in amb:
+            t_str = _safe_str(t)
+            if t_str and t_str not in bag and len(bag) < 20:
+                bag.append(t_str)
 
 
 def _finalize_session(session: dict) -> dict:
@@ -729,6 +913,12 @@ def _finalize_session(session: dict) -> dict:
         "window_title": window_title,
         "project": session["project"],
         "category": session["category"],
+        "match_reason": session.get("_match_reason", ""),
+        "is_tool_app": bool(session.get("_is_tool_app", False)),
+        "topic": session.get("topic", ""),
+        # Privacy-sensitive: stripped by sanitize_session_for_report before write
+        "_clip_text_samples": list(session.get("_clip_text_samples", [])),
+        "_ambient_titles": list(session.get("_ambient_titles", [])),
         "keystrokes_total": session["keystrokes_total"],
         "mouse_clicks_total": session["mouse_clicks_total"],
         "scroll_events_total": session["scroll_events_total"],
@@ -747,6 +937,9 @@ def _finalize_session(session: dict) -> dict:
     if git_repo:
         result["git_repo"] = git_repo
         result["git_branch"] = git_branch
+    cal_ev = session.get("_cal_event")
+    if cal_ev:
+        result["calendar_event"] = cal_ev
     return result
 
 
@@ -779,29 +972,162 @@ def _find_nearby_project(sessions: list[dict], idx: int, direction: int,
     return None
 
 
-def propagate_project_context(sessions: list[dict],
-                               window_minutes: int = 5) -> list[dict]:
-    """Propagate project context onto short 'Other' sessions.
+_PRIVATE_SESSION_KEYS = {
+    # Raw clipboard samples — never leak to disk / reports.
+    "_clip_text_samples",
+    # Raw parallel-window titles — may contain unrelated PII.
+    "_ambient_titles",
+    # Internal flags used only within aggregator passes.
+    "_match_reason",
+    "_is_tool_app",
+    "_cal_event",
+    "_context_propagated",
+}
 
-    A short Other session surrounded by the same project on both sides
-    (within *window_minutes*) gets assigned to that project.
+
+def sanitize_session_for_report(session: dict) -> dict:
+    """Strip privacy-sensitive fields before writing a session to disk.
+
+    - Drops clipboard text samples entirely.
+    - Drops raw ambient window titles (keeps only a count).
+    - Keeps ``match_reason`` because we already populate it via an
+      allow-listed, structured form (``git_repo:…``, ``filename:…`` etc.).
     """
-    max_gap = window_minutes * 60
-    for i, session in enumerate(sessions):
-        if session.get("project", "Other") != "Other":
+    ambient = session.get("_ambient_titles") or []
+    clip = session.get("_clip_text_samples") or []
+    out = {k: v for k, v in session.items() if k not in _PRIVATE_SESSION_KEYS}
+    out["ambient_window_count"] = len(ambient)
+    out["clipboard_sample_count"] = len(clip)
+    return out
+
+
+def _is_unresolved(session: dict, default_project: str = "Other") -> bool:
+    """True if this session should be considered for project inheritance.
+
+    Eligible: projects that fell through to default (Other) or tool-app
+    sessions that haven't been resolved by a content-level signal yet.
+    A tool-app session that already carries an inherited or content-based
+    match_reason is considered resolved and will not be touched again.
+    """
+    proj = session.get("project", default_project)
+    if proj == default_project or str(proj).startswith("Other"):
+        return True
+    if session.get("is_tool_app") or session.get("_is_tool_app"):
+        reason = str(session.get("match_reason", ""))
+        # Resolved states: anything that is content- or inheritance-derived.
+        if reason and not reason.startswith("tool_app_unresolved"):
+            return False
+        return True
+    return False
+
+
+def inherit_projects(sessions: list[dict],
+                      default_project: str = "Other",
+                      sandwich_gap_sec: float = 120.0,
+                      sticky_window_sec: float = 20 * 60,
+                      sticky_ratio: float = 0.5) -> list[dict]:
+    """Two-pass temporal inheritance for tool-app / Other sessions.
+
+    Pass 1 — Sandwich:
+      For each unresolved session, find nearest *resolved* neighbours on
+      both sides within ``sandwich_gap_sec``. If both exist and match the
+      same project → inherit. Single-sided neighbour within the gap is a
+      weaker signal and is applied only if the session is a tool-app.
+
+    Pass 2 — Sticky window:
+      For each still-unresolved session, look at the last
+      ``sticky_window_sec`` of resolved sessions ending before this one.
+      If one project covers ≥ ``sticky_ratio`` of that window's total
+      duration → inherit.
+
+    Modifies sessions in place and returns them.
+    """
+    if not sessions:
+        return sessions
+
+    def _ts(x):
+        return pd.Timestamp(x)
+
+    # --- Pass 1: Sandwich ---
+    for i, s in enumerate(sessions):
+        if not _is_unresolved(s, default_project):
             continue
-        if session.get("duration_seconds", 0) > max_gap:
-            continue  # don't auto-assign long sessions
 
-        prev = _find_nearby_project(sessions, i, direction=-1, max_gap_sec=max_gap)
-        nxt = _find_nearby_project(sessions, i, direction=1, max_gap_sec=max_gap)
+        # Nearest resolved neighbours (ignoring other unresolved in between
+        # if they're short — but here we just walk until resolved or gap).
+        prev_proj = None
+        j = i - 1
+        while j >= 0:
+            if not _is_unresolved(sessions[j], default_project):
+                gap = (_ts(s["start"]) - _ts(sessions[j]["end"])).total_seconds()
+                if gap <= sandwich_gap_sec:
+                    prev_proj = (sessions[j]["project"], sessions[j].get("category", ""))
+                break
+            j -= 1
 
-        if prev and nxt and prev == nxt:
-            session["project"] = prev[0]
-            session["category"] = prev[1]
-            session["_context_propagated"] = True
+        next_proj = None
+        k = i + 1
+        while k < len(sessions):
+            if not _is_unresolved(sessions[k], default_project):
+                gap = (_ts(sessions[k]["start"]) - _ts(s["end"])).total_seconds()
+                if gap <= sandwich_gap_sec:
+                    next_proj = (sessions[k]["project"], sessions[k].get("category", ""))
+                break
+            k += 1
+
+        if prev_proj and next_proj and prev_proj[0] == next_proj[0]:
+            s["project"] = prev_proj[0]
+            s["category"] = prev_proj[1]
+            s["match_reason"] = f"inherited:sandwich({prev_proj[0]})"
+            continue
+
+    # --- Pass 2: Sticky window ---
+    for i, s in enumerate(sessions):
+        if not _is_unresolved(s, default_project):
+            continue
+        if not (s.get("is_tool_app") or s.get("_is_tool_app")):
+            # Stickiness is mainly for tool-app noise; avoid overreach on Other.
+            continue
+
+        window_start_ts = _ts(s["start"]) - pd.Timedelta(seconds=sticky_window_sec)
+        totals: dict[str, float] = {}
+        cats: dict[str, str] = {}
+        total_window = 0.0
+        for j in range(i - 1, -1, -1):
+            cand = sessions[j]
+            if _is_unresolved(cand, default_project):
+                continue
+            end_ts = _ts(cand["end"])
+            if end_ts < window_start_ts:
+                break
+            start_ts = _ts(cand["start"])
+            dur = max(
+                0.0,
+                (min(end_ts, _ts(s["start"])) - max(start_ts, window_start_ts)).total_seconds(),
+            )
+            if dur <= 0:
+                continue
+            proj = cand["project"]
+            totals[proj] = totals.get(proj, 0.0) + dur
+            cats.setdefault(proj, cand.get("category", ""))
+            total_window += dur
+
+        if total_window <= 0:
+            continue
+
+        dom_proj, dom_dur = max(totals.items(), key=lambda kv: kv[1])
+        if dom_dur / total_window >= sticky_ratio:
+            s["project"] = dom_proj
+            s["category"] = cats.get(dom_proj, "")
+            s["match_reason"] = f"inherited:sticky({dom_proj})"
 
     return sessions
+
+
+# Backwards-compatible alias — old name kept for external callers.
+def propagate_project_context(sessions: list[dict],
+                               window_minutes: int = 5) -> list[dict]:
+    return inherit_projects(sessions, sandwich_gap_sec=window_minutes * 60)
 
 
 # ---------------------------------------------------------------------------
@@ -1670,11 +1996,30 @@ def run_daily(date: datetime) -> None:
         clipped.append(s)
     sessions = clipped
 
-    # Propagate project context onto short 'Other' sessions
-    other_before = sum(1 for s in sessions if s.get("project", "Other") == "Other")
-    sessions = propagate_project_context(sessions)
-    propagated = other_before - sum(1 for s in sessions if s.get("project", "Other") == "Other")
-    log.info("%d Sessions erkannt (%d via Kontext propagiert)", len(sessions), propagated)
+    # Temporal inheritance: tool-app / Other sessions inherit project from neighbours
+    unresolved_before = sum(1 for s in sessions if _is_unresolved(s))
+    sessions = inherit_projects(sessions)
+    unresolved_after = sum(1 for s in sessions if _is_unresolved(s))
+    log.info(
+        "%d Sessions (%d via inherit_projects aufgelöst, %d übrig)",
+        len(sessions),
+        unresolved_before - unresolved_after,
+        unresolved_after,
+    )
+
+    # Topic extraction via local LLM (best-effort, silent on failure)
+    try:
+        _, _, _, _tool_ctx = load_patterns()
+        _suffixes = _tool_ctx.get("tool_app_title_suffixes", [])
+        set_count = extract_topics(sessions, cfg, title_suffixes=_suffixes)
+        if set_count:
+            log.info("Topic-LLM: %d Sessions mit Topic angereichert", set_count)
+    except Exception as e:
+        log.warning("Topic-Extraktion fehlgeschlagen: %s", e, exc_info=True)
+
+    # Sanitize before anything reads the sessions — removes clipboard samples
+    # and raw ambient titles from every downstream consumer (reports, stats).
+    sessions = [sanitize_session_for_report(s) for s in sessions]
 
     # Save sessions
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
