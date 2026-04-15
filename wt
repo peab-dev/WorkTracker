@@ -219,11 +219,12 @@ latest_report() {
 
 human_size() {
     local bytes="${1:-0}"
-    if   (( bytes < 1024 ));       then echo "${bytes}B"
-    elif (( bytes < 1048576 ));    then printf "%.0fK" "$(echo "$bytes/1024" | bc -l)"
-    elif (( bytes < 1073741824 )); then printf "%.1fM" "$(echo "$bytes/1048576" | bc -l)"
-    else                                printf "%.1fG" "$(echo "$bytes/1073741824" | bc -l)"
-    fi
+    awk -v b="$bytes" 'BEGIN {
+        if      (b < 1024)       printf "%dB",    b
+        else if (b < 1048576)    printf "%dK",    b/1024
+        else if (b < 1073741824) printf "%.1fM",  b/1048576
+        else                     printf "%.1fG",  b/1073741824
+    }'
 }
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
