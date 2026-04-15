@@ -217,6 +217,15 @@ latest_report() {
     echo "|0"
 }
 
+human_size() {
+    local bytes="${1:-0}"
+    if   (( bytes < 1024 ));       then echo "${bytes}B"
+    elif (( bytes < 1048576 ));    then printf "%.0fK" "$(echo "$bytes/1024" | bc -l)"
+    elif (( bytes < 1073741824 )); then printf "%.1fM" "$(echo "$bytes/1048576" | bc -l)"
+    else                                printf "%.1fG" "$(echo "$bytes/1073741824" | bc -l)"
+    fi
+}
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Commands
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -239,19 +248,33 @@ cmd_status() {
     local sess_file="$BASE/data/sessions/${today}.json"
 
     if [[ -f "$snap_file" ]]; then
-        local snap_count
+        local snap_count snap_bytes snap_size
         snap_count=$(wc -l < "$snap_file" | tr -d ' ')
-        printf "  ${GRAY_L}Snapshots:${RST}    ${WHITE}${BOLD}%s${RST}\n" "$snap_count"
+        snap_bytes=$(stat -f%z "$snap_file" 2>/dev/null || echo 0)
+        snap_size=$(human_size "$snap_bytes")
+        printf "  ${GRAY_L}Snapshots:${RST}    ${WHITE}${BOLD}%s${RST}  ${GRAY}(%s)${RST}\n" "$snap_count" "$snap_size"
     else
         printf "  ${GRAY_L}Snapshots:${RST}    ${GRAY}none${RST}\n"
     fi
 
     if [[ -f "$sess_file" ]]; then
-        local sess_count
+        local sess_count sess_bytes sess_size
         sess_count=$("$VENV" -c "import json; print(len(json.load(open('$sess_file'))))" 2>/dev/null || echo "0")
-        printf "  ${GRAY_L}Sessions:${RST}     ${WHITE}${BOLD}%s${RST}\n" "$sess_count"
+        sess_bytes=$(stat -f%z "$sess_file" 2>/dev/null || echo 0)
+        sess_size=$(human_size "$sess_bytes")
+        printf "  ${GRAY_L}Sessions:${RST}     ${WHITE}${BOLD}%s${RST}  ${GRAY}(%s)${RST}\n" "$sess_count" "$sess_size"
     else
         printf "  ${GRAY_L}Sessions:${RST}     ${GRAY}none${RST}\n"
+    fi
+
+    local scr_dir_today="$BASE/data/screenshots/${today}"
+    if [[ -d "$scr_dir_today" ]]; then
+        local scr_count scr_size_today
+        scr_count=$(find "$scr_dir_today" -maxdepth 1 -name '*.png' 2>/dev/null | wc -l | tr -d ' ')
+        scr_size_today=$(du -sh "$scr_dir_today" 2>/dev/null | awk '{print $1}')
+        printf "  ${GRAY_L}Screenshots:${RST}  ${WHITE}${BOLD}%s${RST}  ${GRAY}(%s)${RST}\n" "$scr_count" "$scr_size_today"
+    else
+        printf "  ${GRAY_L}Screenshots:${RST}  ${GRAY}none${RST}\n"
     fi
 
     local data_size
@@ -260,6 +283,13 @@ cmd_status() {
     log_size=$(du -sh "$LOG_DIR" 2>/dev/null | awk '{print $1}')
     printf "  ${GRAY_L}Data:${RST}         ${WHITE}%s${RST}    " "$data_size"
     printf "${GRAY_L}Logs:${RST} ${WHITE}%s${RST}\n" "$log_size"
+
+    local snap_total sess_total scr_total
+    snap_total=$(du -sh "$BASE/data/snapshots"  2>/dev/null | awk '{print $1}')
+    sess_total=$(du -sh "$BASE/data/sessions"   2>/dev/null | awk '{print $1}')
+    scr_total=$(du -sh "$BASE/data/screenshots" 2>/dev/null | awk '{print $1}')
+    printf "  ${GRAY_L}Totals:${RST}       ${GRAY_L}snap${RST} ${WHITE}%s${RST}  ${GRAY_L}sess${RST} ${WHITE}%s${RST}  ${GRAY_L}scr${RST} ${WHITE}%s${RST}\n" \
+        "${snap_total:-0}" "${sess_total:-0}" "${scr_total:-0}"
 
     section "Reports"
 

@@ -22,6 +22,7 @@ import yaml
 from rapidfuzz.fuzz import ratio as levenshtein_ratio
 
 from web_categories import classify_url, build_web_category_tree
+from motivation_extractor import extract_motivations
 from topic_extractor import extract_topics
 
 # ---------------------------------------------------------------------------
@@ -850,7 +851,7 @@ def detect_sessions(df: pd.DataFrame, cfg: dict) -> list[dict]:
 
         if has_gap:
             # Force split on sleep/wake gap
-            sessions.append(_finalize_session(current))
+            sessions.append(_finalize_session(current, interval, min_snapshots))
             current = _new_session(row, projects, default_project, app_categories, tool_ctx)
         elif same_app and time_gap < same_app_grace and not is_idle:
             # Tier 1: same app + small gap → merge (tab switching)
@@ -864,15 +865,15 @@ def detect_sessions(df: pd.DataFrame, cfg: dict) -> list[dict]:
             _accumulate_session(current, row, interval)
         else:
             # Different app, long gap, or idle → split
-            sessions.append(_finalize_session(current))
+            sessions.append(_finalize_session(current, interval, min_snapshots))
             current = _new_session(row, projects, default_project, app_categories, tool_ctx)
 
     if current is not None:
-        sessions.append(_finalize_session(current))
+        sessions.append(_finalize_session(current, interval, min_snapshots))
 
     # Post-process: absorb micro-sessions into neighbours
     if min_snapshots > 1 and len(sessions) > 1:
-        sessions = _merge_micro_sessions(sessions, min_snapshots)
+        sessions = _merge_micro_sessions(sessions, min_snapshots, interval)
 
     return sessions
 
@@ -889,15 +890,17 @@ def _row_has_sleep_wake(row: pd.Series) -> bool:
     return False
 
 
-def _merge_micro_sessions(sessions: list[dict], min_snapshots: int) -> list[dict]:
-    """Absorb sessions with fewer than *min_snapshots* into adjacent same-app sessions."""
+def _merge_micro_sessions(sessions: list[dict], min_snapshots: int, interval: int) -> list[dict]:
+    """Absorb sessions with fewer than *min_snapshots* into the preceding session.
+
+    The predecessor's identity (app, project, title) wins; only time and
+    interaction counts from the micro-session are absorbed. This lets brief
+    focus-flashes from helper processes (menubar, dialogs) disappear into
+    whatever the user was actually doing before.
+    """
     merged: list[dict] = []
     for s in sessions:
-        if (
-            s["snapshot_count"] < min_snapshots
-            and merged
-            and merged[-1]["app_name"] == s["app_name"]
-        ):
+        if s["snapshot_count"] < min_snapshots and merged:
             prev = merged[-1]
             prev["end"] = s["end"]
             prev["duration_seconds"] = (
@@ -907,8 +910,11 @@ def _merge_micro_sessions(sessions: list[dict], min_snapshots: int) -> list[dict
             prev["keystrokes_total"] += s["keystrokes_total"]
             prev["mouse_clicks_total"] += s["mouse_clicks_total"]
             prev["scroll_events_total"] += s["scroll_events_total"]
+            for sp in s.get("screenshot_paths", []) or []:
+                if sp not in prev.setdefault("screenshot_paths", []):
+                    prev["screenshot_paths"].append(sp)
             # Recalculate intensity
-            dur = max(prev["duration_seconds"], 10)
+            dur = max(prev["duration_seconds"], float(max(min_snapshots - 1, 1) * interval))
             raw = (prev["keystrokes_total"] + prev["mouse_clicks_total"]) / dur
             prev["intensity_score"] = round(min(10.0, raw * 10), 1)
         else:
@@ -972,6 +978,11 @@ def _new_session(row: pd.Series, projects: dict, default_project: str,
         "_cal_event": cal_event_val,
         "_clip_text_samples": [clip_text_val] if clip_text_val else [],
         "_ambient_titles": list(ambient) if ambient else [],
+        "_screenshot_paths": (
+            [row.get("screenshot_path")]
+            if isinstance(row.get("screenshot_path"), str) and row.get("screenshot_path")
+            else []
+        ),
     }
 
 
@@ -1034,12 +1045,21 @@ def _accumulate_session(session: dict, row: pd.Series, interval: int) -> None:
             if t_str and t_str not in bag and len(bag) < 20:
                 bag.append(t_str)
 
+    # Screenshot path (one PNG per snapshot when capture is enabled)
+    sp = row.get("screenshot_path")
+    if isinstance(sp, str) and sp:
+        paths = session.setdefault("_screenshot_paths", [])
+        if sp not in paths:
+            paths.append(sp)
 
-def _finalize_session(session: dict) -> dict:
+
+def _finalize_session(session: dict, interval: int, min_snapshots: int) -> dict:
     duration = (session["end"] - session["start"]).total_seconds()
-    # Minimum duration = 1 snapshot interval
-    if duration < 10:
-        duration = 10.0
+    # Minimum duration = real span of a min_session_snapshots-long session:
+    # (min_snapshots - 1) * interval (first snapshot at t=0, last at t=(N-1)*interval).
+    min_duration = float(max(min_snapshots - 1, 1) * interval)
+    if duration < min_duration:
+        duration = min_duration
 
     # Most common title
     title_counts = Counter(session["_titles"])
@@ -1081,6 +1101,9 @@ def _finalize_session(session: dict) -> dict:
         "match_reason": session.get("_match_reason", ""),
         "is_tool_app": bool(session.get("_is_tool_app", False)),
         "topic": session.get("topic", ""),
+        "topic_long": session.get("topic_long", ""),
+        "screenshot_paths": list(session.get("_screenshot_paths", [])),
+        "motivation_message": session.get("motivation_message", ""),
         # Privacy-sensitive: stripped by sanitize_session_for_report before write
         "_clip_text_samples": list(session.get("_clip_text_samples", [])),
         "_ambient_titles": list(session.get("_ambient_titles", [])),
@@ -1300,6 +1323,39 @@ def propagate_project_context(sessions: list[dict],
 # ---------------------------------------------------------------------------
 
 
+def aggregate_topics(sessions: list[dict], top_n: int = 12, min_sec: int = 60) -> list[dict]:
+    """Aggregate sessions by topic → [{name, sec, pct, project, sessions}]."""
+    totals: dict[str, int] = {}
+    projects: dict[str, tuple[str, int]] = {}
+    counts: dict[str, int] = {}
+    total_topic_sec = 0
+    for s in sessions:
+        topic = (s.get("topic") or "").strip()
+        if not topic:
+            continue
+        dur = int(s.get("duration_seconds", 0) or 0)
+        totals[topic] = totals.get(topic, 0) + dur
+        counts[topic] = counts.get(topic, 0) + 1
+        total_topic_sec += dur
+        # Prefer the project of the longest session under this topic.
+        cur_proj = projects.get(topic)
+        if not cur_proj or dur > cur_proj[1]:
+            projects[topic] = (s.get("project", ""), dur)
+    items = [
+        {
+            "name": t,
+            "sec": totals[t],
+            "pct": round((totals[t] / total_topic_sec) * 100, 1) if total_topic_sec else 0,
+            "project": projects[t][0],
+            "sessions": counts[t],
+        }
+        for t in totals
+        if totals[t] >= min_sec
+    ]
+    items.sort(key=lambda x: x["sec"], reverse=True)
+    return items[:top_n]
+
+
 def calc_daily_stats(df: pd.DataFrame, sessions: list[dict], cfg: Optional[dict] = None) -> dict:
     """Compute all daily statistics from DataFrame and sessions."""
     stats: dict[str, Any] = {}
@@ -1377,6 +1433,9 @@ def calc_daily_stats(df: pd.DataFrame, sessions: list[dict], cfg: Optional[dict]
         stats["projects"] = proj_group.reset_index().to_dict("records")
     else:
         stats["projects"] = []
+
+    # --- Topic distribution (from topic-LLM) ---
+    stats["topics"] = aggregate_topics(sessions, top_n=15, min_sec=60)
 
     # --- App category distribution (excluding inactive apps) ---
     if "app_category" in active_sdf.columns:
@@ -1500,9 +1559,9 @@ def calc_daily_stats(df: pd.DataFrame, sessions: list[dict], cfg: Optional[dict]
     git_commits = []
     git_repos_seen: set[str] = set()
     for s in sessions:
-        repo = s.get("git_repo", "")
-        if repo:
-            git_repos_seen.add(repo)
+        repo = s.get("git_repo")
+        if isinstance(repo, str) and repo.strip():
+            git_repos_seen.add(repo.strip())
     # Load git commits at aggregation time for more complete data
     cfg_collector = cfg.get("collector", {})
     if cfg_collector.get("track_git", False):
@@ -1721,6 +1780,20 @@ def render_daily_md(date: datetime, stats: dict, comparison: list[dict]) -> str:
             )
         lines.append("")
 
+    # --- Topics ---
+    topics_list = stats.get("topics", [])
+    if topics_list:
+        lines.append("## Topics")
+        lines.append("| Topic | Time | Share | Sessions | Top Project |")
+        lines.append("|-------|------|--------|----------|-------------|")
+        for t in topics_list:
+            name = t["name"][:60] + "…" if len(t["name"]) > 60 else t["name"]
+            lines.append(
+                f"| {name} | {fmt_duration(t['sec'])} | {t['pct']:.1f}% "
+                f"| {t['sessions']} | {t['project']} |"
+            )
+        lines.append("")
+
     # --- App Usage ---
     lines.append("## App Usage")
     lines.append("| App | Category | Time | Share | Top Project |")
@@ -1935,6 +2008,20 @@ def render_weekly_md(date: datetime, all_sessions: list[dict], daily_stats_list:
         )
     lines.append("")
 
+    # --- Weekly Topics ---
+    weekly_topics = aggregate_topics(all_sessions, top_n=20, min_sec=60)
+    if weekly_topics:
+        lines.append("## Topics")
+        lines.append("| Topic | Time | Share | Sessions | Top Project |")
+        lines.append("|-------|------|--------|----------|-------------|")
+        for t in weekly_topics:
+            name = t["name"][:60] + "…" if len(t["name"]) > 60 else t["name"]
+            lines.append(
+                f"| {name} | {fmt_duration(t['sec'])} | {t['pct']:.1f}% "
+                f"| {t['sessions']} | {t['project']} |"
+            )
+        lines.append("")
+
     # --- Trends ---
     lines.append("## Trends")
     day_totals = sdf.groupby(sdf["start_dt"].dt.date)["duration_seconds"].sum()
@@ -2050,6 +2137,20 @@ def render_monthly_md(date: datetime, all_sessions: list[dict]) -> str:
         pct = row["total_seconds"] / total_sec
         lines.append(f"| {row.name} | {fmt_duration(row['total_seconds'])} | {pct_str(pct)} | {int(row['session_count'])} |")
     lines.append("")
+
+    # --- Monthly Topics ---
+    monthly_topics = aggregate_topics(all_sessions, top_n=25, min_sec=60)
+    if monthly_topics:
+        lines.append("## Topics")
+        lines.append("| Topic | Time | Share | Sessions | Top Project |")
+        lines.append("|-------|------|--------|----------|-------------|")
+        for t in monthly_topics:
+            name = t["name"][:60] + "…" if len(t["name"]) > 60 else t["name"]
+            lines.append(
+                f"| {name} | {fmt_duration(t['sec'])} | {t['pct']:.1f}% "
+                f"| {t['sessions']} | {t['project']} |"
+            )
+        lines.append("")
 
     # --- Long-term Trends ---
     lines.append("## Long-term Trends")
@@ -2200,6 +2301,19 @@ def run_daily(date: datetime, progress: "Progress | None" = None) -> None:
         progress.update("topics", f"{set_count} set")
     except Exception as e:
         log.warning("Topic-Extraktion fehlgeschlagen: %s", e, exc_info=True)
+
+    # Motivations-Extraktion via Vision-LLM (best-effort, silent on failure)
+    try:
+        def _motiv_progress(done: int, total: int, set_n: int) -> None:
+            progress.update("motivation", f"{done}/{total}  {set_n} set")
+
+        progress.update("motivation", "starting")
+        m_count = extract_motivations(sessions, cfg, progress=_motiv_progress)
+        if m_count:
+            log.info("Motivation-LLM: %d Sessions mit Motivation angereichert", m_count)
+        progress.update("motivation", f"{m_count} set")
+    except Exception as e:
+        log.warning("Motivation-Extraktion fehlgeschlagen: %s", e, exc_info=True)
 
     # Sanitize before anything reads the sessions — removes clipboard samples
     # and raw ambient titles from every downstream consumer (reports, stats).

@@ -27,9 +27,11 @@ from urllib.parse import urlparse
 import yaml
 from AppKit import (
     NSApplicationActivationPolicyRegular,
+    NSBitmapImageRep,
     NSDate,
     NSEvent,
     NSPasteboard,
+    NSPNGFileType,
     NSRunLoop,
     NSRunningApplication,
     NSWorkspace,
@@ -42,13 +44,21 @@ from Quartz import (
     CFRunLoopGetCurrent,
     CFRunLoopRun,
     CFRunLoopStop,
+    CGDisplayBounds,
+    CGDisplayCreateImageForRect,
     CGEventGetLocation,
     CGEventKeyboardGetUnicodeString,
     CGEventMaskBit,
     CGEventSourceSecondsSinceLastEventType,
     CGEventTapCreate,
     CGEventTapEnable,
+    CGGetActiveDisplayList,
+    CGMainDisplayID,
+    CGRectNull,
+    CGRectUnion,
+    CGSessionCopyCurrentDictionary,
     CGWindowListCopyWindowInfo,
+    CGWindowListCreateImage,
     kCFRunLoopCommonModes,
     kCGEventKeyDown,
     kCGEventLeftMouseDown,
@@ -60,6 +70,7 @@ from Quartz import (
     kCGNullWindowID,
     kCGSessionEventTap,
     kCGWindowBounds,
+    kCGWindowImageDefault,
     kCGWindowLayer,
     kCGWindowListOptionOnScreenOnly,
     kCGWindowName,
@@ -1266,6 +1277,67 @@ def collect_system() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Screenshot capture (multi-monitor union, PNG via NSBitmapImageRep)
+# ---------------------------------------------------------------------------
+
+
+_SCREEN_RECORDING_HINT_LOGGED = False
+
+
+def _screen_is_locked() -> bool:
+    try:
+        d = CGSessionCopyCurrentDictionary()
+        return bool(d and d.get("CGSSessionScreenIsLocked"))
+    except Exception:
+        return False
+
+
+def _capture_all_displays_png(out_path: Path) -> bool:
+    """Capture a single PNG covering the union rect of all active displays."""
+    global _SCREEN_RECORDING_HINT_LOGGED
+    log = logging.getLogger("worktracker.collector")
+    try:
+        err, display_ids, count = CGGetActiveDisplayList(16, None, None)
+        if err != 0 or not count:
+            return False
+
+        union = CGRectNull
+        for did in display_ids[:count]:
+            union = CGRectUnion(union, CGDisplayBounds(did))
+
+        img = CGDisplayCreateImageForRect(CGMainDisplayID(), union)
+        if img is None:
+            img = CGWindowListCreateImage(
+                union,
+                kCGWindowListOptionOnScreenOnly,
+                kCGNullWindowID,
+                kCGWindowImageDefault,
+            )
+        if img is None:
+            if not _SCREEN_RECORDING_HINT_LOGGED:
+                log.warning(
+                    "Screenshot: Capture lieferte None — Screen-Recording-Berechtigung "
+                    "fehlt. System Settings > Privacy & Security > Screen Recording → "
+                    "%s freigeben.",
+                    os.path.realpath(sys.executable),
+                )
+                _SCREEN_RECORDING_HINT_LOGGED = True
+            return False
+
+        rep = NSBitmapImageRep.alloc().initWithCGImage_(img)
+        if rep is None:
+            return False
+        data = rep.representationUsingType_properties_(NSPNGFileType, None)
+        if data is None:
+            return False
+        ok = data.writeToFile_atomically_(str(out_path), True)
+        return bool(ok)
+    except Exception:
+        log.exception("Screenshot capture failed")
+        return False
+
+
+# ---------------------------------------------------------------------------
 # Snapshot assembly & writing
 # ---------------------------------------------------------------------------
 
@@ -1278,6 +1350,9 @@ def collect_snapshot(
     git_monitor: Optional[GitMonitor] = None,
     calendar_monitor: Optional[CalendarMonitor] = None,
     sleep_wake_monitor: Optional[SleepWakeMonitor] = None,
+    screenshot_cfg: Optional[dict] = None,
+    screenshot_state: Optional[dict] = None,
+    screenshot_dir: Optional[Path] = None,
 ) -> dict:
     ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
     cfg = config.get("collector", {})
@@ -1347,6 +1422,36 @@ def collect_snapshot(
         if events:
             sleep_wake = events
 
+    # Screenshot (gated by interval, skip-list, lock-screen)
+    screenshot_path: Optional[str] = None
+    if screenshot_cfg and screenshot_cfg.get("enabled"):
+        interval_s = int(screenshot_cfg.get("interval_seconds", 60))
+        now = time.time()
+        last = float((screenshot_state or {}).get("last_ts", 0.0))
+        bundle = (active or {}).get("bundle_id", "") or ""
+        skip_bundles = set(screenshot_cfg.get("skip_bundle_ids", []) or [])
+        if (
+            (now - last) >= interval_s
+            and bundle not in skip_bundles
+            and not _screen_is_locked()
+        ):
+            local_now = datetime.now()
+            day = local_now.strftime("%Y-%m-%d")
+            ts_safe = local_now.strftime("%Y%m%dT%H%M%S")
+            base_dir = screenshot_dir or Path("~/WorkTracker/data/screenshots").expanduser()
+            out_dir = base_dir / day
+            try:
+                out_dir.mkdir(parents=True, exist_ok=True)
+                out_path = out_dir / f"{ts_safe}.png"
+                if _capture_all_displays_png(out_path):
+                    screenshot_path = str(out_path)
+                    if screenshot_state is not None:
+                        screenshot_state["last_ts"] = now
+            except Exception:
+                logging.getLogger("worktracker.collector").exception(
+                    "Screenshot write failed"
+                )
+
     return {
         "ts": ts,
         "active_app": active,
@@ -1359,6 +1464,7 @@ def collect_snapshot(
         "git": git_data,
         "calendar": calendar_data,
         "sleep_wake": sleep_wake,
+        "screenshot_path": screenshot_path,
     }
 
 
@@ -1388,11 +1494,24 @@ def main():
     data_dir = Path(cfg.get("data_dir", "~/WorkTracker/data/snapshots")).expanduser()
     data_dir.mkdir(parents=True, exist_ok=True)
 
+    scr_cfg = cfg.get("screenshot", {}) or {}
+    scr_dir = Path(scr_cfg.get("dir", "~/WorkTracker/data/screenshots")).expanduser()
+    if scr_cfg.get("enabled"):
+        scr_dir.mkdir(parents=True, exist_ok=True)
+    screenshot_state: dict = {"last_ts": 0.0}
+
     interval = cfg.get("interval_seconds", 10)
 
     logger.info("=" * 60)
     logger.info("WorkTracker Collector starting")
     logger.info("Config: interval=%ds  data_dir=%s", interval, data_dir)
+    if scr_cfg.get("enabled"):
+        logger.info(
+            "Screenshots: ON  interval=%ds  dir=%s  skip=%s",
+            scr_cfg.get("interval_seconds", 60),
+            scr_dir,
+            scr_cfg.get("skip_bundle_ids", []),
+        )
 
     # ── Permission check ──────────────────────────────────────────────
     has_ax = check_accessibility()
@@ -1499,6 +1618,9 @@ def main():
                 git_monitor=git_monitor,
                 calendar_monitor=calendar_monitor,
                 sleep_wake_monitor=sleep_wake_monitor,
+                screenshot_cfg=scr_cfg,
+                screenshot_state=screenshot_state,
+                screenshot_dir=scr_dir,
             )
             write_snapshot(snap, data_dir)
             n += 1

@@ -35,6 +35,19 @@ collector:
   # Calendar integration — Read meetings from macOS Calendar
   track_calendar: true
 
+  # Screenshots — speichert ein PNG pro interval_seconds, das alle aktiven
+  # Displays als Union-Rect umfasst. Erfordert Screen-Recording-Berechtigung
+  # (System Settings > Privacy & Security > Screen Recording).
+  # Default disabled — opt-in im user config.yaml.
+  screenshot:
+    enabled: false
+    interval_seconds: 60
+    dir: ~/WorkTracker/data/screenshots
+    # bundle IDs, in denen NIE ein Screenshot entstehen darf
+    skip_bundle_ids:
+      - com.agilebits.onepassword7
+      - com.1password.1password
+
   # Distraction warning — macOS notification on prolonged distraction
   notifications:
     enabled: true
@@ -75,3 +88,18 @@ aggregator:
     batch_size: 10
     max_sessions_per_day: 200
     min_session_seconds: 60
+
+  # Motivations-Extraktion via VISION-LLM (OpenAI-kompatibles
+  # chat/completions mit image_url content parts). Sendet pro Session bis
+  # zu max_images_per_session Screenshots plus minimaler Session-Meta und
+  # erwartet einen kurzen deutschen Motivationssatz zurueck.
+  # Endpoint MUSS LOKAL bleiben — Screenshots zeigen alles vom Bildschirm.
+  motivation_llm:
+    enabled: false
+    endpoint: ""        # z.B. http://localhost:1234/v1/chat/completions
+    model: "local-vision-model"
+    timeout_seconds: 30
+    max_images_per_session: 6
+    max_sessions_per_day: 40
+    min_session_seconds: 300
+    image_max_bytes: 1500000

@@ -7,9 +7,10 @@ import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template_string, request
+from flask import Flask, abort, jsonify, render_template_string, request, send_from_directory
 import subprocess
 
+from aggregator import aggregate_topics
 from web_categories import build_web_category_tree
 
 app = Flask(__name__)
@@ -31,6 +32,7 @@ import yaml
 BASE = Path.home() / "WorkTracker"
 DATA_SNAP = BASE / "data" / "snapshots"
 DATA_SESS = BASE / "data" / "sessions"
+DATA_SCREENSHOTS = BASE / "data" / "screenshots"
 SUMMARIES = BASE / "summaries"
 LOGS = BASE / "logs"
 PATTERNS_FILE = BASE / "daemon" / "project_patterns.yaml"
@@ -127,37 +129,49 @@ def load_sessions(date_str):
         return []
 
 
-def aggregate_topics(sessions, top_n=12, min_sec=60):
-    """Aggregate sessions by topic → [{name, sec, pct, project, sessions}]."""
-    totals = {}
-    projects = {}
-    counts = {}
-    total_topic_sec = 0
+def _dates_in_range(start_str, end_str):
+    """Yield YYYY-MM-DD strings from start..end inclusive."""
+    start = datetime.strptime(start_str, "%Y-%m-%d").date()
+    end = datetime.strptime(end_str, "%Y-%m-%d").date()
+    if end < start:
+        start, end = end, start
+    d = start
+    one = timedelta(days=1)
+    while d <= end:
+        yield d.strftime("%Y-%m-%d")
+        d += one
+
+
+_NO_TOPIC = "(ohne Topic)"
+_NO_PROJECT = "(ohne Projekt)"
+_NO_APP = "(unbekannte App)"
+
+
+def aggregate_triples(sessions):
+    """Group sessions by (topic, project, app_name).
+
+    Missing/empty values get placeholder labels so they still appear in
+    visualizations. Returns list sorted by duration desc.
+    """
+    buckets = {}
     for s in sessions:
-        topic = (s.get("topic") or "").strip()
-        if not topic:
-            continue
+        topic = (s.get("topic") or "").strip() or _NO_TOPIC
+        project = (s.get("project") or "").strip() or _NO_PROJECT
+        app_name = (s.get("app_name") or "").strip() or _NO_APP
         dur = int(s.get("duration_seconds", 0) or 0)
-        totals[topic] = totals.get(topic, 0) + dur
-        counts[topic] = counts.get(topic, 0) + 1
-        total_topic_sec += dur
-        # Prefer the project of the longest session under this topic.
-        cur_proj = projects.get(topic)
-        if not cur_proj or dur > cur_proj[1]:
-            projects[topic] = (s.get("project", ""), dur)
+        if dur <= 0:
+            continue
+        key = (topic, project, app_name)
+        if key not in buckets:
+            buckets[key] = {"sec": 0, "count": 0}
+        buckets[key]["sec"] += dur
+        buckets[key]["count"] += 1
     items = [
-        {
-            "name": t,
-            "sec": totals[t],
-            "pct": round((totals[t] / total_topic_sec) * 100, 1) if total_topic_sec else 0,
-            "project": projects[t][0],
-            "sessions": counts[t],
-        }
-        for t in totals
-        if totals[t] >= min_sec
+        {"topic": t, "project": p, "app": a, "sec": v["sec"], "count": v["count"]}
+        for (t, p, a), v in buckets.items()
     ]
     items.sort(key=lambda x: x["sec"], reverse=True)
-    return items[:top_n]
+    return items
 
 
 def snapshot_count(date_str):
@@ -730,6 +744,11 @@ def explore(date=None):
     return render_template_string(EXPLORE_HTML)
 
 
+@app.route("/statistics")
+def statistics():
+    return render_template_string(STATS_HTML)
+
+
 # ── API: Explore ────────────────────────────────────────────
 
 
@@ -835,6 +854,136 @@ def api_snapshots_timeline(date):
             "idle_ms": inp.get("idle_seconds_mouse", 0),
         })
     return jsonify(result)
+
+
+@app.route("/api/statistics")
+def api_statistics():
+    """Aggregated topic×project×app triples for a date range."""
+    end = request.args.get("end") or datetime.now().strftime("%Y-%m-%d")
+    start = request.args.get("start")
+    if not start:
+        start_dt = datetime.strptime(end, "%Y-%m-%d") - timedelta(days=6)
+        start = start_dt.strftime("%Y-%m-%d")
+
+    try:
+        datetime.strptime(start, "%Y-%m-%d")
+        datetime.strptime(end, "%Y-%m-%d")
+    except ValueError:
+        return jsonify({"error": "invalid date format, expected YYYY-MM-DD"}), 400
+
+    all_sessions = []
+    days_with_data = 0
+    for d in _dates_in_range(start, end):
+        day_sessions = load_sessions(d)
+        if not day_sessions:
+            continue
+        active = [s for s in day_sessions if s.get("app_name") not in INACTIVE_APPS]
+        if active:
+            days_with_data += 1
+            all_sessions.extend(active)
+
+    triples = aggregate_triples(all_sessions)
+    total_sec = sum(t["sec"] for t in triples)
+    total_count = sum(t["count"] for t in triples)
+
+    return jsonify(sanitize_for_json({
+        "start": start,
+        "end": end,
+        "days_with_data": days_with_data,
+        "total_sec": total_sec,
+        "total_sessions": total_count,
+        "triples": triples,
+    }))
+
+
+# ── Screenshots ─────────────────────────────────────────────
+import re as _re
+
+_SAFE_DATE = _re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_SAFE_PNG = _re.compile(r"^[A-Za-z0-9_\-]+\.png$")
+
+
+def _screenshot_dates() -> list[str]:
+    if not DATA_SCREENSHOTS.exists():
+        return []
+    out = []
+    for d in DATA_SCREENSHOTS.iterdir():
+        if d.is_dir() and _SAFE_DATE.match(d.name) and any(d.glob("*.png")):
+            out.append(d.name)
+    return sorted(out, reverse=True)
+
+
+def _parse_shot_filename_to_iso(filename: str) -> "str | None":
+    """Convert ``YYYYMMDDTHHMMSS.png`` to an ISO timestamp string."""
+    stem = filename.rsplit(".", 1)[0]
+    try:
+        return datetime.strptime(stem, "%Y%m%dT%H%M%S").isoformat()
+    except ValueError:
+        return None
+
+
+def _build_path_to_session_map(sessions):
+    """Map absolute screenshot paths to the owning session dict."""
+    m = {}
+    for s in sessions:
+        for p in s.get("screenshot_paths") or []:
+            if isinstance(p, str) and p:
+                m[p] = s
+    return m
+
+
+@app.route("/api/screenshots/dates")
+def api_screenshot_dates():
+    return jsonify(_screenshot_dates())
+
+
+@app.route("/api/screenshots/<date>")
+def api_screenshots_for_date(date):
+    if not _SAFE_DATE.match(date):
+        return jsonify({"error": "invalid date"}), 400
+    folder = DATA_SCREENSHOTS / date
+    if not folder.is_dir():
+        return jsonify({"date": date, "items": []})
+
+    sessions = load_sessions(date)
+    path_to_session = _build_path_to_session_map(sessions)
+
+    items = []
+    for f in sorted(folder.glob("*.png")):
+        abs_path = str(f)
+        sess = path_to_session.get(abs_path)
+        ts_iso = _parse_shot_filename_to_iso(f.name)
+        item = {
+            "filename": f.name,
+            "ts": ts_iso,
+            "url": f"/screenshots/file/{date}/{f.name}",
+            "size_bytes": f.stat().st_size,
+            "session_app": (sess or {}).get("app_name") if sess else None,
+            "session_project": (sess or {}).get("project") if sess else None,
+            "session_topic": (sess or {}).get("topic") if sess else None,
+            "session_motivation": (sess or {}).get("motivation_message") if sess else None,
+            "session_start": (sess or {}).get("start") if sess else None,
+            "session_end": (sess or {}).get("end") if sess else None,
+        }
+        items.append(item)
+
+    items.sort(key=lambda it: it["ts"] or it["filename"], reverse=True)
+    return jsonify({"date": date, "items": items})
+
+
+@app.route("/screenshots/file/<date>/<filename>")
+def screenshot_file(date, filename):
+    if not _SAFE_DATE.match(date) or not _SAFE_PNG.match(filename):
+        abort(404)
+    folder = DATA_SCREENSHOTS / date
+    if not (folder / filename).is_file():
+        abort(404)
+    return send_from_directory(folder, filename, mimetype="image/png")
+
+
+@app.route("/screenshots")
+def screenshots_page():
+    return render_template_string(SCREENSHOTS_HTML)
 
 
 # ── HTML ─────────────────────────────────────────────────────
@@ -1127,7 +1276,7 @@ h2 {
 <body>
 
 <div class="header">
-  <h1>WorkTracker &nbsp;<a href="/explore" style="font-size:12px;font-weight:400;color:var(--fg2)">Explore &rarr;</a></h1>
+  <h1>WorkTracker &nbsp;<a href="/explore" style="font-size:12px;font-weight:400;color:var(--fg2)">Explore &rarr;</a> &nbsp;<a href="/statistics" style="font-size:12px;font-weight:400;color:var(--fg2)">Statistics &rarr;</a> &nbsp;<a href="/screenshots" style="font-size:12px;font-weight:400;color:var(--fg2)">Screenshots &rarr;</a></h1>
   <div class="header-right">
     <span class="dot" id="pulse">●</span>
     <span id="clock">—</span>
@@ -2122,7 +2271,7 @@ h2 {
 <body>
 
 <div class="header">
-  <h1><a href="/" style="color:var(--fg2);font-size:12px">Dashboard</a> &nbsp;/ &nbsp;Explore</h1>
+  <h1><a href="/" style="color:var(--fg2);font-size:12px">Dashboard</a> &nbsp;/ &nbsp;Explore &nbsp;/ &nbsp;<a href="/statistics" style="color:var(--fg2);font-size:12px">Statistics</a> &nbsp;/ &nbsp;<a href="/screenshots" style="color:var(--fg2);font-size:12px">Screenshots</a></h1>
   <div class="header-right" id="status-text"></div>
 </div>
 
@@ -3031,5 +3180,936 @@ init();
 </html>"""
 
 
+STATS_HTML = r"""<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WorkTracker Statistics</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+:root {
+  --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
+  --fg: #e6edf3; --fg2: #8b949e; --fg3: #484f58;
+  --cyan: #58a6ff; --green: #3fb950; --yellow: #d29922;
+  --red: #f85149; --purple: #bc8cff; --blue: #388bfd;
+  --orange: #d18616;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  background: var(--bg); color: var(--fg);
+  font-size: 13px; padding: 14px;
+}
+a { color: var(--cyan); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 14px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--bg3);
+}
+.header h1 { font-size: 18px; font-weight: 600; color: var(--fg); }
+.header-right { color: var(--fg2); font-size: 12px; }
+
+.card {
+  background: var(--bg2); border: 1px solid var(--bg3);
+  border-radius: 8px; padding: 14px; margin-bottom: 12px;
+}
+
+/* Controls */
+.controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.controls .group { display: flex; gap: 6px; align-items: center; }
+.btn {
+  background: var(--bg3); color: var(--fg); border: 1px solid var(--bg3);
+  border-radius: 4px; padding: 5px 12px; font-size: 12px; cursor: pointer;
+  font-family: inherit;
+}
+.btn:hover { background: var(--blue); color: var(--bg); border-color: var(--blue); }
+.btn.active { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+.btn.primary { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+.btn.primary:hover { background: var(--blue); border-color: var(--blue); }
+.controls label { color: var(--fg2); font-size: 12px; display: flex; gap: 5px; align-items: center; }
+.controls input[type=date] {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--bg3);
+  border-radius: 4px; padding: 4px 7px; font-family: inherit; font-size: 12px;
+  color-scheme: dark;
+}
+.controls input[type=checkbox] { accent-color: var(--cyan); }
+.controls select {
+  background: var(--bg); color: var(--fg); border: 1px solid var(--bg3);
+  border-radius: 4px; padding: 4px 7px; font-family: inherit; font-size: 12px;
+}
+.summary {
+  color: var(--fg2); font-size: 12px; margin-top: 10px;
+  padding-top: 10px; border-top: 1px solid var(--bg3);
+}
+.summary strong { color: var(--fg); }
+
+/* Tabs */
+.tab-switcher {
+  display: flex; gap: 2px;
+  border-bottom: 1px solid var(--bg3);
+}
+.tab-btn {
+  background: transparent; color: var(--fg2); border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 18px; font-size: 13px; cursor: pointer;
+  font-family: inherit;
+}
+.tab-btn:hover { color: var(--fg); }
+.tab-btn.active {
+  color: var(--cyan); border-bottom-color: var(--cyan);
+}
+.tab-panel { display: none; padding-top: 14px; }
+.tab-panel.active { display: block; }
+
+/* Crossfilter */
+.selection-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 2px 12px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--bg3);
+  font-size: 12px; color: var(--fg2);
+}
+.selection-bar .spacer { flex: 1; }
+.cf-cols {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;
+}
+@media (max-width: 900px) { .cf-cols { grid-template-columns: 1fr; } }
+.cf-col h3 {
+  font-size: 11px; color: var(--fg2); text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 8px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--bg3);
+  display: flex; justify-content: space-between; align-items: center;
+  font-weight: 600;
+}
+.cf-col h3 .count { color: var(--fg3); font-weight: 400; font-size: 10px; }
+.cf-rows { max-height: 560px; overflow-y: auto; padding-right: 4px; }
+.cf-rows::-webkit-scrollbar { width: 6px; }
+.cf-rows::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
+.cf-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 7px; border-radius: 4px;
+  cursor: pointer; transition: background 0.12s;
+  font-size: 12px;
+}
+.cf-row:hover { background: var(--bg3); }
+.cf-row.selected {
+  background: rgba(88, 166, 255, 0.14);
+  outline: 1px solid var(--cyan);
+}
+.cf-name {
+  flex: 1; color: var(--fg); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.cf-bar-wrap {
+  width: 60px; flex-shrink: 0; height: 6px;
+  background: var(--bg3); border-radius: 3px; overflow: hidden;
+}
+.cf-bar { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.cf-col.col-topic .cf-bar { background: var(--cyan); }
+.cf-col.col-project .cf-bar { background: var(--purple); }
+.cf-col.col-app .cf-bar { background: var(--green); }
+.cf-time {
+  width: 58px; text-align: right; color: var(--yellow);
+  font-size: 11px; flex-shrink: 0;
+}
+.cf-count {
+  width: 26px; text-align: right; color: var(--fg3);
+  font-size: 11px; flex-shrink: 0;
+}
+.cf-empty { color: var(--fg3); padding: 10px 0; font-style: italic; text-align: center; }
+
+/* Viz */
+.matrix-controls {
+  display: flex; gap: 16px; margin-bottom: 12px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--bg3);
+  flex-wrap: wrap;
+}
+.chart-box { height: 680px; width: 100%; }
+.chart-hint {
+  color: var(--fg3); font-size: 11px; margin-bottom: 8px;
+  font-style: italic;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><a href="/" style="color:var(--fg2);font-size:12px">Dashboard</a> &nbsp;/ &nbsp;<a href="/explore" style="color:var(--fg2);font-size:12px">Explore</a> &nbsp;/ &nbsp;Statistics &nbsp;/ &nbsp;<a href="/screenshots" style="color:var(--fg2);font-size:12px">Screenshots</a></h1>
+  <div class="header-right" id="clock">—</div>
+</div>
+
+<div class="card">
+  <div class="controls">
+    <div class="group">
+      <button class="btn preset-btn" data-preset="today">Heute</button>
+      <button class="btn preset-btn" data-preset="7d">7 Tage</button>
+      <button class="btn preset-btn" data-preset="30d">30 Tage</button>
+    </div>
+    <div class="group">
+      <label>Von <input type="date" id="date-start"></label>
+      <label>Bis <input type="date" id="date-end"></label>
+      <button class="btn primary" id="refresh-btn">Aktualisieren</button>
+    </div>
+    <div class="group">
+      <label><input type="checkbox" id="hide-empty"> Ohne Topic/Projekt ausblenden</label>
+    </div>
+  </div>
+  <div class="summary" id="summary">Lade…</div>
+</div>
+
+<div class="card">
+  <div class="tab-switcher">
+    <button class="tab-btn active" data-tab="crossfilter">Zusammenhänge</button>
+    <button class="tab-btn" data-tab="sankey">Sankey</button>
+    <button class="tab-btn" data-tab="matrix">Matrix</button>
+  </div>
+
+  <!-- Tab 1: Crossfilter -->
+  <div class="tab-panel active" id="panel-crossfilter" data-tab="crossfilter">
+    <div class="selection-bar">
+      <span id="selection-info">Keine Auswahl — klicke Zeilen zum Filtern</span>
+      <div class="spacer"></div>
+      <button class="btn" id="reset-btn">Reset</button>
+    </div>
+    <div class="cf-cols">
+      <div class="cf-col col-topic">
+        <h3>Topics <span class="count">0</span></h3>
+        <div class="cf-rows" id="col-topics"></div>
+      </div>
+      <div class="cf-col col-project">
+        <h3>Projects <span class="count">0</span></h3>
+        <div class="cf-rows" id="col-projects"></div>
+      </div>
+      <div class="cf-col col-app">
+        <h3>Apps <span class="count">0</span></h3>
+        <div class="cf-rows" id="col-apps"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 2: Sankey -->
+  <div class="tab-panel" id="panel-sankey" data-tab="sankey">
+    <div class="chart-hint">Fluss Topic → Project → App. Linkbreite = summierte Dauer. Zeigt Top 25 pro Ebene. Filter aus dem Zusammenhänge-Tab gilt hier ebenfalls.</div>
+    <div class="chart-box" id="sankey-chart"></div>
+  </div>
+
+  <!-- Tab 3: Matrix -->
+  <div class="tab-panel" id="panel-matrix" data-tab="matrix">
+    <div class="matrix-controls">
+      <label>Zeilen:
+        <select id="matrix-row">
+          <option value="topic" selected>Topic</option>
+          <option value="project">Project</option>
+          <option value="app">App</option>
+        </select>
+      </label>
+      <label>Spalten:
+        <select id="matrix-col">
+          <option value="topic">Topic</option>
+          <option value="project" selected>Project</option>
+          <option value="app">App</option>
+        </select>
+      </label>
+    </div>
+    <div class="chart-hint">Farbintensität = summierte Dauer. Tooltip zeigt die Top 3 der jeweils dritten Dimension. Zeigt Top 30 pro Achse.</div>
+    <div class="chart-box" id="matrix-chart"></div>
+  </div>
+</div>
+
+<script>
+const API = '/api/statistics';
+const state = {
+  triples: [],
+  meta: {},
+  selection: { topic: new Set(), project: new Set(), app: new Set() },
+  activeTab: 'crossfilter',
+  hideEmpty: false,
+  matrixRow: 'topic',
+  matrixCol: 'project',
+  charts: { sankey: null, matrix: null },
+};
+
+const $ = id => document.getElementById(id);
+
+function fmtTime(sec) {
+  sec = Math.round(sec || 0);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return h + 'h ' + m + 'm';
+  if (m > 0) return m + 'm';
+  return sec + 's';
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+function daysAgoStr(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+function setPreset(name) {
+  document.querySelectorAll('.preset-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.preset === name);
+  });
+  const end = todayStr();
+  let start = end;
+  if (name === '7d') start = daysAgoStr(6);
+  else if (name === '30d') start = daysAgoStr(29);
+  $('date-start').value = start;
+  $('date-end').value = end;
+  loadStats();
+}
+
+async function loadStats() {
+  const start = $('date-start').value;
+  const end = $('date-end').value;
+  if (!start || !end) return;
+  $('summary').textContent = 'Lade…';
+  try {
+    const r = await fetch(API + '?start=' + start + '&end=' + end);
+    const data = await r.json();
+    if (data.error) {
+      $('summary').textContent = 'Fehler: ' + data.error;
+      return;
+    }
+    state.triples = data.triples || [];
+    state.meta = data;
+    state.selection = { topic: new Set(), project: new Set(), app: new Set() };
+    renderAll();
+  } catch (e) {
+    $('summary').textContent = 'Fehler beim Laden: ' + e.message;
+  }
+}
+
+function filteredTriples(exceptField) {
+  const sel = state.selection;
+  return state.triples.filter(t => {
+    if (state.hideEmpty && (t.topic === '(ohne Topic)' || t.project === '(ohne Projekt)')) return false;
+    if (exceptField !== 'topic' && sel.topic.size && !sel.topic.has(t.topic)) return false;
+    if (exceptField !== 'project' && sel.project.size && !sel.project.has(t.project)) return false;
+    if (exceptField !== 'app' && sel.app.size && !sel.app.has(t.app)) return false;
+    return true;
+  });
+}
+
+function aggregateBy(field, triples) {
+  const buckets = new Map();
+  for (const t of triples) {
+    const k = t[field];
+    if (!buckets.has(k)) buckets.set(k, { name: k, sec: 0, count: 0 });
+    const b = buckets.get(k);
+    b.sec += t.sec;
+    b.count += t.count;
+  }
+  return [...buckets.values()].sort((a, b) => b.sec - a.sec);
+}
+
+function updateSummary() {
+  const m = state.meta;
+  const filtered = filteredTriples();
+  const secSum = filtered.reduce((a, t) => a + t.sec, 0);
+  const cntSum = filtered.reduce((a, t) => a + t.count, 0);
+  const combos = filtered.length;
+  const total = state.triples.length;
+  const rangeStr = (m.start === m.end) ? (m.start || '') : ((m.start || '') + ' → ' + (m.end || ''));
+  const comboTxt = (combos === total) ? combos : (combos + ' / ' + total);
+  $('summary').innerHTML =
+    'Zeitraum: <strong>' + escapeHtml(rangeStr) + '</strong>' +
+    ' · Tage mit Daten: <strong>' + (m.days_with_data || 0) + '</strong>' +
+    ' · Gesamtzeit: <strong>' + fmtTime(secSum) + '</strong>' +
+    ' · Sessions: <strong>' + cntSum + '</strong>' +
+    ' · Kombinationen: <strong>' + comboTxt + '</strong>';
+}
+
+function renderCrossfilter() {
+  const sel = state.selection;
+  const selTexts = [];
+  if (sel.topic.size) selTexts.push(sel.topic.size + ' Topic(s)');
+  if (sel.project.size) selTexts.push(sel.project.size + ' Projekt(e)');
+  if (sel.app.size) selTexts.push(sel.app.size + ' App(s)');
+  $('selection-info').textContent = selTexts.length
+    ? 'Auswahl: ' + selTexts.join(' · ') + ' (AND zwischen Spalten, OR innerhalb)'
+    : 'Keine Auswahl — klicke Zeilen zum Filtern';
+
+  const cols = [
+    { field: 'topic', el: 'col-topics' },
+    { field: 'project', el: 'col-projects' },
+    { field: 'app', el: 'col-apps' },
+  ];
+  cols.forEach(c => {
+    // Each column sees triples filtered by the OTHER columns only,
+    // so selecting in a column doesn't collapse that column to 1 row.
+    const items = aggregateBy(c.field, filteredTriples(c.field));
+    const max = (items[0] && items[0].sec) || 1;
+    const container = $(c.el);
+    const countEl = container.parentElement.querySelector('.count');
+    if (countEl) countEl.textContent = items.length;
+    if (!items.length) {
+      container.innerHTML = '<div class="cf-empty">Keine Daten</div>';
+      return;
+    }
+    const selectedSet = sel[c.field];
+    container.innerHTML = items.map(it => {
+      const selected = selectedSet.has(it.name);
+      const pct = Math.round((it.sec / max) * 100);
+      return '<div class="cf-row' + (selected ? ' selected' : '') +
+        '" data-field="' + c.field + '" data-name="' + escapeHtml(it.name) + '">' +
+        '<span class="cf-name" title="' + escapeHtml(it.name) + '">' + escapeHtml(it.name) + '</span>' +
+        '<span class="cf-bar-wrap"><span class="cf-bar" style="width:' + pct + '%"></span></span>' +
+        '<span class="cf-time">' + fmtTime(it.sec) + '</span>' +
+        '<span class="cf-count">' + it.count + '</span>' +
+        '</div>';
+    }).join('');
+  });
+}
+
+function toggleSelect(field, name) {
+  const set = state.selection[field];
+  if (set.has(name)) set.delete(name); else set.add(name);
+  renderAll();
+}
+
+function resetSelection() {
+  state.selection = { topic: new Set(), project: new Set(), app: new Set() };
+  renderAll();
+}
+
+function showEmptyChart(chart, msg) {
+  chart.clear();
+  chart.setOption({
+    backgroundColor: 'transparent',
+    title: {
+      text: msg, left: 'center', top: 'center',
+      textStyle: { color: '#8b949e', fontSize: 14, fontWeight: 'normal' },
+    },
+  });
+}
+
+function renderSankey() {
+  if (!state.charts.sankey) {
+    state.charts.sankey = echarts.init($('sankey-chart'), null, { renderer: 'canvas' });
+  }
+  const chart = state.charts.sankey;
+  const triples = filteredTriples();
+  if (!triples.length) {
+    showEmptyChart(chart, 'Keine Daten im Zeitraum');
+    return;
+  }
+  // Limit each axis to top N by total duration, otherwise labels overlap
+  const LIMIT = 25;
+  const topTotals = new Map(), projTotals = new Map(), appTotals = new Map();
+  for (const t of triples) {
+    topTotals.set(t.topic, (topTotals.get(t.topic) || 0) + t.sec);
+    projTotals.set(t.project, (projTotals.get(t.project) || 0) + t.sec);
+    appTotals.set(t.app, (appTotals.get(t.app) || 0) + t.sec);
+  }
+  const topKeep = new Set([...topTotals.entries()].sort((a,b)=>b[1]-a[1]).slice(0, LIMIT).map(x=>x[0]));
+  const projKeep = new Set([...projTotals.entries()].sort((a,b)=>b[1]-a[1]).slice(0, LIMIT).map(x=>x[0]));
+  const appKeep = new Set([...appTotals.entries()].sort((a,b)=>b[1]-a[1]).slice(0, LIMIT).map(x=>x[0]));
+  const keptTriples = triples.filter(t => topKeep.has(t.topic) && projKeep.has(t.project) && appKeep.has(t.app));
+  if (!keptTriples.length) {
+    showEmptyChart(chart, 'Keine überschneidenden Top-Einträge');
+    return;
+  }
+  const nodes = new Map();
+  const tp = new Map();
+  const pa = new Map();
+  for (const t of keptTriples) {
+    const tN = 'T: ' + t.topic;
+    const pN = 'P: ' + t.project;
+    const aN = 'A: ' + t.app;
+    if (!nodes.has(tN)) nodes.set(tN, { name: tN, itemStyle: { color: '#58a6ff' }, depth: 0 });
+    if (!nodes.has(pN)) nodes.set(pN, { name: pN, itemStyle: { color: '#bc8cff' }, depth: 1 });
+    if (!nodes.has(aN)) nodes.set(aN, { name: aN, itemStyle: { color: '#3fb950' }, depth: 2 });
+    const k1 = tN + '\u0001' + pN;
+    tp.set(k1, (tp.get(k1) || 0) + t.sec);
+    const k2 = pN + '\u0001' + aN;
+    pa.set(k2, (pa.get(k2) || 0) + t.sec);
+  }
+  const links = [];
+  for (const [k, v] of tp) {
+    const [s, d] = k.split('\u0001');
+    links.push({ source: s, target: d, value: v });
+  }
+  for (const [k, v] of pa) {
+    const [s, d] = k.split('\u0001');
+    links.push({ source: s, target: d, value: v });
+  }
+  chart.clear();
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: '#161b22',
+      borderColor: '#21262d',
+      textStyle: { color: '#e6edf3' },
+      formatter: (p) => {
+        if (p.dataType === 'edge') {
+          return escapeHtml(p.data.source) + '<br>→ ' + escapeHtml(p.data.target) +
+            '<br><b>' + fmtTime(p.data.value) + '</b>';
+        }
+        return escapeHtml(p.data.name) + '<br><b>' + fmtTime(p.value || 0) + '</b>';
+      },
+    },
+    series: [{
+      type: 'sankey',
+      data: [...nodes.values()],
+      links: links,
+      emphasis: { focus: 'adjacency' },
+      lineStyle: { color: 'gradient', curveness: 0.5, opacity: 0.45 },
+      label: { color: '#e6edf3', fontSize: 11 },
+      nodeGap: 8,
+      nodeWidth: 14,
+      left: 10, right: 100, top: 10, bottom: 10,
+    }],
+  });
+}
+
+function renderMatrix() {
+  if (!state.charts.matrix) {
+    state.charts.matrix = echarts.init($('matrix-chart'), null, { renderer: 'canvas' });
+  }
+  const chart = state.charts.matrix;
+  const triples = filteredTriples();
+  if (!triples.length) {
+    showEmptyChart(chart, 'Keine Daten im Zeitraum');
+    return;
+  }
+  const row = state.matrixRow;
+  const col = state.matrixCol;
+  const third = ['topic', 'project', 'app'].find(d => d !== row && d !== col);
+
+  // Top 30 per axis by total duration
+  const rowTotals = new Map();
+  const colTotals = new Map();
+  for (const t of triples) {
+    rowTotals.set(t[row], (rowTotals.get(t[row]) || 0) + t.sec);
+    colTotals.set(t[col], (colTotals.get(t[col]) || 0) + t.sec);
+  }
+  const topRows = [...rowTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30).map(x => x[0]);
+  const topCols = [...colTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30).map(x => x[0]);
+  const rowKeep = new Set(topRows);
+  const colKeep = new Set(topCols);
+  const rowIdx = new Map(topRows.map((r, i) => [r, i]));
+  const colIdx = new Map(topCols.map((c, i) => [c, i]));
+
+  // Aggregate
+  const cellAgg = new Map();
+  for (const t of triples) {
+    const rv = t[row], cv = t[col];
+    if (!rowKeep.has(rv) || !colKeep.has(cv)) continue;
+    const key = rv + '\u0001' + cv;
+    if (!cellAgg.has(key)) cellAgg.set(key, { sec: 0, count: 0, third: new Map() });
+    const b = cellAgg.get(key);
+    b.sec += t.sec;
+    b.count += t.count;
+    if (third) b.third.set(t[third], (b.third.get(t[third]) || 0) + t.sec);
+  }
+
+  const data = [];
+  let maxVal = 0;
+  for (const [key, b] of cellAgg) {
+    const [rv, cv] = key.split('\u0001');
+    data.push([colIdx.get(cv), rowIdx.get(rv), b.sec, b.count, rv, cv]);
+    if (b.sec > maxVal) maxVal = b.sec;
+  }
+  if (!maxVal) maxVal = 1;
+  // Robust color scale: use 90th percentile as visualMap max so a few
+  // outlier cells don't flatten the rest of the heatmap into darkness.
+  const sortedSecs = data.map(d => d[2]).sort((a, b) => a - b);
+  let visualMax = maxVal;
+  if (sortedSecs.length >= 10) {
+    visualMax = sortedSecs[Math.floor(sortedSecs.length * 0.9)] || maxVal;
+    if (visualMax < maxVal / 20) visualMax = maxVal / 20;
+  }
+
+  chart.clear();
+  chart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: {
+      backgroundColor: '#161b22',
+      borderColor: '#21262d',
+      textStyle: { color: '#e6edf3' },
+      formatter: (p) => {
+        const rv = p.data[4], cv = p.data[5];
+        const sec = p.data[2], cnt = p.data[3];
+        const key = rv + '\u0001' + cv;
+        const b = cellAgg.get(key);
+        let html = '<b>' + escapeHtml(rv) + '</b> × <b>' + escapeHtml(cv) + '</b><br>' +
+          fmtTime(sec) + ' · ' + cnt + ' Sessions';
+        if (third && b && b.third.size) {
+          const topThird = [...b.third.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+          html += '<br><span style="color:#8b949e">Top ' + third + ':</span>';
+          topThird.forEach(entry => {
+            html += '<br>· ' + escapeHtml(entry[0]) + ' (' + fmtTime(entry[1]) + ')';
+          });
+        }
+        return html;
+      },
+    },
+    grid: { left: 160, right: 40, bottom: 140, top: 20 },
+    xAxis: {
+      type: 'category', data: topCols, splitArea: { show: true },
+      axisLabel: { color: '#8b949e', rotate: 45, interval: 0, fontSize: 10 },
+      axisLine: { lineStyle: { color: '#484f58' } },
+    },
+    yAxis: {
+      type: 'category', data: topRows, splitArea: { show: true },
+      axisLabel: { color: '#8b949e', fontSize: 10 },
+      axisLine: { lineStyle: { color: '#484f58' } },
+    },
+    visualMap: {
+      min: 0, max: visualMax, calculable: true,
+      dimension: 2,
+      orient: 'horizontal', left: 'center', bottom: 10,
+      inRange: { color: ['#161b22', '#0d3321', '#3fb950', '#d29922', '#f85149'] },
+      textStyle: { color: '#8b949e' },
+      formatter: v => fmtTime(v),
+    },
+    series: [{
+      name: 'Dauer', type: 'heatmap', data: data,
+      encode: { x: 0, y: 1, value: 2 },
+      emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(88, 166, 255, 0.5)' } },
+    }],
+  });
+}
+
+function switchTab(name) {
+  state.activeTab = name;
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    p.classList.toggle('active', p.dataset.tab === name);
+  });
+  setTimeout(() => {
+    if (name === 'sankey') {
+      if (state.charts.sankey) state.charts.sankey.resize();
+      renderSankey();
+    } else if (name === 'matrix') {
+      if (state.charts.matrix) state.charts.matrix.resize();
+      renderMatrix();
+    }
+  }, 30);
+}
+
+function renderAll() {
+  updateSummary();
+  renderCrossfilter();
+  if (state.activeTab === 'sankey') renderSankey();
+  if (state.activeTab === 'matrix') renderMatrix();
+}
+
+function tickClock() {
+  const d = new Date();
+  $('clock').textContent = d.toLocaleTimeString('de-DE');
+}
+
+function init() {
+  document.querySelectorAll('.preset-btn').forEach(b => {
+    b.addEventListener('click', () => setPreset(b.dataset.preset));
+  });
+  $('refresh-btn').addEventListener('click', loadStats);
+  $('hide-empty').addEventListener('change', e => {
+    state.hideEmpty = e.target.checked;
+    renderAll();
+  });
+  $('reset-btn').addEventListener('click', resetSelection);
+
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.addEventListener('click', () => switchTab(b.dataset.tab));
+  });
+
+  $('panel-crossfilter').addEventListener('click', e => {
+    const row = e.target.closest('.cf-row');
+    if (!row) return;
+    toggleSelect(row.dataset.field, row.dataset.name);
+  });
+
+  $('matrix-row').addEventListener('change', e => {
+    state.matrixRow = e.target.value;
+    renderMatrix();
+  });
+  $('matrix-col').addEventListener('change', e => {
+    state.matrixCol = e.target.value;
+    renderMatrix();
+  });
+
+  window.addEventListener('resize', () => {
+    if (state.charts.sankey) state.charts.sankey.resize();
+    if (state.charts.matrix) state.charts.matrix.resize();
+  });
+
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  setPreset('7d');
+}
+
+init();
+</script>
+</body>
+</html>"""
+
+
+SCREENSHOTS_HTML = r"""<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WorkTracker Screenshots</title>
+<style>
+:root {
+  --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
+  --fg: #e6edf3; --fg2: #8b949e; --fg3: #484f58;
+  --cyan: #58a6ff; --green: #3fb950; --yellow: #d29922;
+  --red: #f85149; --purple: #bc8cff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  background: var(--bg); color: var(--fg);
+  font-size: 13px; line-height: 1.5;
+  padding: 12px; max-width: 1400px; margin: 0 auto;
+}
+h1 { font-size: 18px; color: var(--cyan); font-weight: 600; }
+h1 a { color: var(--fg2); font-size: 12px; text-decoration: none; font-weight: 400; }
+h1 a:hover { color: var(--cyan); }
+.header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0 12px; border-bottom: 1px solid var(--bg3); margin-bottom: 16px;
+  flex-wrap: wrap; gap: 12px;
+}
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.toolbar label { color: var(--fg2); font-size: 12px; }
+.toolbar select, .toolbar input {
+  background: var(--bg2); color: var(--fg); border: 1px solid var(--bg3);
+  border-radius: 4px; padding: 4px 8px; font-family: inherit; font-size: 12px;
+}
+.toolbar select:focus, .toolbar input:focus {
+  outline: none; border-color: var(--cyan);
+}
+.summary { color: var(--fg2); font-size: 12px; }
+.empty { color: var(--fg3); padding: 40px 0; text-align: center; }
+
+.grid {
+  display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+.card {
+  background: var(--bg2); border: 1px solid var(--bg3);
+  border-radius: 8px; overflow: hidden;
+  display: flex; flex-direction: column;
+  transition: border-color 0.15s ease;
+}
+.card:hover { border-color: var(--cyan); }
+.thumb {
+  width: 100%; aspect-ratio: 16 / 9; background: #000;
+  display: block; cursor: zoom-in; object-fit: cover;
+}
+.meta { padding: 10px 12px 12px; }
+.meta-row1 {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 8px; margin-bottom: 4px;
+}
+.time { color: var(--cyan); font-size: 12px; font-weight: 600; }
+.app { color: var(--fg2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%;
+}
+.topic {
+  color: var(--fg); font-size: 12px; margin-bottom: 6px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.motivation {
+  color: var(--purple); font-size: 12px; font-style: italic;
+  border-top: 1px solid var(--bg3); padding-top: 6px; margin-top: 4px;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.motivation.empty-msg { color: var(--fg3); font-style: normal; }
+.no-session { color: var(--fg3); font-size: 11px; padding-top: 6px; border-top: 1px solid var(--bg3); margin-top: 4px; }
+
+/* Lightbox */
+.lightbox {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+  display: none; align-items: center; justify-content: center;
+  padding: 20px; z-index: 100; cursor: zoom-out;
+}
+.lightbox.active { display: flex; }
+.lightbox img {
+  max-width: 100%; max-height: 100%; object-fit: contain;
+  border-radius: 4px; box-shadow: 0 0 40px rgba(0,0,0,0.6);
+}
+.lightbox-info {
+  position: absolute; bottom: 20px; left: 20px; right: 20px;
+  background: rgba(13,17,23,0.85); padding: 10px 16px; border-radius: 6px;
+  color: var(--fg); font-size: 12px; max-width: 800px; margin: 0 auto;
+  pointer-events: none;
+}
+.lightbox-info .lb-time { color: var(--cyan); font-weight: 600; }
+.lightbox-info .lb-app { color: var(--fg2); margin-left: 10px; }
+.lightbox-info .lb-topic { color: var(--fg); margin-top: 4px; }
+.lightbox-info .lb-mot { color: var(--purple); font-style: italic; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1><a href="/">Dashboard</a> &nbsp;/ &nbsp;<a href="/explore">Explore</a> &nbsp;/ &nbsp;<a href="/statistics">Statistics</a> &nbsp;/ &nbsp;Screenshots</h1>
+  <div class="toolbar">
+    <label for="date-select">Datum:</label>
+    <select id="date-select"></select>
+    <span class="summary" id="summary"></span>
+  </div>
+</div>
+
+<div id="grid" class="grid"></div>
+<div id="empty" class="empty" style="display:none">Keine Screenshots fuer dieses Datum.</div>
+
+<div id="lightbox" class="lightbox">
+  <img id="lightbox-img" alt="">
+  <div class="lightbox-info" id="lightbox-info"></div>
+</div>
+
+<script>
+const $ = sel => document.querySelector(sel);
+const grid = $('#grid');
+const empty = $('#empty');
+const summary = $('#summary');
+const dateSelect = $('#date-select');
+const lightbox = $('#lightbox');
+const lightboxImg = $('#lightbox-img');
+const lightboxInfo = $('#lightbox-info');
+
+function fmtTime(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch (e) { return iso; }
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderItems(items) {
+  grid.innerHTML = '';
+  if (!items.length) {
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  for (const it of items) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const time = fmtTime(it.ts);
+    const app = it.session_app || '';
+    const topic = it.session_topic || '';
+    const motivation = it.session_motivation || '';
+    const hasSession = !!(app || topic);
+    const motivationHtml = hasSession
+      ? (motivation
+          ? `<div class="motivation">${escapeHtml(motivation)}</div>`
+          : `<div class="motivation empty-msg">(noch keine Beschreibung)</div>`)
+      : `<div class="no-session">(nicht in Session aggregiert)</div>`;
+
+    card.innerHTML = `
+      <img class="thumb" loading="lazy" src="${it.url}" alt="${escapeHtml(it.filename)}">
+      <div class="meta">
+        <div class="meta-row1">
+          <span class="time">${time}</span>
+          <span class="app">${escapeHtml(app)}</span>
+        </div>
+        ${topic ? `<div class="topic">${escapeHtml(topic)}</div>` : ''}
+        ${motivationHtml}
+      </div>
+    `;
+    card.querySelector('.thumb').addEventListener('click', () => openLightbox(it));
+    grid.appendChild(card);
+  }
+}
+
+function openLightbox(it) {
+  lightboxImg.src = it.url;
+  const time = fmtTime(it.ts);
+  const app = escapeHtml(it.session_app || '');
+  const topic = escapeHtml(it.session_topic || '');
+  const motivation = escapeHtml(it.session_motivation || '');
+  lightboxInfo.innerHTML = `
+    <span class="lb-time">${time}</span>
+    ${app ? `<span class="lb-app">${app}</span>` : ''}
+    ${topic ? `<div class="lb-topic">${topic}</div>` : ''}
+    ${motivation ? `<div class="lb-mot">${motivation}</div>` : ''}
+  `;
+  lightbox.classList.add('active');
+}
+
+lightbox.addEventListener('click', () => lightbox.classList.remove('active'));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') lightbox.classList.remove('active');
+});
+
+async function loadDate(date) {
+  grid.innerHTML = '<div class="empty">Lade...</div>';
+  empty.style.display = 'none';
+  try {
+    const res = await fetch(`/api/screenshots/${date}`);
+    const data = await res.json();
+    renderItems(data.items || []);
+    summary.textContent = `${(data.items || []).length} Screenshots`;
+  } catch (e) {
+    grid.innerHTML = '';
+    empty.textContent = 'Fehler beim Laden: ' + e.message;
+    empty.style.display = 'block';
+  }
+}
+
+async function init() {
+  try {
+    const res = await fetch('/api/screenshots/dates');
+    const dates = await res.json();
+    if (!dates.length) {
+      summary.textContent = 'Noch keine Screenshots aufgenommen.';
+      empty.style.display = 'block';
+      return;
+    }
+    dateSelect.innerHTML = dates.map(d => `<option value="${d}">${d}</option>`).join('');
+    dateSelect.addEventListener('change', () => loadDate(dateSelect.value));
+    loadDate(dates[0]);
+  } catch (e) {
+    summary.textContent = 'Fehler: ' + e.message;
+  }
+}
+
+init();
+</script>
+</body>
+</html>"""
+
+
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=7880, debug=False)
+    port = int(os.environ.get("PORT", "7880"))
+    app.run(host="127.0.0.1", port=port, debug=False)
