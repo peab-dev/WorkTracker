@@ -643,6 +643,10 @@ cmd_help() {
     help_row "docs"      "Open documentation in browser"         "wtdocs"
     echo ""
 
+    printf "  ${CYAN}${BOLD}Maintenance${RST}\n"
+    help_row "compress"  "Shrink screenshots PNG → JPEG q75"     "wtcmp"
+    echo ""
+
     printf "  ${GRAY_L}wtrl${RST} ${GRAY}= reload shell (activate aliases)${RST}\n"
     echo ""
 
@@ -902,6 +906,38 @@ cmd_backfill() {
     echo ""
 }
 
+cmd_compress() {
+    header "SCREENSHOT COMPRESSION"
+
+    local script="$DAEMON/compress_screenshots.sh"
+    if [[ ! -x "$script" ]]; then
+        msg_err "Skript fehlt oder nicht ausführbar: ${DIM}$script${RST}"
+        exit 1
+    fi
+
+    msg_info "PNG → JPEG q75 (macOS sips)"
+    echo ""
+
+    local start_time
+    start_time=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
+
+    local exit_code=0
+    "$script" "$@" || exit_code=$?
+
+    local end_time elapsed_ms
+    end_time=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
+    elapsed_ms=$(perl -e "printf '%d', ($end_time - $start_time) * 1000")
+
+    echo ""
+    if [[ "$exit_code" -eq 0 ]]; then
+        msg_ok "Kompression fertig $(badge_ok "${elapsed_ms}ms")"
+    else
+        msg_err "Kompression mit Fehlern beendet (exit $exit_code)"
+        exit "$exit_code"
+    fi
+    echo ""
+}
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Main
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -924,6 +960,7 @@ case "${1:-help}" in
     menubar|mb)   _wt_timed=false; cmd_menubar;;
     past|p)        cmd_backfill;;
     reprocess|rp)  cmd_reprocess;;
+    compress|cmp)  cmd_compress "${@:2}";;
     docs|docu|documentation)  cmd_docs;;
     tail|log)     _wt_timed=false; cmd_tail;;
     h|help|-h|--help)  _wt_timed=false; cmd_help;;

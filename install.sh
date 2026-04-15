@@ -387,6 +387,7 @@ alias wtmb='wt menubar'
 alias wtdocs='wt docs'
 alias wtdocu='wt docs'
 alias wtdocumentation='wt docs'
+alias wtcmp='wt compress'
 alias wtrl='exec $SHELL -l'
 # <<< WorkTracker <<<
 ALIASES
