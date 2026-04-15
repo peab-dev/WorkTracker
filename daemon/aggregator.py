@@ -98,6 +98,68 @@ def _safe_str(val, default: str = "") -> str:
     return str(val)
 
 
+import time as _time
+
+
+class Progress:
+    """Live phase-based progress display on stderr.
+
+    Uses carriage return to rewrite one line when stderr is a TTY; falls
+    back to plain newline-per-update otherwise. Cheap to call repeatedly.
+    """
+
+    def __init__(self, enabled: bool = False, tag: str = "", indent: str = "  "):
+        self.enabled = bool(enabled)
+        self.tag = tag
+        self.indent = indent
+        self._tty = sys.stderr.isatty() if self.enabled else False
+        self._last_len = 0
+        self._last_phase = ""
+        self._t0 = _time.monotonic()
+
+    def _render(self, phase: str, details: str = "") -> str:
+        parts = [self.indent]
+        if self.tag:
+            parts.append(f"{self.tag}  ")
+        parts.append(phase)
+        if details:
+            parts.append(f"  {details}")
+        return "".join(parts)
+
+    def update(self, phase: str, details: str = "") -> None:
+        if not self.enabled:
+            return
+        line = self._render(phase, details)
+        if self._tty:
+            pad = " " * max(0, self._last_len - len(line))
+            sys.stderr.write(f"\r{line}{pad}")
+            sys.stderr.flush()
+            self._last_len = len(line)
+        else:
+            # Non-TTY: only emit when the phase label changes, to keep logs quiet.
+            if phase != self._last_phase:
+                sys.stderr.write(line + "\n")
+                sys.stderr.flush()
+        self._last_phase = phase
+
+    def finish(self, summary: str) -> None:
+        """Replace the live line with a final summary and move to a new line."""
+        if not self.enabled:
+            return
+        line = self._render("", summary).rstrip()
+        if self._tty:
+            pad = " " * max(0, self._last_len - len(line))
+            sys.stderr.write(f"\r{line}{pad}\n")
+            sys.stderr.flush()
+            self._last_len = 0
+        else:
+            sys.stderr.write(line + "\n")
+            sys.stderr.flush()
+
+    def elapsed(self) -> float:
+        return _time.monotonic() - self._t0
+
+
 SYSTEM_APPS = {
     "WindowManager", "Finder", "Dock", "SystemUIServer",
     "Control Center", "Notification Center", "loginwindow",
@@ -2057,12 +2119,16 @@ def _load_sessions_range(start: datetime, end: datetime) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def run_daily(date: datetime) -> None:
+def run_daily(date: datetime, progress: "Progress | None" = None) -> None:
+    progress = progress or Progress(enabled=False)
     log.info("Daily report for %s", date.strftime("%Y-%m-%d"))
 
+    progress.update("loading snapshots")
     df = load_snapshots(date)
     if df.empty:
         log.warning("No snapshots — aborting.")
+        progress.finish("⚠ no snapshots")
+        print("[SUMMARY] sessions=0 inherited=0 topics=0 duration=0s")
         return
 
     # ── Midnight continuity: load tail of previous day (≥23:55) ──────
@@ -2078,11 +2144,14 @@ def run_daily(date: datetime) -> None:
             )
             df = pd.concat([prev_tail, df], ignore_index=True).sort_values("ts").reset_index(drop=True)
 
+    progress.update("flattening", f"{len(df)} snapshots")
     df = flatten_df(df)
     cfg = load_config()
 
     # Detect sessions
+    progress.update("detecting sessions")
     sessions = detect_sessions(df, cfg)
+    progress.update("detecting sessions", f"{len(sessions)} raw sessions")
 
     # ── Clip midnight-carryover sessions to target date ──────────────
     midnight = pd.Timestamp(date.strftime("%Y-%m-%d"), tz=TZ)
@@ -2100,23 +2169,35 @@ def run_daily(date: datetime) -> None:
     sessions = clipped
 
     # Temporal inheritance: tool-app / Other sessions inherit project from neighbours
+    progress.update("inherit projects", f"{len(sessions)} sessions")
     unresolved_before = sum(1 for s in sessions if _is_unresolved(s))
     sessions = inherit_projects(sessions)
     unresolved_after = sum(1 for s in sessions if _is_unresolved(s))
+    n_inherited = unresolved_before - unresolved_after
     log.info(
         "%d Sessions (%d via inherit_projects aufgelöst, %d übrig)",
         len(sessions),
-        unresolved_before - unresolved_after,
+        n_inherited,
         unresolved_after,
     )
+    progress.update("inherit projects", f"{n_inherited} resolved, {unresolved_after} open")
 
     # Topic extraction via local LLM (best-effort, silent on failure)
+    set_count = 0
     try:
         _, _, _, _tool_ctx = load_patterns()
         _suffixes = _tool_ctx.get("tool_app_title_suffixes", [])
-        set_count = extract_topics(sessions, cfg, title_suffixes=_suffixes)
+
+        def _topic_progress(done: int, total: int, topics_set: int) -> None:
+            progress.update("topics", f"batch {done}/{total}  {topics_set} set")
+
+        progress.update("topics", "starting")
+        set_count = extract_topics(
+            sessions, cfg, title_suffixes=_suffixes, progress=_topic_progress
+        )
         if set_count:
             log.info("Topic-LLM: %d Sessions mit Topic angereichert", set_count)
+        progress.update("topics", f"{set_count} set")
     except Exception as e:
         log.warning("Topic-Extraktion fehlgeschlagen: %s", e, exc_info=True)
 
@@ -2125,6 +2206,7 @@ def run_daily(date: datetime) -> None:
     sessions = [sanitize_session_for_report(s) for s in sessions]
 
     # Save sessions
+    progress.update("saving sessions")
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     sessions_path = SESSIONS_DIR / f"{date.strftime('%Y-%m-%d')}.json"
     with open(sessions_path, "w") as f:
@@ -2132,6 +2214,7 @@ def run_daily(date: datetime) -> None:
     log.info("Sessions gespeichert: %s", sessions_path)
 
     # Calculate stats
+    progress.update("computing stats")
     try:
         stats = calc_daily_stats(df, sessions, cfg)
     except Exception as e:
@@ -2148,19 +2231,30 @@ def run_daily(date: datetime) -> None:
         comparison = []
 
     # Render Markdown
+    progress.update("rendering report")
     md = render_daily_md(date, stats, comparison)
     DAILY_DIR.mkdir(parents=True, exist_ok=True)
     md_path = DAILY_DIR / f"{date.strftime('%Y-%m-%d')}.md"
     with open(md_path, "w") as f:
         f.write(md)
     log.info("Daily-Report geschrieben: %s", md_path)
-    print(f"✓ Daily-Report: {md_path}")
 
     # Auto-suggest patterns for unmatched sessions
+    progress.update("pattern suggestions")
     try:
         suggest_patterns(sessions, date)
     except Exception as e:
         log.warning("Pattern-Suggestion fehlgeschlagen: %s", e, exc_info=True)
+
+    # Final summary — live progress gets replaced, [SUMMARY] goes to stdout for parsing
+    elapsed = int(round(progress.elapsed()))
+    summary = (
+        f"sessions={len(sessions)} inherited={n_inherited} "
+        f"topics={set_count} duration={elapsed}s"
+    )
+    progress.finish(f"✓ {summary}")
+    print(f"[SUMMARY] {summary}")
+    print(f"✓ Daily-Report: {md_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -2424,6 +2518,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="WorkTracker Aggregator")
     parser.add_argument("--mode", choices=["daily", "weekly", "monthly"], required=True)
     parser.add_argument("--date", help="Datum im Format YYYY-MM-DD (Default: heute)", default=None)
+    parser.add_argument("--progress", action="store_true",
+                        help="Emit live phase-based progress on stderr.")
+    parser.add_argument("--tag", default="",
+                        help="Label to prefix live progress lines with (e.g. the date).")
     args = parser.parse_args()
 
     if args.date:
@@ -2431,8 +2529,18 @@ def main() -> None:
     else:
         target = datetime.now()
 
+    prog = Progress(enabled=args.progress, tag=args.tag)
+
+    # In progress mode, keep stderr clean — file logging still works.
+    if args.progress:
+        for _h in list(log.handlers):
+            if isinstance(_h, logging.StreamHandler) and not isinstance(
+                _h, logging.FileHandler
+            ):
+                log.removeHandler(_h)
+
     if args.mode == "daily":
-        run_daily(target)
+        run_daily(target, progress=prog)
     elif args.mode == "weekly":
         run_weekly(target)
     elif args.mode == "monthly":

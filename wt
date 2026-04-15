@@ -351,25 +351,50 @@ cmd_agg() {
     header "AGGREGATOR $mode_upper"
 
     msg_info "Running ${label_name} aggregation..."
+    echo ""
 
     local start_time
     start_time=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
 
-    "$VENV" "$DAEMON/aggregator.py" --mode "$mode" 2>&1 | while IFS= read -r agg_line; do
-        if echo "$agg_line" | grep -q '^✓'; then
-            printf "    ${GREEN}${BOLD}%s${RST}\n" "$agg_line"
-        elif echo "$agg_line" | grep -q '\[ERROR\]'; then
-            printf "    ${RED}%s${RST}\n" "$agg_line"
-        elif echo "$agg_line" | grep -q '\[WARNING\]'; then
-            printf "    ${YELLOW}%s${RST}\n" "$agg_line"
-        elif echo "$agg_line" | grep -q '\[INFO\]'; then
-            printf "    ${GRAY_L}%s${RST}\n" "$agg_line"
+    # For daily mode, use the live-progress UI (the aggregator writes phase
+    # updates on stderr and final marker lines on stdout). Weekly/monthly
+    # keep the old log-line-streaming behaviour for now.
+    local exit_code=0
+    if [[ "$mode" == "daily" ]]; then
+        local agg_out
+        if agg_out=$("$VENV" "$DAEMON/aggregator.py" --mode "$mode" --progress); then
+            exit_code=0
         else
-            printf "    ${GRAY}%s${RST}\n" "$agg_line"
+            exit_code=$?
         fi
-    done
+        # Echo any remaining stdout lines (report paths, suggestions, etc.) —
+        # skip [SUMMARY] and empty lines.
+        echo "$agg_out" | while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            [[ "$line" == "[SUMMARY]"* ]] && continue
+            if [[ "$line" == "✓"* ]]; then
+                printf "    ${GREEN}${BOLD}%s${RST}\n" "$line"
+            else
+                printf "    ${GRAY_L}%s${RST}\n" "$line"
+            fi
+        done
+    else
+        "$VENV" "$DAEMON/aggregator.py" --mode "$mode" 2>&1 | while IFS= read -r agg_line; do
+            if echo "$agg_line" | grep -q '^✓'; then
+                printf "    ${GREEN}${BOLD}%s${RST}\n" "$agg_line"
+            elif echo "$agg_line" | grep -q '\[ERROR\]'; then
+                printf "    ${RED}%s${RST}\n" "$agg_line"
+            elif echo "$agg_line" | grep -q '\[WARNING\]'; then
+                printf "    ${YELLOW}%s${RST}\n" "$agg_line"
+            elif echo "$agg_line" | grep -q '\[INFO\]'; then
+                printf "    ${GRAY_L}%s${RST}\n" "$agg_line"
+            else
+                printf "    ${GRAY}%s${RST}\n" "$agg_line"
+            fi
+        done
+        exit_code=${PIPESTATUS[0]}
+    fi
 
-    local exit_code=${PIPESTATUS[0]}
     local end_time
     end_time=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
     local elapsed_ms
@@ -551,32 +576,40 @@ cmd_help() {
     printf "  ${WHITE}${BOLD}Usage:${RST}  ${CYAN}wt${RST} ${WHITE}<command>${RST}\n"
     echo ""
 
+    # Helper: print one help row with fixed column widths so aliases line up.
+    # Widths: cmd=10, desc=42, alias=right-aligned column.
+    help_row() {
+        local cmd="$1" desc="$2" alias="$3"
+        printf "    ${WHITE}${BOLD}%-10s${RST}  ${GRAY_L}%-42s${RST}  ${ORANGE}%s${RST}\n" \
+            "$cmd" "$desc" "$alias"
+    }
+
     printf "  ${CYAN}${BOLD}Overview${RST}\n"
-    printf "    ${WHITE}${BOLD}status${RST}       ${GRAY_L}Show services, data & reports${RST}        ${ORANGE}wts${RST}\n"
-    printf "    ${WHITE}${BOLD}tail${RST}         ${GRAY_L}Follow collector logs live${RST}           ${ORANGE}wtl${RST}\n"
+    help_row "status"    "Show services, data & reports"         "wts"
+    help_row "tail"      "Follow collector logs live"            "wtl"
     echo ""
 
     printf "  ${CYAN}${BOLD}Collector${RST}\n"
-    printf "    ${WHITE}${BOLD}restart${RST}      ${GRAY_L}Restart collector daemon${RST}             ${ORANGE}wtr${RST}\n"
-    printf "    ${WHITE}${BOLD}start${RST}        ${GRAY_L}Start collector${RST}\n"
-    printf "    ${WHITE}${BOLD}stop${RST}         ${GRAY_L}Stop collector${RST}\n"
+    help_row "restart"   "Restart collector daemon"              "wtr"
+    help_row "start"     "Start collector"                       ""
+    help_row "stop"      "Stop collector"                        ""
     echo ""
 
     printf "  ${CYAN}${BOLD}Aggregator${RST}\n"
-    printf "    ${WHITE}${BOLD}daily${RST}        ${GRAY_L}Run daily aggregation${RST}                ${ORANGE}wtd${RST}\n"
-    printf "    ${WHITE}${BOLD}weekly${RST}       ${GRAY_L}Run weekly aggregation${RST}               ${ORANGE}wtw${RST}\n"
-    printf "    ${WHITE}${BOLD}monthly${RST}      ${GRAY_L}Run monthly aggregation${RST}              ${ORANGE}wtm${RST}\n"
-    printf "    ${WHITE}${BOLD}all${RST}          ${GRAY_L}Run all aggregations${RST}                 ${ORANGE}wtx${RST}\n"
-    printf "    ${WHITE}${BOLD}past${RST}         ${GRAY_L}Backfill missing daily/weekly reports${RST} ${ORANGE}wtp${RST}\n"
-    printf "    ${WHITE}${BOLD}reprocess${RST}    ${GRAY_L}Re-run all days with current patterns${RST} ${ORANGE}wtrp${RST}\n"
+    help_row "daily"     "Run daily aggregation"                 "wtd"
+    help_row "weekly"    "Run weekly aggregation"                "wtw"
+    help_row "monthly"   "Run monthly aggregation"               "wtm"
+    help_row "all"       "Run all aggregations"                  "wtx"
+    help_row "past"      "Backfill missing daily/weekly reports" "wtp"
+    help_row "reprocess" "Re-run all days with current patterns" "wtrp"
     echo ""
 
     printf "  ${CYAN}${BOLD}Dashboard${RST}\n"
-    printf "    ${WHITE}${BOLD}dash${RST}         ${GRAY_L}Open terminal dashboard${RST}              ${ORANGE}wtdash${RST}\n"
-    printf "    ${WHITE}${BOLD}rhythm${RST}       ${GRAY_L}Weekly activity heatmap${RST}              ${ORANGE}wtrh${RST}\n"
-    printf "    ${WHITE}${BOLD}web${RST}          ${GRAY_L}Start web dashboard (port 7880)${RST}      ${ORANGE}wtweb${RST}\n"
-    printf "    ${WHITE}${BOLD}menubar${RST}      ${GRAY_L}Start macOS menubar widget${RST}           ${ORANGE}wtmb${RST}\n"
-    printf "    ${WHITE}${BOLD}docs${RST}         ${GRAY_L}Open documentation in browser${RST}        ${ORANGE}wtdocs${RST}\n"
+    help_row "dash"      "Open terminal dashboard"               "wtdash"
+    help_row "rhythm"    "Weekly activity heatmap"               "wtrh"
+    help_row "web"       "Start web dashboard (port 7880)"       "wtweb"
+    help_row "menubar"   "Start macOS menubar widget"            "wtmb"
+    help_row "docs"      "Open documentation in browser"         "wtdocs"
     echo ""
 
     printf "  ${GRAY_L}wtrl${RST} ${GRAY}= reload shell (activate aliases)${RST}\n"
@@ -678,19 +711,32 @@ cmd_reprocess() {
 
     local ok=0
     local fail=0
+    local total_inherited=0
+    local total_topics=0
+    local total_sessions=0
     for d in "${dates[@]}"; do
-        printf "  ${GRAY_L}%s${RST} " "$d"
-        if "$VENV" "$DAEMON/aggregator.py" --mode daily --date "$d" >/dev/null 2>&1; then
-            printf "${GREEN}${SYM_CHECK}${RST}\n"
+        # Aggregator writes live progress on stderr (inherits terminal).
+        # stdout is captured for the [SUMMARY] line.
+        local agg_out
+        if agg_out=$("$VENV" "$DAEMON/aggregator.py" --mode daily --date "$d" --progress --tag "$d"); then
+            local summary sess inh topics
+            summary=$(echo "$agg_out" | grep '^\[SUMMARY\]' | head -1 || true)
+            sess=$(echo "$summary" | grep -oE 'sessions=[0-9]+' | cut -d= -f2 || true)
+            inh=$(echo "$summary" | grep -oE 'inherited=[0-9]+' | cut -d= -f2 || true)
+            topics=$(echo "$summary" | grep -oE 'topics=[0-9]+' | cut -d= -f2 || true)
+            total_sessions=$((total_sessions + ${sess:-0}))
+            total_inherited=$((total_inherited + ${inh:-0}))
+            total_topics=$((total_topics + ${topics:-0}))
             ((ok++))
         else
-            printf "${RED}${SYM_CROSS}${RST}\n"
+            printf "  ${GRAY_L}%s${RST} ${RED}${SYM_CROSS}${RST} aggregation failed\n" "$d"
             ((fail++))
         fi
     done
 
     echo ""
     msg_ok "Reprocessed: ${WHITE}${BOLD}${ok}${RST} OK, ${fail} failed"
+    msg_info "Total: ${WHITE}${BOLD}${total_sessions}${RST} sessions, ${WHITE}${BOLD}${total_inherited}${RST} inherited, ${WHITE}${BOLD}${total_topics}${RST} topics"
     echo ""
 }
 
@@ -738,13 +784,23 @@ cmd_backfill() {
 
         local ok=0
         local fail=0
+        local total_sessions=0
+        local total_inherited=0
+        local total_topics=0
         for d in "${missing_daily[@]}"; do
-            printf "  ${GRAY_L}%s${RST} " "$d"
-            if "$VENV" "$DAEMON/aggregator.py" --mode daily --date "$d" >/dev/null 2>&1; then
-                printf "${GREEN}${SYM_CHECK} generiert${RST}\n"
+            local agg_out
+            if agg_out=$("$VENV" "$DAEMON/aggregator.py" --mode daily --date "$d" --progress --tag "$d"); then
+                local summary sess inh topics
+                summary=$(echo "$agg_out" | grep '^\[SUMMARY\]' | head -1 || true)
+                sess=$(echo "$summary" | grep -oE 'sessions=[0-9]+' | cut -d= -f2 || true)
+                inh=$(echo "$summary" | grep -oE 'inherited=[0-9]+' | cut -d= -f2 || true)
+                topics=$(echo "$summary" | grep -oE 'topics=[0-9]+' | cut -d= -f2 || true)
+                total_sessions=$((total_sessions + ${sess:-0}))
+                total_inherited=$((total_inherited + ${inh:-0}))
+                total_topics=$((total_topics + ${topics:-0}))
                 ((ok++))
             else
-                printf "${RED}${SYM_CROSS} fehlgeschlagen${RST}\n"
+                printf "  ${GRAY_L}%s${RST} ${RED}${SYM_CROSS} fehlgeschlagen${RST}\n" "$d"
                 ((fail++))
             fi
         done
@@ -755,6 +811,7 @@ cmd_backfill() {
         else
             msg_warn "${WHITE}${BOLD}${ok}${RST} OK, ${RED}${fail}${RST} fehlgeschlagen"
         fi
+        msg_info "Total: ${WHITE}${BOLD}${total_sessions}${RST} sessions, ${WHITE}${BOLD}${total_inherited}${RST} inherited, ${WHITE}${BOLD}${total_topics}${RST} topics"
     fi
 
     # ── Check missing weekly reports ──

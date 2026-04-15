@@ -127,6 +127,39 @@ def load_sessions(date_str):
         return []
 
 
+def aggregate_topics(sessions, top_n=12, min_sec=60):
+    """Aggregate sessions by topic → [{name, sec, pct, project, sessions}]."""
+    totals = {}
+    projects = {}
+    counts = {}
+    total_topic_sec = 0
+    for s in sessions:
+        topic = (s.get("topic") or "").strip()
+        if not topic:
+            continue
+        dur = int(s.get("duration_seconds", 0) or 0)
+        totals[topic] = totals.get(topic, 0) + dur
+        counts[topic] = counts.get(topic, 0) + 1
+        total_topic_sec += dur
+        # Prefer the project of the longest session under this topic.
+        cur_proj = projects.get(topic)
+        if not cur_proj or dur > cur_proj[1]:
+            projects[topic] = (s.get("project", ""), dur)
+    items = [
+        {
+            "name": t,
+            "sec": totals[t],
+            "pct": round((totals[t] / total_topic_sec) * 100, 1) if total_topic_sec else 0,
+            "project": projects[t][0],
+            "sessions": counts[t],
+        }
+        for t in totals
+        if totals[t] >= min_sec
+    ]
+    items.sort(key=lambda x: x["sec"], reverse=True)
+    return items[:top_n]
+
+
 def snapshot_count(date_str):
     path = DATA_SNAP / f"{date_str}.jsonl"
     try:
@@ -136,33 +169,126 @@ def snapshot_count(date_str):
         return 0
 
 
+def _pgrep_process(pattern):
+    """Return (pid, started_epoch) for the first process matching *pattern*.
+
+    Uses ``ps -Ao pid,lstart,command`` so it finds both launchd-managed and
+    plain user-launched processes (e.g. when collector is started via
+    ``wt start`` instead of launchctl).
+    """
+    try:
+        r = subprocess.run(
+            ["ps", "-Axo", "pid=,lstart=,command="],
+            capture_output=True, text=True, timeout=3,
+        )
+        if r.returncode != 0:
+            return None
+        from datetime import datetime as _dt
+        for line in r.stdout.splitlines():
+            line = line.strip()
+            if pattern not in line:
+                continue
+            # Format: "12345 Wed Apr 15 01:23:45 2026 /path/to/cmd args"
+            parts = line.split(None, 1)
+            if len(parts) < 2:
+                continue
+            try:
+                pid = int(parts[0])
+            except ValueError:
+                continue
+            rest = parts[1]
+            # lstart is a fixed 24-char field in ps output format "%c"
+            # e.g. "Wed Apr 15 01:23:45 2026"
+            tokens = rest.split(None, 5)
+            if len(tokens) < 6:
+                continue
+            lstart_str = " ".join(tokens[:5])
+            try:
+                started = _dt.strptime(lstart_str, "%a %b %d %H:%M:%S %Y")
+                return (pid, started.timestamp())
+            except ValueError:
+                return (pid, None)
+    except Exception:
+        pass
+    return None
+
+
 def launchd_status(label):
+    """Return status for a launchd label with a pgrep fallback.
+
+    Fields:
+      loaded:     bool — launchctl knows about this label
+      running:    bool — there is an active process for this collector
+      pid:        int|None — PID of the running process
+      started_at: float|None — epoch seconds when the process started
+      uptime_sec: int|None — seconds since the process started
+      exit:       int|None — last exit status (launchd only)
+    """
+    info = {
+        "loaded": False, "running": False, "pid": None,
+        "started_at": None, "uptime_sec": None, "exit": None,
+    }
+
+    # 1. Primary path: launchctl for properly installed services.
     try:
         r = subprocess.run(
             ["launchctl", "list", label],
             capture_output=True, text=True, timeout=3,
         )
-        if r.returncode != 0:
-            return {"loaded": False}
-        info = {"loaded": True, "pid": None, "exit": None}
-        for line in r.stdout.split("\n"):
-            if "LastExitStatus" in line:
-                for tok in line.replace('"', "").replace(";", "").split():
+        if r.returncode == 0:
+            info["loaded"] = True
+            for line in r.stdout.split("\n"):
+                if "LastExitStatus" in line:
+                    for tok in line.replace('"', "").replace(";", "").split():
+                        try:
+                            info["exit"] = int(tok)
+                        except ValueError:
+                            pass
+            lines = r.stdout.strip().split("\n")
+            if len(lines) >= 2:
+                tok = lines[1].split()
+                if tok and tok[0] != "-":
                     try:
-                        info["exit"] = int(tok)
+                        info["pid"] = int(tok[0])
                     except ValueError:
                         pass
-        lines = r.stdout.strip().split("\n")
-        if len(lines) >= 2:
-            tok = lines[1].split()
-            if tok and tok[0] != "-":
-                try:
-                    info["pid"] = int(tok[0])
-                except ValueError:
-                    pass
-        return info
     except Exception:
-        return {"loaded": False}
+        pass
+
+    # 2. Fallback: pgrep for plain user-launched processes.
+    #    Map known labels → process-search patterns.
+    if not info["pid"]:
+        pattern = None
+        if "collector" in label:
+            pattern = "daemon/collector.py"
+        elif "aggregator" in label:
+            pattern = "daemon/aggregator.py"
+        if pattern:
+            found = _pgrep_process(pattern)
+            if found:
+                info["pid"], started = found
+                info["started_at"] = started
+
+    # 3. If we have a PID, get its start time via ps (if we didn't already).
+    if info["pid"] and info["started_at"] is None:
+        try:
+            from datetime import datetime as _dt
+            r = subprocess.run(
+                ["ps", "-o", "lstart=", "-p", str(info["pid"])],
+                capture_output=True, text=True, timeout=2,
+            )
+            if r.returncode == 0 and r.stdout.strip():
+                started = _dt.strptime(r.stdout.strip(), "%a %b %d %H:%M:%S %Y")
+                info["started_at"] = started.timestamp()
+        except Exception:
+            pass
+
+    if info["pid"]:
+        info["running"] = True
+        if info["started_at"]:
+            info["uptime_sec"] = int(datetime.now().timestamp() - info["started_at"])
+
+    return info
 
 
 def latest_report(report_type):
@@ -406,6 +532,9 @@ def api_live():
 
         hrs = total_sec / 3600 if total_sec else 1
 
+        # Topics (grouped by `topic` field, filled by topic_extractor)
+        topic_list = aggregate_topics(active_sessions, top_n=12, min_sec=60)
+
         day_stats = {
             "total_sec": total_sec,
             "sessions": len(active_sessions),
@@ -418,6 +547,7 @@ def api_live():
             "scrolls": scrolls,
             "clipboard": clip,
             "projects": proj_list,
+            "topics": topic_list,
             "app_categories": cat_list,
             "apps": app_list,
             "hourly": hourly,
@@ -436,6 +566,7 @@ def api_live():
             "app": s.get("app_name", "—"),
             "title": (s.get("window_title") or "—")[:60],
             "project": s.get("project", ""),
+            "topic": s.get("topic", ""),
             "dur": s.get("duration_seconds", 0),
             "intensity": s.get("intensity_score", 0),
         })
@@ -473,30 +604,62 @@ def api_live():
 @app.route("/api/rhythm")
 @app.route("/api/rhythm/<int:weeks>")
 def api_rhythm(weeks=2):
-    """Return heatmap data for the last N weeks."""
+    """Return heatmap data for the last N weeks.
+
+    Rhythm days follow a 10:00 → 10:00 definition: each day spans from
+    10:00 on its start date to 10:00 on the next calendar day. Returned
+    ``hours`` arrays are already ordered by display position, starting at
+    ``display_start`` (10) and wrapping through midnight back to 09:00.
+    """
     from rhythm_heatmap import get_active_hours, HEALTHY_START, HEALTHY_END
     from datetime import timedelta as td
 
     weeks = min(weeks, 8)
-    today = datetime.now()
     days = weeks * 7
-    result = []
 
+    DAY_START = 10  # 10:00 → 10:00 day definition
+
+    def _hours_for_rhythm_day(start_date):
+        """Return set of wall-clock hours active during start_date 10:00 → next 10:00."""
+        active = set()
+        # Part 1: start_date 10..23
+        h1 = get_active_hours(SUMMARIES / "daily" / f"{start_date.strftime('%Y-%m-%d')}.md")
+        for h in h1:
+            if h >= DAY_START:
+                active.add(h)
+        # Part 2: (start_date + 1) 0..9
+        next_date = start_date + td(days=1)
+        h2 = get_active_hours(SUMMARIES / "daily" / f"{next_date.strftime('%Y-%m-%d')}.md")
+        for h in h2:
+            if h < DAY_START:
+                active.add(h)
+        return active
+
+    # The rhythm day that contains "now": if now.hour >= 10, it starts today;
+    # otherwise it started yesterday.
+    now = datetime.now()
+    if now.hour >= DAY_START:
+        current_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        current_start = (now - td(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Display order: hours 10..23, then 0..9 (24 positions total)
+    display_hours = list(range(DAY_START, 24)) + list(range(0, DAY_START))
+
+    result = []
     for i in range(days - 1, -1, -1):
-        day = today - td(days=i)
-        ds = day.strftime("%Y-%m-%d")
-        filepath = SUMMARIES / "daily" / f"{ds}.md"
-        hours = get_active_hours(filepath)
+        start_date = current_start - td(days=i)
+        hours = _hours_for_rhythm_day(start_date)
         cells = []
-        for h in range(24):
+        for h in display_hours:
             if h in hours:
                 cells.append("healthy" if HEALTHY_START <= h < HEALTHY_END else "unhealthy")
             else:
                 cells.append("missed" if HEALTHY_START <= h < HEALTHY_END else "rest")
         result.append({
-            "date": ds,
-            "weekday": day.strftime("%a"),
-            "weekend": day.weekday() >= 5,
+            "date": start_date.strftime("%Y-%m-%d"),
+            "weekday": start_date.strftime("%a"),
+            "weekend": start_date.weekday() >= 5,
             "today": i == 0,
             "hours": cells,
             "active": len(hours),
@@ -510,6 +673,8 @@ def api_rhythm(weeks=2):
 
     return jsonify({
         "days": result,
+        "display_hours": display_hours,
+        "day_start": DAY_START,
         "healthy_start": HEALTHY_START,
         "healthy_end": HEALTHY_END,
         "stats": {
@@ -607,6 +772,21 @@ def api_sessions(date):
     for s in active:
         s["app_category"] = classify_app(s.get("app_name", ""), cats)
     return jsonify(sanitize_for_json(active))
+
+
+@app.route("/api/topics/<date>")
+def api_topics(date):
+    """Return aggregated topics for a single day."""
+    sessions = load_sessions(date)
+    active = [s for s in sessions if s.get("app_name") not in INACTIVE_APPS]
+    topics = aggregate_topics(active, top_n=50, min_sec=30)
+    total_with_topic = sum(1 for s in active if (s.get("topic") or "").strip())
+    return jsonify({
+        "date": date,
+        "topics": topics,
+        "sessions_total": len(active),
+        "sessions_with_topic": total_with_topic,
+    })
 
 
 @app.route("/api/snapshots/<date>/range")
@@ -742,6 +922,32 @@ h2 {
 .stat-val { font-size: 22px; font-weight: 700; color: var(--fg); }
 .stat-label { font-size: 10px; color: var(--fg2); text-transform: uppercase; }
 
+/* Gauges Row — 3 SVG ring gauges at the top of Daily Overview */
+.gauges-row {
+  display: flex; justify-content: space-around; align-items: center;
+  gap: 14px; padding: 10px 6px 18px; margin-bottom: 10px;
+  border-bottom: 1px solid var(--bg3);
+}
+.gauge {
+  position: relative; display: flex; flex-direction: column; align-items: center;
+  justify-content: center;
+}
+.gauge-svg { display: block; }
+.gauge-value {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 700; color: var(--fg);
+  pointer-events: none;
+}
+.gauge.gauge-hero .gauge-value { font-size: 18px; }
+.gauge-label {
+  margin-top: 6px; font-size: 10px; color: var(--fg2);
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.gauge-sub {
+  margin-top: 2px; font-size: 10px; color: var(--fg3);
+}
+
 /* Project bars */
 .proj-row { display: flex; align-items: center; gap: 8px; padding: 4px 0;
   border-bottom: 1px solid var(--bg3); font-size: 12px; }
@@ -773,6 +979,24 @@ h2 {
 .proj-time { width: 55px; text-align: right; color: var(--fg2); }
 .proj-int { width: 30px; text-align: right; color: var(--yellow); }
 
+/* Topics (styled similar to projects but with cyan accent) */
+.topic-row { display: flex; align-items: center; gap: 8px; padding: 5px 0;
+  border-bottom: 1px solid var(--bg3); font-size: 12px; }
+.topic-row:last-child { border-bottom: none; }
+.topic-name { flex: 1; color: var(--fg); font-weight: 500; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.topic-proj { color: var(--cyan); font-size: 11px; font-weight: 500;
+  padding: 2px 7px; border: 1px solid var(--bg3); border-radius: 10px;
+  max-width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topic-bar-wrap { width: 90px; flex-shrink: 0; height: 6px;
+  background: var(--bg3); border-radius: 3px; overflow: hidden; }
+.topic-bar { height: 100%; background: var(--cyan); border-radius: 3px;
+  transition: width 0.4s; }
+.topic-time { width: 55px; text-align: right; color: var(--yellow); font-size: 11px; }
+.topic-sessions { width: 28px; text-align: right; color: var(--fg3); font-size: 11px; }
+.card-meta { font-size: 10px; color: var(--fg3); font-weight: 400;
+  margin-left: 6px; text-transform: none; }
+
 /* Sessions */
 .sess-row { display: flex; gap: 8px; padding: 5px 0;
   border-bottom: 1px solid var(--bg3); font-size: 12px; align-items: center; }
@@ -784,6 +1008,9 @@ h2 {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sess-proj { width: 90px; flex-shrink: 0; text-align: right; color: var(--blue); font-size: 11px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sess-topic { width: 140px; flex-shrink: 0; color: var(--cyan); font-size: 11px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-style: italic; }
+.sess-topic:empty { display: none; }
 .sess-dur-wrap { flex: 0.6; display: flex; align-items: center; gap: 6px; min-width: 100px; }
 .sess-dur { flex-shrink: 0; text-align: right; color: var(--yellow); white-space: nowrap; }
 .sess-dur-bar { flex: 1; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
@@ -951,6 +1178,7 @@ h2 {
   <!-- Daily Overview -->
   <div class="card wide">
     <h2 id="day-title">Today</h2>
+    <div class="gauges-row" id="gauges-row"></div>
     <div class="stats" id="day-stats"></div>
   </div>
 
@@ -970,6 +1198,12 @@ h2 {
   <div class="card">
     <h2>Projects</h2>
     <div id="projects"></div>
+  </div>
+
+  <!-- Topics -->
+  <div class="card">
+    <h2>Topics <span id="topics-meta" class="card-meta"></span></h2>
+    <div id="topics"></div>
   </div>
 
   <!-- Hourly -->
@@ -1042,6 +1276,48 @@ function fmt(sec) {
   if (sec < 60) return sec + 's';
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
   return h > 0 ? h + 'h ' + String(m).padStart(2, '0') + 'm' : m + 'm';
+}
+
+function fmtUptime(sec) {
+  if (!sec || sec <= 0) return '—';
+  sec = Math.floor(sec);
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (d >= 1) return d + 'd ' + h + 'h';
+  if (h >= 1) return h + 'h ' + String(m).padStart(2, '0') + 'm';
+  if (m >= 1) return m + 'm ' + String(s).padStart(2, '0') + 's';
+  return s + 's';
+}
+
+// SVG ring gauge: { label, value, pct (0..1), color, hero?, sub? }
+function gaugeHtml(g) {
+  const hero = !!g.hero;
+  const size = hero ? 84 : 64;
+  const stroke = hero ? 7 : 5;
+  const r = (size - stroke) / 2;
+  const cx = size / 2, cy = size / 2;
+  const circumference = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(1, g.pct || 0));
+  const offset = circumference * (1 - pct);
+  const color = g.color || 'var(--cyan)';
+  // Rotate -90° so progress starts at the top.
+  const svg = '<svg class="gauge-svg" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">'
+    + '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" stroke="var(--bg3)" stroke-width="' + stroke + '" fill="none" />'
+    + '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" stroke="' + color + '" stroke-width="' + stroke + '"'
+    + ' fill="none" stroke-linecap="round" transform="rotate(-90 ' + cx + ' ' + cy + ')"'
+    + ' stroke-dasharray="' + circumference + '" stroke-dashoffset="' + offset + '" />'
+    + '</svg>';
+  const valueStr = (g.value == null || g.value === '') ? '—' : String(g.value);
+  return '<div class="gauge ' + (hero ? 'gauge-hero' : '') + '">'
+    + '<div style="position:relative;width:' + size + 'px;height:' + size + 'px">'
+    + svg
+    + '<div class="gauge-value">' + esc(valueStr) + '</div>'
+    + '</div>'
+    + '<div class="gauge-label">' + esc(g.label || '') + '</div>'
+    + (g.sub ? '<div class="gauge-sub">' + esc(g.sub) + '</div>' : '')
+    + '</div>';
 }
 
 function fmtAge(mtime) {
@@ -1148,7 +1424,7 @@ function update(d) {
     $('sys-info').textContent = sys.join('  ·  ');
   }
 
-  // Services
+  // Services — show uptime ("läuft · 27m 03s") when collector is running
   const svcs = d.services;
   let sh = '';
   const svcList = [
@@ -1160,9 +1436,22 @@ function update(d) {
   for (const [key, name, sched] of svcList) {
     const s = svcs[key];
     let dot = 'off', info = 'not loaded';
-    if (s && s.loaded) {
-      if (s.pid) { dot = 'on'; info = 'PID ' + s.pid; }
-      else { dot = 'sched'; info = sched + (s.exit != null ? '  exit=' + s.exit : ''); }
+    if (s) {
+      const running = s.running || (s.loaded && s.pid);
+      if (running) {
+        dot = 'on';
+        const uptime = s.uptime_sec;
+        if (uptime && uptime > 0) {
+          info = 'läuft · ' + fmtUptime(uptime);
+        } else if (s.pid) {
+          info = 'läuft · PID ' + s.pid;
+        } else {
+          info = 'läuft';
+        }
+      } else if (s.loaded) {
+        dot = 'sched';
+        info = sched + (s.exit != null ? '  exit=' + s.exit : '');
+      }
     }
     sh += '<div class="svc"><span class="svc-dot ' + dot + '"></span>'
         + '<span class="svc-name">' + name + '</span>'
@@ -1174,6 +1463,23 @@ function update(d) {
   const dy = d.day;
   if (dy) {
     $('day-title').textContent = 'Today · ' + d.today;
+
+    // Hero gauges (3 SVG rings: Sessions / Arbeitszeit / Focus)
+    const pctWork = Math.min(1, (dy.total_sec || 0) / (8 * 3600));
+    const pctFocus = Math.min(1, (dy.focus_count || 0) / 4.0);
+    const pctSessions = Math.min(1, (dy.sessions || 0) / 20.0);
+    const topicsCount = (dy.topics && dy.topics.length) || 0;
+    const gauges = [
+      {label: 'Sessions', value: dy.sessions, pct: pctSessions, color: 'var(--cyan)'},
+      {label: 'Arbeitszeit', value: fmt(dy.total_sec), pct: pctWork,
+       color: pctWork >= 0.5 ? 'var(--green)' : pctWork >= 0.2 ? 'var(--cyan)' : 'var(--yellow)',
+       hero: true, sub: Math.round(pctWork * 100) + '% von 8h'},
+      {label: 'Focus', value: dy.focus_count, pct: pctFocus,
+       color: dy.focus_count > 0 ? 'var(--green)' : 'var(--orange)',
+       sub: fmt(dy.focus_sec)},
+    ];
+    $('gauges-row').innerHTML = gauges.map(g => gaugeHtml(g)).join('');
+
     $('day-stats').innerHTML = [
       ['Active', fmt(dy.total_sec)],
       ['Sessions', dy.sessions],
@@ -1183,6 +1489,7 @@ function update(d) {
       ['Clicks', dy.clicks.toLocaleString('en')],
       ['Scroll', dy.scrolls.toLocaleString('en')],
       ['Clipboard', dy.clipboard + 'x'],
+      ['Topics', topicsCount],
     ].map(([l, v]) => '<div class="stat"><div class="stat-val">' + v + '</div><div class="stat-label">' + l + '</div></div>').join('');
 
     // App Categories with sub-apps
@@ -1277,6 +1584,28 @@ function update(d) {
           + '</div>';
     }, 10);
 
+    // Topics (aggregated from per-session LLM extraction)
+    const topics = dy.topics || [];
+    if (topics.length) {
+      const topicTotal = topics.reduce((a, t) => a + (t.sec || 0), 0);
+      const topicMax = Math.max(...topics.map(t => t.sec || 0), 1);
+      $('topics-meta').textContent = topics.length + ' · ' + fmt(topicTotal);
+      $('topics').innerHTML = paginated('dash-topics', topics, (t) => {
+        const widthPct = Math.round(((t.sec || 0) / topicMax) * 100);
+        const proj = t.project ? '<span class="topic-proj">' + esc(t.project) + '</span>' : '';
+        return '<div class="topic-row">'
+            + '<div class="topic-name">' + esc(t.name) + '</div>'
+            + proj
+            + '<div class="topic-bar-wrap"><div class="topic-bar" style="width:' + widthPct + '%"></div></div>'
+            + '<div class="topic-time">' + fmt(t.sec) + '</div>'
+            + '<div class="topic-sessions">×' + (t.sessions || 1) + '</div>'
+            + '</div>';
+      }, 10);
+    } else {
+      $('topics-meta').textContent = '';
+      $('topics').innerHTML = '<div style="color:var(--fg3);font-size:12px;padding:8px 0">Noch keine Themen erkannt. Topics werden vom lokalen LLM beim Aggregieren erzeugt.</div>';
+    }
+
     // Apps
     $('apps').innerHTML = paginated('dash-apps', dy.apps || [], (a, i) => {
       const c = PROJ_COLORS[i % PROJ_COLORS.length];
@@ -1288,16 +1617,21 @@ function update(d) {
           + '</div>';
     });
 
-    // Hourly chart
+    // Hourly chart — starts at 10:00 and wraps through midnight to 09:00.
+    // Display order: [10, 11, ..., 23, 0, 1, ..., 9]
     const maxH = Math.max(...dy.hourly, 1);
     const nowH = new Date().getHours();
+    const DAY_START_HOUR = 10;
     let ch = '';
-    for (let h = 6; h < 24; h++) {
+    for (let i = 0; i < 24; i++) {
+      const h = (DAY_START_HOUR + i) % 24;       // actual wall-clock hour
       const pct = dy.hourly[h] / maxH * 100;
       const cls = h === nowH ? ' now' : '';
+      // Label every 3rd column to keep the axis readable
+      const lbl = (i % 3 === 0 || i === 23) ? String(h).padStart(2, '0') : '';
       ch += '<div class="chart-bar-wrap">'
           + '<div class="chart-bar' + cls + '" style="height:' + pct + '%"></div>'
-          + '<div class="chart-lbl">' + h + '</div>'
+          + '<div class="chart-lbl">' + lbl + '</div>'
           + '</div>';
     }
     $('hourly-chart').innerHTML = ch;
@@ -1320,10 +1654,12 @@ function update(d) {
       const h = 3 + b * 2.5;
       bars += '<div class="sess-int-seg" style="height:'+h+'px;background:'+bg+'"></div>';
     }
+    const topicHtml = s.topic ? esc(s.topic) : '';
     return '<div class="sess-row">'
         + '<div class="sess-time">' + s.time + '</div>'
         + '<div class="sess-app">' + esc(s.app) + '</div>'
         + '<div class="sess-title">' + esc(s.title) + '</div>'
+        + '<div class="sess-topic">' + topicHtml + '</div>'
         + '<div class="sess-proj">' + esc(s.project) + '</div>'
         + '<div class="sess-dur-wrap"><div class="sess-dur">' + fmt(s.dur) + '</div>'
         + '<div class="sess-dur-bar"><div class="sess-dur-fill" style="width:' + durPct + '%"></div></div></div>'
@@ -1451,10 +1787,13 @@ function renderHeatmap(data) {
   if (!el) return;
   let html = '';
 
-  // Hour labels
+  // Hour labels — use wall-clock hours from the API (10-10 day).
+  const displayHours = data.display_hours || Array.from({length: 24}, (_, i) => i);
   html += '<div class="heatmap-hours">';
-  for (let h = 0; h < 24; h++) {
-    html += '<span>' + (h % 3 === 0 ? h : '') + '</span>';
+  for (let i = 0; i < displayHours.length; i++) {
+    const hr = displayHours[i];
+    const showLabel = (i % 3 === 0) || (i === displayHours.length - 1);
+    html += '<span>' + (showLabel ? String(hr).padStart(2, '0') : '') + '</span>';
   }
   html += '</div>';
 
@@ -1469,8 +1808,9 @@ function renderHeatmap(data) {
     const dd = d.date.slice(5); // MM-DD
     html += '<div class="heatmap-row">';
     html += '<div class="heatmap-label ' + cls + '">' + d.weekday + ' ' + dd.replace('-', '.') + '</div>';
-    d.hours.forEach((c, h) => {
-      html += '<div class="heatmap-cell ' + c + '" title="' + d.date + ' ' + h + ':00 — ' + c + '"></div>';
+    d.hours.forEach((c, idx) => {
+      const hr = displayHours[idx];
+      html += '<div class="heatmap-cell ' + c + '" title="' + d.date + ' ' + String(hr).padStart(2,'0') + ':00 — ' + c + '"></div>';
     });
     html += '<div class="heatmap-day-total">' + (d.active > 0 ? d.active + 'h' : '') + '</div>';
     html += '</div>';
@@ -1599,6 +1939,14 @@ h2 {
 .bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
 .bar-pct { width: 40px; text-align: right; color: var(--fg2); }
 .bar-time { width: 55px; text-align: right; color: var(--fg2); }
+.topic-dist-proj {
+  font-size: 10px; color: var(--cyan);
+  padding: 2px 7px; border: 1px solid var(--bg3); border-radius: 10px;
+  max-width: 110px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.topic-dist-count {
+  font-size: 10px; color: var(--fg3); min-width: 22px; text-align: right;
+}
 
 /* Timeline */
 .timeline-wrap { position: relative; margin: 8px 0; }
@@ -1650,6 +1998,15 @@ h2 {
 .sess-proj {
   width: 100px; flex-shrink: 0; text-align: right; color: var(--blue); font-size: 11px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sess-topic {
+  width: 150px; flex-shrink: 0; color: var(--cyan); font-size: 11px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-style: italic;
+}
+.sess-topic:empty { display: none; }
+.sess-tool {
+  display: inline-block; margin-left: 6px; color: var(--cyan); font-size: 10px;
+  opacity: 0.7; cursor: help;
 }
 .sess-dur-wrap { flex: 0.6; display: flex; align-items: center; gap: 6px; min-width: 100px; }
 .sess-dur { flex-shrink: 0; text-align: right; color: var(--yellow); white-space: nowrap; }
@@ -1798,9 +2155,10 @@ h2 {
 <div class="card" id="sessions-card">
   <h2>Sessions</h2>
   <div class="filter-bar" id="filter-bar">
-    <input type="text" id="f-text" placeholder="Suche..." oninput="applyFilters()">
+    <input type="text" id="f-text" placeholder="Suche in Titel/Topic/App..." oninput="applyFilters()">
     <select id="f-app" onchange="applyFilters()"><option value="">Alle Apps</option></select>
     <select id="f-proj" onchange="applyFilters()"><option value="">Alle Projekte</option></select>
+    <select id="f-topic" onchange="applyFilters()"><option value="">Alle Themen</option></select>
     <button class="sort-btn active" id="sort-time" onclick="sortBy('time')">Zeit</button>
     <button class="sort-btn" id="sort-dur" onclick="sortBy('duration')">Dauer</button>
     <span class="filter-count" id="filter-count"></span>
@@ -1948,6 +2306,21 @@ function renderOverview() {
   const scrolls = sessions.reduce((s, x) => s + (x.scroll_events_total || 0), 0);
   const clip = sessions.reduce((s, x) => s + (x.clipboard_events || []).length, 0);
 
+  // Topic stats
+  const topicSecs = {};
+  const topicCount = {};
+  const topicProject = {};
+  let sessionsWithTopic = 0;
+  sessions.forEach(s => {
+    const t = (s.topic || '').trim();
+    if (!t) return;
+    sessionsWithTopic++;
+    topicSecs[t] = (topicSecs[t] || 0) + (s.duration_seconds || 0);
+    topicCount[t] = (topicCount[t] || 0) + 1;
+    if (!topicProject[t]) topicProject[t] = s.project || '';
+  });
+  const distinctTopics = Object.keys(topicSecs).length;
+
   document.getElementById('day-stats').innerHTML = [
     ['Aktiv', fmt(totalSec)],
     ['Sessions', sessions.length],
@@ -1957,6 +2330,7 @@ function renderOverview() {
     ['Clicks', clicks.toLocaleString()],
     ['Scroll', scrolls.toLocaleString()],
     ['Clipboard', clip + 'x'],
+    ['Themen', distinctTopics + ' (' + sessionsWithTopic + ')'],
   ].map(([l,v]) => '<div class="stat"><div class="stat-val">'+v+'</div><div class="stat-label">'+l+'</div></div>').join('');
 
   // Distributions
@@ -1969,15 +2343,35 @@ function renderOverview() {
     projDist[p] = (projDist[p] || 0) + (s.duration_seconds || 0);
   });
 
-  // Store dist data globally for search
-  window._distData = { Apps: appDist, Projekte: projDist };
+  // Store dist data globally for search (Topics reuses the proj-coloured dot)
+  window._distData = { Apps: appDist, Projekte: projDist, Themen: topicSecs };
+  window._topicProject = topicProject;
+  window._topicCount = topicCount;
 
   function distRowHtml(title, name, sec, max) {
     const pct = Math.round(sec / totalSec * 100);
-    const c = title === 'Apps' ? appColor(name) : 'var(--cyan)';
+    let c;
+    if (title === 'Apps') c = appColor(name);
+    else if (title === 'Themen') c = 'var(--cyan)';
+    else c = 'var(--blue)';
+
+    // Optional extra suffix (project for topics, count)
+    let suffix = '';
+    if (title === 'Themen') {
+      const proj = window._topicProject ? window._topicProject[name] : '';
+      const cnt = window._topicCount ? window._topicCount[name] : 0;
+      if (proj) {
+        suffix += '<span class="topic-dist-proj" title="Projekt">' + esc(proj) + '</span>';
+      }
+      if (cnt) {
+        suffix += '<span class="topic-dist-count">×' + cnt + '</span>';
+      }
+    }
+
     return '<div class="bar-row">'
       + '<span class="app-dot" style="background:'+c+'"></span>'
       + '<div class="bar-name">' + esc(name) + '</div>'
+      + suffix
       + '<div class="bar-wrap"><div class="bar-fill" style="width:'+Math.round(sec/max*100)+'%;background:'+c+'"></div></div>'
       + '<div class="bar-pct">' + pct + '%</div>'
       + '<div class="bar-time">' + fmt(sec) + '</div></div>';
@@ -2063,9 +2457,13 @@ function renderOverview() {
     if (inp) { inp.focus(); inp.selectionStart = inp.selectionEnd = inp.value.length; }
   };
 
-  document.getElementById('distributions').innerHTML =
+  let distHtml =
     '<div class="dist-card">' + renderDist('Apps', appDist, '') + '</div>'
     + '<div class="dist-card">' + renderDist('Projekte', projDist, '') + '</div>';
+  if (distinctTopics > 0) {
+    distHtml += '<div class="dist-card">' + renderDist('Themen', topicSecs, '') + '</div>';
+  }
+  document.getElementById('distributions').innerHTML = distHtml;
 }
 
 // --- Timeline ---
@@ -2179,12 +2577,16 @@ function scrollToSession(idx) {
 function populateFilters() {
   const apps = [...new Set(sessions.map(s => s.app_name))].sort();
   const projs = [...new Set(sessions.map(s => s.project || 'Other'))].sort();
+  const topics = [...new Set(sessions.map(s => (s.topic || '').trim()).filter(Boolean))].sort();
   let ao = '<option value="">Alle Apps</option>';
   apps.forEach(a => ao += '<option>' + esc(a) + '</option>');
   document.getElementById('f-app').innerHTML = ao;
   let po = '<option value="">Alle Projekte</option>';
   projs.forEach(p => po += '<option>' + esc(p) + '</option>');
   document.getElementById('f-proj').innerHTML = po;
+  let to = '<option value="">Alle Themen (' + topics.length + ')</option>';
+  topics.forEach(t => to += '<option>' + esc(t) + '</option>');
+  document.getElementById('f-topic').innerHTML = to;
 }
 
 function applyFilters() {
@@ -2192,13 +2594,15 @@ function applyFilters() {
   const text = document.getElementById('f-text').value.toLowerCase();
   const app = document.getElementById('f-app').value;
   const proj = document.getElementById('f-proj').value;
+  const topic = document.getElementById('f-topic').value;
 
   filteredSessions = sessions.filter((s, i) => {
     s._origIdx = i;
     if (app && s.app_name !== app) return false;
     if (proj && (s.project || 'Other') !== proj) return false;
+    if (topic && (s.topic || '') !== topic) return false;
     if (text) {
-      const hay = ((s.app_name || '') + ' ' + (s.window_title || '') + ' ' + (s.project || '')).toLowerCase();
+      const hay = ((s.app_name || '') + ' ' + (s.window_title || '') + ' ' + (s.project || '') + ' ' + (s.topic || '')).toLowerCase();
       if (!hay.includes(text)) return false;
     }
     return true;
@@ -2248,12 +2652,15 @@ function sessRowHtml(s) {
   const expanded = expandedIdx === i;
   const durPct = Math.round((s.duration_seconds || 0) / _sessMaxDur * 100);
   const iv = Math.round(Math.min(s.intensity_score || 0, 10));
+  const topicHtml = s.topic ? esc(s.topic) : '';
+  const toolBadge = s.is_tool_app ? '<span class="sess-tool" title="Tool-App">◎</span>' : '';
   let h = '<div class="sess-row' + (expanded ? ' expanded' : '') + '" id="sess-' + i + '" onclick="toggleSession(' + i + ')">'
     + '<span class="sess-arrow">\u25B6</span>'
     + '<div class="sess-time">' + t + '</div>'
     + '<span class="app-dot" style="background:'+c+'"></span>'
-    + '<div class="sess-app">' + esc(s.app_name) + '</div>'
+    + '<div class="sess-app">' + esc(s.app_name) + toolBadge + '</div>'
     + '<div class="sess-title">' + esc(s.window_title || '\u2014') + '</div>'
+    + '<div class="sess-topic">' + topicHtml + '</div>'
     + '<div class="sess-proj">' + esc(s.project || '') + '</div>'
     + '<div class="sess-dur-wrap"><div class="sess-dur">' + fmt(s.duration_seconds) + '</div>'
     + '<div class="sess-dur-bar"><div class="sess-dur-fill" style="width:'+durPct+'%"></div></div></div>'
@@ -2331,8 +2738,12 @@ function renderDetail(s, idx) {
   // Left column
   h += '<div>';
   if (s.window_title) h += '<div class="detail-field"><div class="detail-label">Fenstertitel</div><div class="detail-val">' + esc(s.window_title) + '</div></div>';
+  if (s.topic) h += '<div class="detail-field"><div class="detail-label">Thema</div><div class="detail-val" style="color:var(--cyan)">' + esc(s.topic) + '</div></div>';
+  if (s.project) h += '<div class="detail-field"><div class="detail-label">Projekt</div><div class="detail-val" style="color:var(--blue)">' + esc(s.project) + (s.category ? ' <span style="color:var(--fg3);font-size:11px">· ' + esc(s.category) + '</span>' : '') + '</div></div>';
+  if (s.match_reason) h += '<div class="detail-field"><div class="detail-label">Match-Grund</div><div class="detail-val" style="font-family:monospace;font-size:11px;color:var(--fg2)">' + esc(s.match_reason) + '</div></div>';
   if (s.url) h += '<div class="detail-field"><div class="detail-label">URL</div><div class="detail-val">' + esc(s.url) + '</div></div>';
   if (s.git_repo) h += '<div class="detail-field"><div class="detail-label">Git</div><div class="detail-val">' + esc(s.git_repo) + ' / ' + esc(s.git_branch || '\u2014') + '</div></div>';
+  if (s.calendar_event) h += '<div class="detail-field"><div class="detail-label">Kalender</div><div class="detail-val">' + esc(s.calendar_event) + '</div></div>';
   if (s.app_category) h += '<div class="detail-field"><div class="detail-label">Kategorie</div><div class="detail-val">' + esc(s.app_category) + '</div></div>';
   if (s.parallel_media) h += '<div class="detail-field"><div class="detail-label">Media</div><div class="detail-val">\u266B ' + esc(typeof s.parallel_media === 'string' ? s.parallel_media : JSON.stringify(s.parallel_media)) + '</div></div>';
 
