@@ -473,7 +473,7 @@ def _extract_filename(title: str) -> str:
 def _strip_tool_app_suffix(title: str, suffixes: "list[str] | tuple[str, ...]") -> str:
     """Remove known tool-app suffixes from a window title.
 
-    E.g. "Fix MyProject login — Claude" → "Fix MyProject login".
+    E.g. "Fix login bug — Claude" → "Fix login bug".
     Returns the semantic title used for further matching.
     """
     for suffix in suffixes or ():

@@ -150,7 +150,6 @@ DOMAIN_CATEGORIES: dict[str, tuple[str, str]] = {
     "twitch.tv":             ("Entertainment", "Gaming"),
     "win2day.at":            ("Entertainment", "Gambling"),
     "bet365.com":            ("Entertainment", "Gambling"),
-    "example.com":           ("Entertainment", "Adult"),
     "imdb.com":              ("Entertainment", "Reference"),
     "rottentomatoes.com":    ("Entertainment", "Reference"),
     "letterboxd.com":        ("Entertainment", "Reference"),
