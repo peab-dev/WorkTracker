@@ -4619,21 +4619,30 @@ CONFIG_HTML = r"""<!doctype html>
     .row .control > input[type=text],
     .row .control > textarea { max-width: 100%; flex-basis: 100%; }
   }
-  .docs-card {
-    display: flex; align-items: center; gap: 14px;
-    padding: 14px 18px; margin-bottom: 18px;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-    color: var(--fg); text-decoration: none;
-    transition: border-color .15s, background .15s, transform .08s;
+  .docs-link-wrap {
+    display: flex; justify-content: center;
+    margin: 6px 0 22px;
   }
-  .docs-card:hover { border-color: var(--accent); background: var(--panel2); }
+  .docs-card {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 10px 18px;
+    background: transparent;
+    border: 1px solid var(--border); border-radius: 999px;
+    color: var(--accent); text-decoration: underline; text-underline-offset: 4px;
+    font-size: 16px; font-weight: 600; letter-spacing: .2px;
+    transition: border-color .15s, background .15s, color .15s, transform .08s;
+  }
+  .docs-card:hover {
+    border-color: var(--accent); background: rgba(212,245,0,.08);
+    color: var(--white);
+  }
   .docs-card:active { transform: translateY(1px); }
-  .docs-card > svg { flex: 0 0 auto; color: var(--accent); }
-  .docs-card .docs-card-text { flex: 1; min-width: 0; }
-  .docs-card .docs-card-title { font-size: 14px; font-weight: 600; letter-spacing: .2px; }
-  .docs-card .docs-card-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
-  .docs-card .arrow { color: var(--muted); transition: transform .15s, color .15s; }
-  .docs-card:hover .arrow { color: var(--accent); transform: translateX(2px); }
+  .docs-card .arrow {
+    display: inline-block; font-weight: 700;
+    text-decoration: none;
+    transition: transform .15s;
+  }
+  .docs-card:hover .arrow { transform: translateX(3px); }
   .switch { position: relative; width: 38px; height: 22px; display: inline-block; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .slider {
@@ -4756,18 +4765,16 @@ async function saveField(path, value) {
 const READONLY_PATHS = new Set(["author", "version"]);
 
 function renderDocsCard() {
+  const wrap = document.createElement("div");
+  wrap.className = "docs-link-wrap";
   const a = document.createElement("a");
   a.href = "/docs/index.html#config";
   a.target = "_blank";
   a.rel = "noopener";
   a.className = "docs-card";
-  a.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>' +
-    '<div class="docs-card-text">' +
-      '<div class="docs-card-title">Documentation</div>' +
-      '<div class="docs-card-sub">Keys, categories, LLM setup &mdash; opens in a new tab</div>' +
-    '</div>' +
-    '<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
-  return a;
+  a.innerHTML = 'Config Documentation <span class="arrow">&rsaquo;</span>';
+  wrap.appendChild(a);
+  return wrap;
 }
 
 function renderScalar(path, defaultValue, userValue) {
@@ -4954,6 +4961,9 @@ async function load() {
     for (const row of rows) sec.appendChild(row);
     main.appendChild(sec);
   }
+
+  // Second docs link — at the very bottom of the page
+  main.appendChild(renderDocsCard());
 }
 
 async function doRestart(which, btn) {
