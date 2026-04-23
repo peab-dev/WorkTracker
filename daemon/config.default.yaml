@@ -8,7 +8,7 @@
 # if it is missing.
 
 version: "0.2.0"
-author: "worktracker"
+author: "peab.at"
 
 collector:
   interval_seconds: 5
