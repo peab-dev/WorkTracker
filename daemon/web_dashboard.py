@@ -4530,9 +4530,19 @@ CONFIG_HTML = r"""<!doctype html>
 <title>WorkTracker — Config</title>
 <style>
   :root {
-    --bg: #0f1115; --panel: #161a22; --panel2: #1c2230;
-    --fg: #e6e9ef; --muted: #8b93a7; --accent: #5aa9ff; --ok: #3ecf8e;
-    --warn: #f5b041; --err: #ff6b6b; --border: #262c3a;
+    /* Palette mirrors docs/index.html so /config matches the documentation skin */
+    --bg: #0c1116;       /* docs --bg */
+    --panel: #141a20;    /* docs --bg2 */
+    --panel2: #1b222a;   /* docs --bg3 */
+    --fg: #cfd7e0;       /* docs --text */
+    --muted: #8a95a3;    /* docs --text2 */
+    --accent: #d4f500;   /* docs --acid (primary highlight) */
+    --accent2: #4fc3d8;  /* docs --cyan (secondary accent, hover/focus) */
+    --ok: #6fe28a;       /* docs --green */
+    --warn: #ff5a1f;     /* docs --orange */
+    --err: #ff4d4f;      /* docs --red */
+    --border: #2b3642;   /* docs --border */
+    --white: #f4f8ff;    /* docs --white */
   }
   * { box-sizing: border-box; }
   body {
@@ -4541,7 +4551,7 @@ CONFIG_HTML = r"""<!doctype html>
   }
   header {
     position: sticky; top: 0; z-index: 10;
-    background: rgba(15,17,21,.92); backdrop-filter: blur(8px);
+    background: rgba(12,17,22,.92); backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--border);
     padding: 12px 20px; display: flex; align-items: center; gap: 14px;
   }
@@ -4558,11 +4568,11 @@ CONFIG_HTML = r"""<!doctype html>
     display: inline-flex; align-items: center; gap: 7px;
   }
   button svg { flex: 0 0 auto; display: block; }
-  button:hover { background: #222a3a; border-color: #3a4358; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #0b1220; font-weight: 600; }
-  button.primary:hover { filter: brightness(1.08); }
-  button.danger { border-color: #5a2a2a; }
-  button.danger:hover { background: #3a1f1f; border-color: var(--err); }
+  button:hover { background: var(--border); border-color: var(--accent2); color: var(--white); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0c1116; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); color: #0c1116; }
+  button.danger { border-color: var(--err); }
+  button.danger:hover { background: rgba(255,77,79,.12); border-color: var(--err); color: var(--err); }
   button:disabled { opacity: .5; cursor: not-allowed; }
   main { max-width: 1180px; margin: 0 auto; padding: 18px 24px 80px; }
   section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 18px; overflow: hidden; }
@@ -4587,17 +4597,18 @@ CONFIG_HTML = r"""<!doctype html>
   .row .control > input[type=text],
   .row .control > textarea { flex: 1 1 260px; min-width: 0; max-width: 640px; }
   input[type=text], input[type=number], textarea {
-    background: #0b0e13; color: var(--fg);
+    background: var(--bg); color: var(--fg);
     border: 1px solid var(--border); border-radius: 5px;
     padding: 7px 10px; font: 13px ui-monospace, Menlo, monospace;
     outline: none; box-sizing: border-box;
   }
   input[type=number] { flex: 0 0 140px; max-width: 160px; }
   input[type=text]:focus, input[type=number]:focus, textarea:focus {
-    border-color: var(--accent);
+    border-color: var(--accent2);
+    box-shadow: 0 0 0 1px var(--accent2);
   }
   input[readonly], textarea[readonly] {
-    color: var(--muted); background: #0a0c11; cursor: default;
+    color: var(--muted); background: var(--panel); cursor: default;
     border-color: rgba(255,255,255,.04);
   }
   input[readonly]:focus, textarea[readonly]:focus { border-color: rgba(255,255,255,.08); }
@@ -4626,16 +4637,17 @@ CONFIG_HTML = r"""<!doctype html>
   .switch { position: relative; width: 38px; height: 22px; display: inline-block; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .slider {
-    position: absolute; inset: 0; background: #2a3142; border-radius: 22px;
+    position: absolute; inset: 0; background: var(--panel2); border-radius: 22px;
     cursor: pointer; transition: background .15s;
+    border: 1px solid var(--border);
   }
   .slider::before {
-    content: ""; position: absolute; left: 3px; top: 3px;
-    width: 16px; height: 16px; background: #cfd4e0; border-radius: 50%;
-    transition: transform .15s;
+    content: ""; position: absolute; left: 2px; top: 2px;
+    width: 16px; height: 16px; background: var(--muted); border-radius: 50%;
+    transition: transform .15s, background .15s;
   }
-  .switch input:checked + .slider { background: var(--ok); }
-  .switch input:checked + .slider::before { transform: translateX(16px); background: #fff; }
+  .switch input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+  .switch input:checked + .slider::before { transform: translateX(16px); background: #0c1116; }
   .toast {
     position: fixed; bottom: 18px; right: 20px; padding: 8px 14px;
     background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
@@ -4745,7 +4757,7 @@ const READONLY_PATHS = new Set(["author", "version"]);
 
 function renderDocsCard() {
   const a = document.createElement("a");
-  a.href = "/docs";
+  a.href = "/docs/index.html#config";
   a.target = "_blank";
   a.rel = "noopener";
   a.className = "docs-card";
