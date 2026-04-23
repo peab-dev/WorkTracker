@@ -12,7 +12,7 @@ Built for macOS (Apple Silicon), designed as a fully local, private productivity
 `Runs Locally` · `Open Source` · `No Blackbox` · `App Tracking` · `Flow Insights`
 
 
-[Go to Full Documentation](https://peab.at/work-tracker/docs/index.html)
+[Go to Full Documentation](docs/index.html)
 
 
 ---
@@ -73,6 +73,6 @@ WorkTracker v0.2.0 — made with <3 by [peab.at](https://peab.at)
 
 ---
 
-[Go to Full Documentation](https://peab.at/work-tracker/docs/index.html)
+[Go to Full Documentation](docs/index.html)
 
 
