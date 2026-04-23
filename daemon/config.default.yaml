@@ -7,7 +7,7 @@
 # Every loader in the daemon bootstraps the user file from this default
 # if it is missing.
 
-version: "0.0.1"
+version: "0.2.0"
 author: "worktracker"
 
 collector:

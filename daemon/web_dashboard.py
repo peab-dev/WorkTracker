@@ -30,15 +30,38 @@ import fnmatch
 import yaml
 
 BASE = Path.home() / "WorkTracker"
-DATA_SNAP = BASE / "data" / "snapshots"
-DATA_SESS = BASE / "data" / "sessions"
-DATA_SCREENSHOTS = BASE / "data" / "screenshots"
-SUMMARIES = BASE / "summaries"
-LOGS = BASE / "logs"
 PATTERNS_FILE = BASE / "daemon" / "project_patterns.yaml"
 PATTERNS_DEFAULT_FILE = BASE / "daemon" / "project_patterns.default.yaml"
 CONFIG_FILE = BASE / "daemon" / "config.yaml"
 CONFIG_DEFAULT_FILE = BASE / "daemon" / "config.default.yaml"
+
+
+def _paths_from_config():
+    try:
+        with open(CONFIG_FILE) as f:
+            cfg = yaml.safe_load(f) or {}
+        col = cfg.get("collector", {})
+        agg = cfg.get("aggregator", {})
+        summaries = Path(agg["summaries_dir"]).expanduser()
+        return (
+            Path(col["data_dir"]),
+            Path(agg["sessions_dir"]),
+            Path(col["screenshot"]["dir"]),
+            summaries,
+            Path(col["log_dir"]),
+        )
+    except Exception:
+        summaries = BASE / "summaries"
+        return (
+            BASE / "data" / "snapshots",
+            BASE / "data" / "sessions",
+            BASE / "data" / "screenshots",
+            summaries,
+            BASE / "logs",
+        )
+
+
+DATA_SNAP, DATA_SESS, DATA_SCREENSHOTS, SUMMARIES, LOGS = _paths_from_config()
 
 # Apps that represent inactive/lock-screen state — excluded from stats
 INACTIVE_APPS = {"loginwindow"}
@@ -575,6 +598,14 @@ def api_live():
             t = datetime.fromisoformat(s["start"]).strftime("%H:%M")
         except Exception:
             t = "—"
+        shots = [p for p in (s.get("screenshot_paths") or []) if isinstance(p, str) and p]
+        first_shot_url = ""
+        if shots:
+            try:
+                parts = shots[0].split("/")
+                first_shot_url = f"/screenshots/file/{parts[-2]}/{parts[-1]}"
+            except Exception:
+                first_shot_url = ""
         recent_sess.append({
             "time": t,
             "app": s.get("app_name", "—"),
@@ -583,6 +614,8 @@ def api_live():
             "topic": s.get("topic", ""),
             "dur": s.get("duration_seconds", 0),
             "intensity": s.get("intensity_score", 0),
+            "screenshots": len(shots),
+            "screenshot_url": first_shot_url,
         })
 
     # Reports
@@ -899,8 +932,38 @@ def api_statistics():
 # ── Screenshots ─────────────────────────────────────────────
 import re as _re
 
+# Accepted screenshot formats: PNG is what the collector writes; JPG/JPEG
+# is what ``wt compress`` produces. The dashboard must serve both so old
+# (compressed) days stay visible alongside today's (raw) captures.
+_IMG_EXTS = ("png", "jpg", "jpeg")
+_IMG_GLOBS = tuple(f"*.{ext}" for ext in _IMG_EXTS)
+_MIME_FOR_EXT = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}
+
 _SAFE_DATE = _re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_SAFE_PNG = _re.compile(r"^[A-Za-z0-9_\-]+\.png$")
+_SAFE_IMG = _re.compile(r"^[A-Za-z0-9_\-]+\.(?:png|jpe?g)$", _re.IGNORECASE)
+
+
+def _iter_screenshots(folder):
+    """Yield all image files in ``folder`` across supported extensions.
+
+    macOS creates ``._<name>`` AppleDouble shadows on non-HFS+ volumes
+    (e.g. external drives formatted exFAT). These are binary resource
+    forks, not real images — skip them so the UI stays clean.
+    """
+    for pat in _IMG_GLOBS:
+        for f in folder.glob(pat):
+            if f.name.startswith("._"):
+                continue
+            yield f
+
+
+def _folder_has_screenshots(folder) -> bool:
+    return any(True for _ in _iter_screenshots(folder))
+
+
+def _mimetype_for(filename: str) -> str:
+    ext = filename.rsplit(".", 1)[-1].lower()
+    return _MIME_FOR_EXT.get(ext, "application/octet-stream")
 
 
 def _screenshot_dates() -> list[str]:
@@ -908,13 +971,13 @@ def _screenshot_dates() -> list[str]:
         return []
     out = []
     for d in DATA_SCREENSHOTS.iterdir():
-        if d.is_dir() and _SAFE_DATE.match(d.name) and any(d.glob("*.png")):
+        if d.is_dir() and _SAFE_DATE.match(d.name) and _folder_has_screenshots(d):
             out.append(d.name)
     return sorted(out, reverse=True)
 
 
 def _parse_shot_filename_to_iso(filename: str) -> "str | None":
-    """Convert ``YYYYMMDDTHHMMSS.png`` to an ISO timestamp string."""
+    """Convert ``YYYYMMDDTHHMMSS.<ext>`` to an ISO timestamp string."""
     stem = filename.rsplit(".", 1)[0]
     try:
         return datetime.strptime(stem, "%Y%m%dT%H%M%S").isoformat()
@@ -949,7 +1012,7 @@ def api_screenshots_for_date(date):
     path_to_session = _build_path_to_session_map(sessions)
 
     items = []
-    for f in sorted(folder.glob("*.png")):
+    for f in sorted(_iter_screenshots(folder)):
         abs_path = str(f)
         sess = path_to_session.get(abs_path)
         ts_iso = _parse_shot_filename_to_iso(f.name)
@@ -973,17 +1036,36 @@ def api_screenshots_for_date(date):
 
 @app.route("/screenshots/file/<date>/<filename>")
 def screenshot_file(date, filename):
-    if not _SAFE_DATE.match(date) or not _SAFE_PNG.match(filename):
+    if not _SAFE_DATE.match(date) or not _SAFE_IMG.match(filename):
         abort(404)
     folder = DATA_SCREENSHOTS / date
     if not (folder / filename).is_file():
         abort(404)
-    return send_from_directory(folder, filename, mimetype="image/png")
+    return send_from_directory(folder, filename, mimetype=_mimetype_for(filename))
 
 
 @app.route("/screenshots")
 def screenshots_page():
     return render_template_string(SCREENSHOTS_HTML)
+
+
+# ── Docs (static, served from ~/WorkTracker/docs) ────────────────────────────
+DOCS_DIR = BASE / "docs"
+
+
+@app.route("/docs")
+@app.route("/docs/")
+def docs_index():
+    if not (DOCS_DIR / "index.html").exists():
+        abort(404)
+    return send_from_directory(str(DOCS_DIR), "index.html")
+
+
+@app.route("/docs/<path:filename>")
+def docs_file(filename):
+    if ".." in filename:
+        abort(400)
+    return send_from_directory(str(DOCS_DIR), filename)
 
 
 # ── HTML ─────────────────────────────────────────────────────
@@ -1166,6 +1248,10 @@ h2 {
 .sess-dur-fill { height: 100%; border-radius: 3px; background: #888; }
 .sess-int-wrap { width: 36px; flex-shrink: 0; display: flex; align-items: flex-end; gap: 2px; height: 14px; }
 .sess-int-seg { width: 4px; border-radius: 1px; }
+.sess-scr { width: 44px; flex-shrink: 0; text-align: right; color: var(--fg2); font-size: 11px;
+  text-decoration: none; white-space: nowrap; }
+.sess-scr:hover { color: var(--cyan); }
+.sess-scr-empty { width: 44px; flex-shrink: 0; }
 
 /* Chart */
 .chart-wrap { height: 120px; display: flex; align-items: flex-end; gap: 2px; padding-top: 8px; }
@@ -1276,7 +1362,7 @@ h2 {
 <body>
 
 <div class="header">
-  <h1>WorkTracker &nbsp;<a href="/explore" style="font-size:12px;font-weight:400;color:var(--fg2)">Explore &rarr;</a> &nbsp;<a href="/statistics" style="font-size:12px;font-weight:400;color:var(--fg2)">Statistics &rarr;</a> &nbsp;<a href="/screenshots" style="font-size:12px;font-weight:400;color:var(--fg2)">Screenshots &rarr;</a></h1>
+  <h1>Dashboard &nbsp;/ &nbsp;<a href="/explore" style="color:var(--fg2);font-size:12px">Explore</a> &nbsp;/ &nbsp;<a href="/statistics" style="color:var(--fg2);font-size:12px">Statistics</a> &nbsp;/ &nbsp;<a href="/screenshots" style="color:var(--fg2);font-size:12px">Screenshots</a> &nbsp;/ &nbsp;<a href="/config" style="color:var(--fg2);font-size:12px">Config</a></h1>
   <div class="header-right">
     <span class="dot" id="pulse">●</span>
     <span id="clock">—</span>
@@ -1804,6 +1890,10 @@ function update(d) {
       bars += '<div class="sess-int-seg" style="height:'+h+'px;background:'+bg+'"></div>';
     }
     const topicHtml = s.topic ? esc(s.topic) : '';
+    const scrN = s.screenshots || 0;
+    const scrHtml = scrN && s.screenshot_url
+      ? '<a class="sess-scr" href="'+esc(s.screenshot_url)+'" target="_blank" title="'+scrN+' Screenshot'+(scrN>1?'s':'')+'">📷 '+scrN+'</a>'
+      : '<span class="sess-scr-empty"></span>';
     return '<div class="sess-row">'
         + '<div class="sess-time">' + s.time + '</div>'
         + '<div class="sess-app">' + esc(s.app) + '</div>'
@@ -1813,6 +1903,7 @@ function update(d) {
         + '<div class="sess-dur-wrap"><div class="sess-dur">' + fmt(s.dur) + '</div>'
         + '<div class="sess-dur-bar"><div class="sess-dur-fill" style="width:' + durPct + '%"></div></div></div>'
         + '<div class="sess-int-wrap">' + bars + '</div>'
+        + scrHtml
         + '</div>';
   });
   $('sessions').innerHTML = sessHtml || '<div style="color:var(--fg2)">—</div>';
@@ -2163,6 +2254,10 @@ h2 {
 .sess-dur-fill { height: 100%; border-radius: 3px; background: #888; }
 .sess-int-wrap { width: 36px; flex-shrink: 0; display: flex; align-items: flex-end; gap: 2px; height: 14px; }
 .sess-int-seg { width: 4px; border-radius: 1px; }
+.sess-scr { width: 44px; flex-shrink: 0; text-align: right; color: var(--fg2); font-size: 11px;
+  text-decoration: none; white-space: nowrap; }
+.sess-scr:hover { color: var(--cyan); }
+.sess-scr-empty { width: 44px; flex-shrink: 0; }
 .sess-snaps { width: 30px; flex-shrink: 0; text-align: right; color: var(--fg3); font-size: 11px; }
 .sess-arrow { width: 16px; flex-shrink: 0; color: var(--fg3); text-align: center; transition: transform 0.2s; font-size: 10px; }
 .sess-row.expanded .sess-arrow { transform: rotate(90deg); }
@@ -2271,7 +2366,7 @@ h2 {
 <body>
 
 <div class="header">
-  <h1><a href="/" style="color:var(--fg2);font-size:12px">Dashboard</a> &nbsp;/ &nbsp;Explore &nbsp;/ &nbsp;<a href="/statistics" style="color:var(--fg2);font-size:12px">Statistics</a> &nbsp;/ &nbsp;<a href="/screenshots" style="color:var(--fg2);font-size:12px">Screenshots</a></h1>
+  <h1><a href="/" style="color:var(--fg2);font-size:12px">Dashboard</a> &nbsp;/ &nbsp;Explore &nbsp;/ &nbsp;<a href="/statistics" style="color:var(--fg2);font-size:12px">Statistics</a> &nbsp;/ &nbsp;<a href="/screenshots" style="color:var(--fg2);font-size:12px">Screenshots</a> &nbsp;/ &nbsp;<a href="/config" style="color:var(--fg2);font-size:12px">Config</a></h1>
   <div class="header-right" id="status-text"></div>
 </div>
 
@@ -2793,6 +2888,13 @@ function intBars(val) {
   return b;
 }
 
+function scrUrlFromPath(p) {
+  if (!p) return '';
+  const parts = String(p).split('/');
+  if (parts.length < 2) return '';
+  return '/screenshots/file/' + parts[parts.length - 2] + '/' + parts[parts.length - 1];
+}
+
 function sessRowHtml(s) {
   const i = s._origIdx;
   const start = new Date(s.start);
@@ -2803,6 +2905,12 @@ function sessRowHtml(s) {
   const iv = Math.round(Math.min(s.intensity_score || 0, 10));
   const topicHtml = s.topic ? esc(s.topic) : '';
   const toolBadge = s.is_tool_app ? '<span class="sess-tool" title="Tool-App">◎</span>' : '';
+  const scrPaths = s.screenshot_paths || [];
+  const scrN = scrPaths.length;
+  const scrUrl = scrN ? scrUrlFromPath(scrPaths[0]) : '';
+  const scrHtml = scrN && scrUrl
+    ? '<a class="sess-scr" href="'+esc(scrUrl)+'" target="_blank" onclick="event.stopPropagation()" title="'+scrN+' Screenshot'+(scrN>1?'s':'')+'">📷 '+scrN+'</a>'
+    : '<span class="sess-scr-empty"></span>';
   let h = '<div class="sess-row' + (expanded ? ' expanded' : '') + '" id="sess-' + i + '" onclick="toggleSession(' + i + ')">'
     + '<span class="sess-arrow">\u25B6</span>'
     + '<div class="sess-time">' + t + '</div>'
@@ -2814,6 +2922,7 @@ function sessRowHtml(s) {
     + '<div class="sess-dur-wrap"><div class="sess-dur">' + fmt(s.duration_seconds) + '</div>'
     + '<div class="sess-dur-bar"><div class="sess-dur-fill" style="width:'+durPct+'%"></div></div></div>'
     + '<div class="sess-int-wrap">' + intBars(s.intensity_score) + '</div>'
+    + scrHtml
     + '<div class="sess-snaps">' + (s.snapshot_count || 0) + '</div>'
     + '</div>';
   h += '<div class="sess-detail' + (expanded ? ' show' : '') + '" id="detail-' + i + '">'
@@ -3326,7 +3435,9 @@ a:hover { text-decoration: underline; }
   padding-bottom: 10px; border-bottom: 1px solid var(--bg3);
   flex-wrap: wrap;
 }
-.chart-box { height: 680px; width: 100%; }
+.chart-box { height: min(1100px, calc(100vh - 180px)); min-height: 760px; width: 100%; }
+#sankey-chart { height: min(1400px, calc(100vh - 160px)); min-height: 960px; }
+#matrix-chart { min-height: 760px; }
 .chart-hint {
   color: var(--fg3); font-size: 11px; margin-bottom: 8px;
   font-style: italic;
@@ -3336,7 +3447,7 @@ a:hover { text-decoration: underline; }
 <body>
 
 <div class="header">
-  <h1><a href="/" style="color:var(--fg2);font-size:12px">Dashboard</a> &nbsp;/ &nbsp;<a href="/explore" style="color:var(--fg2);font-size:12px">Explore</a> &nbsp;/ &nbsp;Statistics &nbsp;/ &nbsp;<a href="/screenshots" style="color:var(--fg2);font-size:12px">Screenshots</a></h1>
+  <h1><a href="/" style="color:var(--fg2);font-size:12px">Dashboard</a> &nbsp;/ &nbsp;<a href="/explore" style="color:var(--fg2);font-size:12px">Explore</a> &nbsp;/ &nbsp;Statistics &nbsp;/ &nbsp;<a href="/screenshots" style="color:var(--fg2);font-size:12px">Screenshots</a> &nbsp;/ &nbsp;<a href="/config" style="color:var(--fg2);font-size:12px">Config</a></h1>
   <div class="header-right" id="clock">—</div>
 </div>
 
@@ -3354,6 +3465,18 @@ a:hover { text-decoration: underline; }
     </div>
     <div class="group">
       <label><input type="checkbox" id="hide-empty"> Ohne Topic/Projekt ausblenden</label>
+    </div>
+    <div class="group">
+      <label>Top (pro Ebene)
+        <select id="top-n">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">Alle</option>
+        </select>
+      </label>
     </div>
   </div>
   <div class="summary" id="summary">Lade…</div>
@@ -3391,7 +3514,7 @@ a:hover { text-decoration: underline; }
 
   <!-- Tab 2: Sankey -->
   <div class="tab-panel" id="panel-sankey" data-tab="sankey">
-    <div class="chart-hint">Fluss Topic → Project → App. Linkbreite = summierte Dauer. Zeigt Top 25 pro Ebene. Filter aus dem Zusammenhänge-Tab gilt hier ebenfalls.</div>
+    <div class="chart-hint">Fluss Topic → Project → App. Linkbreite = summierte Dauer. Zeigt <span class="top-n-label">Top 25</span> pro Ebene. Filter aus dem Zusammenhänge-Tab gilt hier ebenfalls.</div>
     <div class="chart-box" id="sankey-chart"></div>
   </div>
 
@@ -3413,7 +3536,7 @@ a:hover { text-decoration: underline; }
         </select>
       </label>
     </div>
-    <div class="chart-hint">Farbintensität = summierte Dauer. Tooltip zeigt die Top 3 der jeweils dritten Dimension. Zeigt Top 30 pro Achse.</div>
+    <div class="chart-hint">Farbintensität = summierte Dauer. Tooltip zeigt die Top 3 der jeweils dritten Dimension. Zeigt <span class="top-n-label">Top 25</span> pro Achse.</div>
     <div class="chart-box" id="matrix-chart"></div>
   </div>
 </div>
@@ -3426,10 +3549,22 @@ const state = {
   selection: { topic: new Set(), project: new Set(), app: new Set() },
   activeTab: 'crossfilter',
   hideEmpty: false,
+  topN: 25,                       // Top-N per level (Topic/Project/App).
+                                  // Infinity means "show all".
   matrixRow: 'topic',
   matrixCol: 'project',
   charts: { sankey: null, matrix: null },
 };
+
+// Helper: apply state.topN to a sorted list. Infinity → return as-is.
+function applyTopN(items) {
+  return Number.isFinite(state.topN) ? items.slice(0, state.topN) : items;
+}
+
+// Helper: format the current Top-N for hint labels.
+function topNLabel() {
+  return Number.isFinite(state.topN) ? ('Top ' + state.topN) : 'Alle';
+}
 
 const $ = id => document.getElementById(id);
 
@@ -3555,11 +3690,17 @@ function renderCrossfilter() {
   cols.forEach(c => {
     // Each column sees triples filtered by the OTHER columns only,
     // so selecting in a column doesn't collapse that column to 1 row.
-    const items = aggregateBy(c.field, filteredTriples(c.field));
+    const allItems = aggregateBy(c.field, filteredTriples(c.field));
+    const items = applyTopN(allItems);
     const max = (items[0] && items[0].sec) || 1;
     const container = $(c.el);
     const countEl = container.parentElement.querySelector('.count');
-    if (countEl) countEl.textContent = items.length;
+    // Show "visible / total" when Top-N clips the list.
+    if (countEl) {
+      countEl.textContent = (items.length < allItems.length)
+        ? (items.length + ' / ' + allItems.length)
+        : items.length;
+    }
     if (!items.length) {
       container.innerHTML = '<div class="cf-empty">Keine Daten</div>';
       return;
@@ -3611,17 +3752,17 @@ function renderSankey() {
     showEmptyChart(chart, 'Keine Daten im Zeitraum');
     return;
   }
-  // Limit each axis to top N by total duration, otherwise labels overlap
-  const LIMIT = 25;
+  // Limit each axis to top N by total duration, otherwise labels overlap.
+  // state.topN controls this; Infinity means "show every distinct value".
   const topTotals = new Map(), projTotals = new Map(), appTotals = new Map();
   for (const t of triples) {
     topTotals.set(t.topic, (topTotals.get(t.topic) || 0) + t.sec);
     projTotals.set(t.project, (projTotals.get(t.project) || 0) + t.sec);
     appTotals.set(t.app, (appTotals.get(t.app) || 0) + t.sec);
   }
-  const topKeep = new Set([...topTotals.entries()].sort((a,b)=>b[1]-a[1]).slice(0, LIMIT).map(x=>x[0]));
-  const projKeep = new Set([...projTotals.entries()].sort((a,b)=>b[1]-a[1]).slice(0, LIMIT).map(x=>x[0]));
-  const appKeep = new Set([...appTotals.entries()].sort((a,b)=>b[1]-a[1]).slice(0, LIMIT).map(x=>x[0]));
+  const topKeep  = new Set(applyTopN([...topTotals.entries() ].sort((a,b)=>b[1]-a[1])).map(x=>x[0]));
+  const projKeep = new Set(applyTopN([...projTotals.entries()].sort((a,b)=>b[1]-a[1])).map(x=>x[0]));
+  const appKeep  = new Set(applyTopN([...appTotals.entries() ].sort((a,b)=>b[1]-a[1])).map(x=>x[0]));
   const keptTriples = triples.filter(t => topKeep.has(t.topic) && projKeep.has(t.project) && appKeep.has(t.app));
   if (!keptTriples.length) {
     showEmptyChart(chart, 'Keine überschneidenden Top-Einträge');
@@ -3695,15 +3836,15 @@ function renderMatrix() {
   const col = state.matrixCol;
   const third = ['topic', 'project', 'app'].find(d => d !== row && d !== col);
 
-  // Top 30 per axis by total duration
+  // Top-N per axis by total duration (configurable via state.topN).
   const rowTotals = new Map();
   const colTotals = new Map();
   for (const t of triples) {
     rowTotals.set(t[row], (rowTotals.get(t[row]) || 0) + t.sec);
     colTotals.set(t[col], (colTotals.get(t[col]) || 0) + t.sec);
   }
-  const topRows = [...rowTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30).map(x => x[0]);
-  const topCols = [...colTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 30).map(x => x[0]);
+  const topRows = applyTopN([...rowTotals.entries()].sort((a, b) => b[1] - a[1])).map(x => x[0]);
+  const topCols = applyTopN([...colTotals.entries()].sort((a, b) => b[1] - a[1])).map(x => x[0]);
   const rowKeep = new Set(topRows);
   const colKeep = new Set(topCols);
   const rowIdx = new Map(topRows.map((r, i) => [r, i]));
@@ -3828,6 +3969,12 @@ function init() {
   $('refresh-btn').addEventListener('click', loadStats);
   $('hide-empty').addEventListener('change', e => {
     state.hideEmpty = e.target.checked;
+    renderAll();
+  });
+  $('top-n').addEventListener('change', e => {
+    const v = e.target.value;
+    state.topN = (v === 'all') ? Infinity : parseInt(v, 10);
+    document.querySelectorAll('.top-n-label').forEach(el => el.textContent = topNLabel());
     renderAll();
   });
   $('reset-btn').addEventListener('click', resetSelection);
@@ -3971,7 +4118,7 @@ h1 a:hover { color: var(--cyan); }
 </head>
 <body>
 <div class="header">
-  <h1><a href="/">Dashboard</a> &nbsp;/ &nbsp;<a href="/explore">Explore</a> &nbsp;/ &nbsp;<a href="/statistics">Statistics</a> &nbsp;/ &nbsp;Screenshots</h1>
+  <h1><a href="/" style="color:var(--fg2);font-size:12px">Dashboard</a> &nbsp;/ &nbsp;<a href="/explore" style="color:var(--fg2);font-size:12px">Explore</a> &nbsp;/ &nbsp;<a href="/statistics" style="color:var(--fg2);font-size:12px">Statistics</a> &nbsp;/ &nbsp;Screenshots &nbsp;/ &nbsp;<a href="/config" style="color:var(--fg2);font-size:12px">Config</a></h1>
   <div class="toolbar">
     <label for="date-select">Datum:</label>
     <select id="date-select"></select>
@@ -4105,6 +4252,730 @@ async function init() {
 }
 
 init();
+</script>
+</body>
+</html>"""
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Config-Editor — `wt config` öffnet /config (Label/Value-Editor)
+# ═══════════════════════════════════════════════════════════════════════════
+
+AGG_LABELS = (
+    "com.peab.worktracker.aggregator.daily",
+    "com.peab.worktracker.aggregator.weekly",
+    "com.peab.worktracker.aggregator.monthly",
+)
+# Keys that may not be written via the config editor API.
+READONLY_CONFIG_PATHS = frozenset({"author", "version"})
+COL_LABEL = "com.peab.worktracker.collector"
+LAUNCH_AGENTS = Path.home() / "Library" / "LaunchAgents"
+
+
+def _cfg_get(d, path):
+    for p in path.split("."):
+        if not isinstance(d, dict) or p not in d:
+            return None
+        d = d[p]
+    return d
+
+
+def _cfg_set(d, path, value):
+    parts = path.split(".")
+    for p in parts[:-1]:
+        nxt = d.get(p)
+        if not isinstance(nxt, dict):
+            nxt = {}
+            d[p] = nxt
+        d = nxt
+    d[parts[-1]] = value
+
+
+def _cfg_coerce(value, default):
+    """Coerce an incoming JSON value to the type suggested by the default."""
+    if default is None:
+        return value
+    if isinstance(default, bool):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in ("1", "true", "yes", "on")
+        return bool(value)
+    if isinstance(default, int) and not isinstance(default, bool):
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, (int, float)):
+            return int(value)
+        s = str(value).strip()
+        return int(s) if s else 0
+    if isinstance(default, float):
+        if isinstance(value, (int, float)):
+            return float(value)
+        s = str(value).strip()
+        return float(s) if s else 0.0
+    if isinstance(default, list):
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            return [ln.strip() for ln in value.splitlines() if ln.strip()]
+        return list(value) if value is not None else []
+    if isinstance(default, dict):
+        if isinstance(value, dict):
+            return value
+        raise ValueError("dict expected")
+    # string default
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _cfg_write_atomic(data: dict) -> None:
+    _ensure_user_config()
+    tmp = CONFIG_FILE.with_suffix(CONFIG_FILE.suffix + ".tmp")
+    tmp.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
+    os.replace(tmp, CONFIG_FILE)
+
+
+def _cfg_load_pair():
+    """Return (default_cfg, user_cfg). Bootstraps user file if missing."""
+    _ensure_user_config()
+    try:
+        default = yaml.safe_load(CONFIG_DEFAULT_FILE.read_text()) or {}
+    except Exception:
+        default = {}
+    try:
+        user = yaml.safe_load(CONFIG_FILE.read_text()) or {}
+    except Exception:
+        user = {}
+    return default, user
+
+
+def _safe_path_under_home(p: str) -> Path | None:
+    try:
+        resolved = Path(p).expanduser().resolve()
+    except Exception:
+        return None
+    home = Path.home().resolve()
+    try:
+        resolved.relative_to(home)
+    except ValueError:
+        return None
+    return resolved
+
+
+@app.route("/api/config", methods=["GET"])
+def api_config_get():
+    default, user = _cfg_load_pair()
+    return jsonify({
+        "default": default,
+        "user": user,
+        "config_path": str(CONFIG_FILE),
+        "config_default_path": str(CONFIG_DEFAULT_FILE),
+    })
+
+
+@app.route("/api/config/open-file", methods=["POST"])
+def api_config_open_file():
+    """Open config.yaml or config.default.yaml in the default editor."""
+    body = request.get_json(silent=True) or {}
+    which = body.get("which")
+    if which == "user":
+        _ensure_user_config()
+        path = CONFIG_FILE
+    elif which == "default":
+        path = CONFIG_DEFAULT_FILE
+    else:
+        return jsonify({"ok": False, "error": "which must be 'user' or 'default'"}), 400
+    if not path.exists():
+        return jsonify({"ok": False, "error": f"does not exist: {path}"}), 404
+    subprocess.Popen(["open", str(path)])
+    return jsonify({"ok": True, "path": str(path)})
+
+
+@app.route("/api/config", methods=["POST"])
+def api_config_set():
+    body = request.get_json(silent=True) or {}
+    updates = body.get("updates")
+    if updates is None:
+        if "path" not in body:
+            return jsonify({"ok": False, "error": "missing 'path' or 'updates'"}), 400
+        updates = [{"path": body["path"], "value": body.get("value")}]
+    if not isinstance(updates, list):
+        return jsonify({"ok": False, "error": "'updates' must be a list"}), 400
+
+    default, user = _cfg_load_pair()
+    try:
+        for u in updates:
+            path = u.get("path")
+            if not isinstance(path, str) or not path:
+                return jsonify({"ok": False, "error": "invalid path"}), 400
+            if path in READONLY_CONFIG_PATHS:
+                return jsonify({"ok": False, "error": f"'{path}' is read-only"}), 403
+            default_value = _cfg_get(default, path)
+            coerced = _cfg_coerce(u.get("value"), default_value)
+            _cfg_set(user, path, coerced)
+        _cfg_write_atomic(user)
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"{type(e).__name__}: {e}"}), 500
+    return jsonify({"ok": True, "user": user})
+
+
+@app.route("/api/config/pick-path", methods=["POST"])
+def api_config_pick_path():
+    body = request.get_json(silent=True) or {}
+    title = str(body.get("title") or "Verzeichnis wählen")
+    start_path = body.get("start_path")
+    # Escape for AppleScript double-quoted strings
+    title_esc = title.replace("\\", "\\\\").replace('"', '\\"')
+    if start_path:
+        try:
+            start_resolved = Path(str(start_path)).expanduser().resolve()
+        except Exception:
+            start_resolved = None
+    else:
+        start_resolved = None
+    if start_resolved and start_resolved.is_dir():
+        sp_esc = str(start_resolved).replace("\\", "\\\\").replace('"', '\\"')
+        script = (
+            f'POSIX path of (choose folder with prompt "{title_esc}" '
+            f'default location (POSIX file "{sp_esc}"))'
+        )
+    else:
+        script = f'POSIX path of (choose folder with prompt "{title_esc}")'
+    try:
+        proc = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True, timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "error": "timeout"}), 504
+    if proc.returncode != 0:
+        # User cancel → exit code 1, stderr contains "User canceled."
+        if "User canceled" in (proc.stderr or ""):
+            return jsonify({"ok": True, "cancelled": True})
+        return jsonify({"ok": False, "error": proc.stderr.strip() or "osascript failed"}), 500
+    picked = proc.stdout.strip().rstrip("/")
+    # Replace home prefix with ~ for nicer display/storage
+    home = str(Path.home())
+    if picked == home:
+        picked = "~"
+    elif picked.startswith(home + "/"):
+        picked = "~" + picked[len(home):]
+    return jsonify({"ok": True, "path": picked})
+
+
+@app.route("/api/config/reveal", methods=["POST"])
+def api_config_reveal():
+    body = request.get_json(silent=True) or {}
+    raw = body.get("path")
+    if not isinstance(raw, str) or not raw.strip():
+        return jsonify({"ok": False, "error": "missing path"}), 400
+    safe = _safe_path_under_home(raw)
+    if safe is None:
+        return jsonify({"ok": False, "error": "path must be under $HOME"}), 403
+    if not safe.exists():
+        # Try to create parent for nicer UX when the target dir is not yet there
+        return jsonify({"ok": False, "error": f"does not exist: {safe}"}), 404
+    subprocess.Popen(["open", str(safe)])
+    return jsonify({"ok": True, "path": str(safe)})
+
+
+def _run(cmd, timeout=30):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return p.returncode, (p.stdout or "") + (p.stderr or "")
+    except Exception as e:
+        return 1, f"{type(e).__name__}: {e}"
+
+
+@app.route("/api/config/restart/collector", methods=["POST"])
+def api_config_restart_collector():
+    plist = LAUNCH_AGENTS / f"{COL_LABEL}.plist"
+    log = []
+    _run(["launchctl", "stop", COL_LABEL])
+    _run(["launchctl", "unload", str(plist)])
+    rc1, o1 = _run(["launchctl", "load", str(plist)])
+    log.append(o1)
+    rc2, o2 = _run(["launchctl", "start", COL_LABEL])
+    log.append(o2)
+    ok = rc1 == 0 and rc2 == 0
+    return jsonify({"ok": ok, "output": "\n".join(x for x in log if x)})
+
+
+@app.route("/api/config/restart/aggregator", methods=["POST"])
+def api_config_restart_aggregator():
+    out = []
+    all_ok = True
+    for label in AGG_LABELS:
+        plist = LAUNCH_AGENTS / f"{label}.plist"
+        _run(["launchctl", "unload", str(plist)])
+        rc, o = _run(["launchctl", "load", str(plist)])
+        out.append(f"{label}: rc={rc} {o.strip()}")
+        if rc != 0:
+            all_ok = False
+    return jsonify({"ok": all_ok, "output": "\n".join(out)})
+
+
+@app.route("/config")
+def config_editor():
+    return render_template_string(CONFIG_HTML)
+
+
+CONFIG_HTML = r"""<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>WorkTracker — Config</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #161a22; --panel2: #1c2230;
+    --fg: #e6e9ef; --muted: #8b93a7; --accent: #5aa9ff; --ok: #3ecf8e;
+    --warn: #f5b041; --err: #ff6b6b; --border: #262c3a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    background: var(--bg); color: var(--fg);
+  }
+  header {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(15,17,21,.92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px; display: flex; align-items: center; gap: 14px;
+  }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: .2px; color: var(--accent); }
+  header h1 a { color: var(--muted); font-size: 12px; text-decoration: none; font-weight: 400; }
+  header h1 a:hover { color: var(--accent); }
+  header .path { color: var(--muted); font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+  header .spacer { flex: 1; }
+  button {
+    background: var(--panel2); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 12px; font-size: 13px; cursor: pointer;
+    transition: background .12s, border-color .12s;
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  button svg { flex: 0 0 auto; display: block; }
+  button:hover { background: #222a3a; border-color: #3a4358; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0b1220; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); }
+  button.danger { border-color: #5a2a2a; }
+  button.danger:hover { background: #3a1f1f; border-color: var(--err); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  main { max-width: 1180px; margin: 0 auto; padding: 18px 24px 80px; }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 18px; overflow: hidden; }
+  section > h2 {
+    margin: 0; padding: 12px 18px; font-size: 13px; text-transform: uppercase;
+    letter-spacing: 1.2px; color: var(--muted); border-bottom: 1px solid var(--border);
+    background: var(--panel2);
+  }
+  .row {
+    display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+    gap: 18px; padding: 12px 18px; align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,.04);
+  }
+  .row:last-child { border-bottom: none; }
+  .row .label {
+    font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; color: var(--fg);
+    overflow-wrap: anywhere; word-break: break-word; line-height: 1.4;
+  }
+  .row .label .seg-dim { color: var(--muted); }
+  .row .label .sub { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; font-family: inherit; }
+  .row .control { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; }
+  .row .control > input[type=text],
+  .row .control > textarea { flex: 1 1 260px; min-width: 0; max-width: 640px; }
+  input[type=text], input[type=number], textarea {
+    background: #0b0e13; color: var(--fg);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 7px 10px; font: 13px ui-monospace, Menlo, monospace;
+    outline: none; box-sizing: border-box;
+  }
+  input[type=number] { flex: 0 0 140px; max-width: 160px; }
+  input[type=text]:focus, input[type=number]:focus, textarea:focus {
+    border-color: var(--accent);
+  }
+  input[readonly], textarea[readonly] {
+    color: var(--muted); background: #0a0c11; cursor: default;
+    border-color: rgba(255,255,255,.04);
+  }
+  input[readonly]:focus, textarea[readonly]:focus { border-color: rgba(255,255,255,.08); }
+  textarea { width: 100%; min-height: 84px; resize: vertical; line-height: 1.45; white-space: pre; overflow-x: auto; }
+  @media (max-width: 720px) {
+    .row { grid-template-columns: 1fr; gap: 8px; padding: 12px 14px; }
+    .row .label { font-size: 12px; }
+    .row .control > input[type=text],
+    .row .control > textarea { max-width: 100%; flex-basis: 100%; }
+  }
+  .docs-card {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 18px; margin-bottom: 18px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--fg); text-decoration: none;
+    transition: border-color .15s, background .15s, transform .08s;
+  }
+  .docs-card:hover { border-color: var(--accent); background: var(--panel2); }
+  .docs-card:active { transform: translateY(1px); }
+  .docs-card > svg { flex: 0 0 auto; color: var(--accent); }
+  .docs-card .docs-card-text { flex: 1; min-width: 0; }
+  .docs-card .docs-card-title { font-size: 14px; font-weight: 600; letter-spacing: .2px; }
+  .docs-card .docs-card-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .docs-card .arrow { color: var(--muted); transition: transform .15s, color .15s; }
+  .docs-card:hover .arrow { color: var(--accent); transform: translateX(2px); }
+  .switch { position: relative; width: 38px; height: 22px; display: inline-block; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0; background: #2a3142; border-radius: 22px;
+    cursor: pointer; transition: background .15s;
+  }
+  .slider::before {
+    content: ""; position: absolute; left: 3px; top: 3px;
+    width: 16px; height: 16px; background: #cfd4e0; border-radius: 50%;
+    transition: transform .15s;
+  }
+  .switch input:checked + .slider { background: var(--ok); }
+  .switch input:checked + .slider::before { transform: translateX(16px); background: #fff; }
+  .toast {
+    position: fixed; bottom: 18px; right: 20px; padding: 8px 14px;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 8px;
+    font-size: 12px; opacity: 0; transform: translateY(6px);
+    transition: opacity .15s, transform .15s; pointer-events: none;
+    max-width: 420px;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.ok { border-color: var(--ok); }
+  .toast.err { border-color: var(--err); }
+  .hint { color: var(--muted); font-size: 11.5px; padding: 6px 16px 10px; }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
+  .status-dot.saving { background: var(--warn); }
+  .status-dot.ok { background: var(--ok); }
+  .status-dot.err { background: var(--err); }
+  .unit { color: var(--muted); font-size: 12px; margin-left: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="/">Dashboard</a> &nbsp;/ &nbsp;<a href="/explore">Explore</a> &nbsp;/ &nbsp;<a href="/statistics">Statistics</a> &nbsp;/ &nbsp;<a href="/screenshots">Screenshots</a> &nbsp;/ &nbsp;Config</h1>
+  <span class="path" id="cfgPath"></span>
+  <div class="spacer"></div>
+  <button id="btnOpenDefault" title="config.default.yaml im Editor öffnen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="btn-label">Open config.default.yaml</span></button>
+  <button id="btnOpenUser" title="config.yaml im Editor öffnen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="btn-label">Open config.yaml</span></button>
+  <button id="btnRestartCol" class="primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span class="btn-label">Restart Collector</span></button>
+  <button id="btnRestartAgg" class="primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span class="btn-label">Restart Aggregator</span></button>
+</header>
+<main id="main">
+  <div class="hint" id="loadingMsg">Lade Konfiguration…</div>
+</main>
+<div id="toast" class="toast"></div>
+
+<script>
+const PATH_KEY_HINTS = /_dir$|_path$|^dir$|^path$|^endpoint$/;
+
+const UNITS = {
+  "interval_seconds": "s",
+  "git_scan_interval_seconds": "s",
+  "idle_threshold_seconds": "s",
+  "focus_session_min_seconds": "s",
+  "same_app_grace_period_seconds": "s",
+  "timeout_seconds": "s",
+  "min_session_seconds": "s",
+  "threshold_minutes": "min",
+  "cooldown_minutes": "min",
+  "deep_work_min_minutes": "min",
+  "image_max_bytes": "bytes",
+};
+
+function tlabel(k) {
+  // Use dotted path as-is — that IS the label per spec
+  return k;
+}
+
+function unitFor(path) {
+  const leaf = path.split(".").pop();
+  return UNITS[leaf] || "";
+}
+
+function isPathField(path, defaultValue) {
+  if (typeof defaultValue !== "string") return false;
+  const leaf = path.split(".").pop();
+  if (PATH_KEY_HINTS.test(leaf)) return true;
+  // Heuristic: starts with ~ or /
+  if (defaultValue.startsWith("~") || defaultValue.startsWith("/")) return true;
+  return false;
+}
+
+let toastTimer = null;
+function toast(msg, kind) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast show " + (kind || "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = "toast " + (kind || ""); }, 2400);
+}
+
+async function postJSON(url, body) {
+  const r = await fetch(url, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body || {}),
+  });
+  let j = null;
+  try { j = await r.json(); } catch (_) {}
+  if (!r.ok || (j && j.ok === false)) {
+    const msg = (j && j.error) || r.statusText;
+    const err = new Error(msg);
+    err.status = r.status;
+    throw err;
+  }
+  return j;
+}
+
+async function saveField(path, value) {
+  try {
+    await postJSON("/api/config", {path, value});
+    toast("gespeichert · " + path, "ok");
+  } catch (e) {
+    toast("Fehler: " + e.message, "err");
+    throw e;
+  }
+}
+
+const READONLY_PATHS = new Set(["author", "version"]);
+
+function renderDocsCard() {
+  const a = document.createElement("a");
+  a.href = "/docs";
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.className = "docs-card";
+  a.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>' +
+    '<div class="docs-card-text">' +
+      '<div class="docs-card-title">Documentation</div>' +
+      '<div class="docs-card-sub">Keys, categories, LLM setup &mdash; opens in a new tab</div>' +
+    '</div>' +
+    '<svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+  return a;
+}
+
+function renderScalar(path, defaultValue, userValue) {
+  const control = document.createElement("div");
+  control.className = "control";
+  const current = userValue === undefined ? defaultValue : userValue;
+  const readonly = READONLY_PATHS.has(path);
+
+  if (typeof defaultValue === "boolean") {
+    const wrap = document.createElement("label");
+    wrap.className = "switch";
+    const inp = document.createElement("input");
+    inp.type = "checkbox"; inp.checked = !!current;
+    if (readonly) inp.disabled = true;
+    const sl = document.createElement("span"); sl.className = "slider";
+    wrap.appendChild(inp); wrap.appendChild(sl);
+    if (!readonly) inp.addEventListener("change", () => saveField(path, inp.checked));
+    control.appendChild(wrap);
+    return control;
+  }
+
+  if (typeof defaultValue === "number") {
+    const inp = document.createElement("input");
+    inp.type = "number";
+    if (Number.isInteger(defaultValue)) inp.step = "1"; else inp.step = "any";
+    inp.value = current ?? 0;
+    if (readonly) inp.readOnly = true;
+    else inp.addEventListener("change", () => {
+      const v = inp.value === "" ? 0 : Number(inp.value);
+      saveField(path, v);
+    });
+    control.appendChild(inp);
+    const u = unitFor(path);
+    if (u) { const s = document.createElement("span"); s.className = "unit"; s.textContent = u; control.appendChild(s); }
+    return control;
+  }
+
+  // string
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.value = current ?? "";
+  if (readonly) inp.readOnly = true;
+  let lastSaved = inp.value;
+  const save = () => {
+    if (inp.value === lastSaved) return;
+    lastSaved = inp.value;
+    saveField(path, inp.value);
+  };
+  if (!readonly) {
+    inp.addEventListener("blur", save);
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } });
+  }
+  control.appendChild(inp);
+
+  if (!readonly && isPathField(path, defaultValue)) {
+    const browse = document.createElement("button");
+    browse.textContent = "Browse…";
+    browse.addEventListener("click", async () => {
+      try {
+        const r = await postJSON("/api/config/pick-path", {title: "Wähle: " + path, start_path: inp.value});
+        if (r.cancelled) return;
+        inp.value = r.path;
+        lastSaved = r.path;
+        await saveField(path, r.path);
+      } catch (e) { toast("Fehler: " + e.message, "err"); }
+    });
+    control.appendChild(browse);
+
+    const open = document.createElement("button");
+    open.textContent = "Open";
+    open.title = "Im Finder öffnen";
+    open.addEventListener("click", async () => {
+      try {
+        await postJSON("/api/config/reveal", {path: inp.value});
+      } catch (e) { toast("Fehler: " + e.message, "err"); }
+    });
+    control.appendChild(open);
+  }
+  return control;
+}
+
+function renderList(path, defaultValue, userValue) {
+  const control = document.createElement("div");
+  control.className = "control";
+  const current = Array.isArray(userValue) ? userValue : (Array.isArray(defaultValue) ? defaultValue : []);
+  const ta = document.createElement("textarea");
+  ta.placeholder = "Ein Eintrag pro Zeile";
+  ta.value = current.join("\n");
+  let lastSaved = ta.value;
+  ta.addEventListener("blur", () => {
+    if (ta.value === lastSaved) return;
+    lastSaved = ta.value;
+    const arr = ta.value.split("\n").map(s => s.trim()).filter(s => s);
+    saveField(path, arr);
+  });
+  control.appendChild(ta);
+  return control;
+}
+
+function renderRow(path, defaultValue, userValue) {
+  const row = document.createElement("div");
+  row.className = "row";
+  const lab = document.createElement("div");
+  lab.className = "label";
+  lab.title = path;
+  // Segment the dotted path: dim parents + soft break hint, emphasize leaf
+  const parts = path.split(".");
+  const leaf = parts.pop();
+  if (parts.length) {
+    const dim = document.createElement("span");
+    dim.className = "seg-dim";
+    // Insert zero-width space after each dot so the browser prefers to break there
+    dim.textContent = parts.join(".\u200B") + ".\u200B";
+    lab.appendChild(dim);
+  }
+  const strong = document.createElement("span");
+  strong.textContent = leaf;
+  lab.appendChild(strong);
+  row.appendChild(lab);
+
+  let ctrl;
+  if (Array.isArray(defaultValue)) {
+    ctrl = renderList(path, defaultValue, userValue);
+  } else {
+    ctrl = renderScalar(path, defaultValue, userValue);
+  }
+  row.appendChild(ctrl);
+  return row;
+}
+
+function walk(defaultObj, userObj, prefix, rows) {
+  for (const [k, v] of Object.entries(defaultObj)) {
+    const path = prefix ? prefix + "." + k : k;
+    const userV = (userObj && typeof userObj === "object") ? userObj[k] : undefined;
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      walk(v, (userV && typeof userV === "object") ? userV : {}, path, rows);
+    } else {
+      rows.push(renderRow(path, v, userV));
+    }
+  }
+}
+
+async function load() {
+  const main = document.getElementById("main");
+  main.innerHTML = '<div class="hint" id="loadingMsg">Lade Konfiguration…</div>';
+  let data;
+  try {
+    const r = await fetch("/api/config");
+    data = await r.json();
+  } catch (e) {
+    main.innerHTML = '<div class="hint" style="color:var(--err)">Fehler beim Laden: ' + e.message + "</div>";
+    return;
+  }
+  document.getElementById("cfgPath").textContent = data.config_path || "";
+  main.innerHTML = "";
+
+  const topKeys = Object.keys(data.default || {});
+  // Skip scalar top-level meta keys (version, author) — render as own section
+  const metaKeys = topKeys.filter(k => typeof data.default[k] !== "object" || data.default[k] === null);
+  const sectionKeys = topKeys.filter(k => typeof data.default[k] === "object" && data.default[k] !== null && !Array.isArray(data.default[k]));
+
+  if (metaKeys.length) {
+    const sec = document.createElement("section");
+    const h = document.createElement("h2"); h.textContent = "meta"; sec.appendChild(h);
+    for (const k of metaKeys) {
+      sec.appendChild(renderRow(k, data.default[k], data.user ? data.user[k] : undefined));
+    }
+    main.appendChild(sec);
+  }
+
+  // Docs link card — rendered directly after meta
+  main.appendChild(renderDocsCard());
+
+  for (const sk of sectionKeys) {
+    const sec = document.createElement("section");
+    const h = document.createElement("h2"); h.textContent = sk; sec.appendChild(h);
+    const hint = document.createElement("div");
+    hint.className = "hint";
+    if (sk === "collector") hint.textContent = 'Änderungen werden erst nach "Restart Collector" aktiv.';
+    else if (sk === "aggregator") hint.textContent = 'Änderungen werden beim nächsten Aggregator-Lauf wirksam (oder sofort via "Restart Aggregator").';
+    if (hint.textContent) sec.appendChild(hint);
+    const rows = [];
+    walk(data.default[sk], (data.user && data.user[sk]) || {}, sk, rows);
+    for (const row of rows) sec.appendChild(row);
+    main.appendChild(sec);
+  }
+}
+
+async function doRestart(which, btn) {
+  const lab = btn.querySelector(".btn-label") || btn;
+  const orig = lab.textContent;
+  btn.disabled = true; lab.textContent = "…restarting";
+  try {
+    const r = await postJSON("/api/config/restart/" + which, {});
+    toast(which + " neu gestartet", "ok");
+  } catch (e) {
+    toast("Restart fehlgeschlagen: " + e.message, "err");
+  } finally {
+    btn.disabled = false; lab.textContent = orig;
+  }
+}
+
+document.getElementById("btnRestartCol").addEventListener("click", (e) => doRestart("collector", e.currentTarget));
+document.getElementById("btnRestartAgg").addEventListener("click", (e) => doRestart("aggregator", e.currentTarget));
+
+async function openCfgFile(which, btn) {
+  btn.disabled = true;
+  try {
+    const r = await postJSON("/api/config/open-file", {which});
+    toast("geöffnet: " + (r.path || which), "ok");
+  } catch (e) {
+    toast("Fehler: " + e.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+}
+document.getElementById("btnOpenDefault").addEventListener("click", (e) => openCfgFile("default", e.currentTarget));
+document.getElementById("btnOpenUser").addEventListener("click", (e) => openCfgFile("user", e.currentTarget));
+
+load();
 </script>
 </body>
 </html>"""

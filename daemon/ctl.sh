@@ -3,11 +3,34 @@
 
 LABEL="com.peab.worktracker.collector"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-LOG_DIR="$HOME/WorkTracker/logs"
 
 AGG_DAILY="com.peab.worktracker.aggregator.daily"
 AGG_WEEKLY="com.peab.worktracker.aggregator.weekly"
 AGG_MONTHLY="com.peab.worktracker.aggregator.monthly"
+
+# ── Paths from config.yaml (fall back to the canonical ~/WorkTracker layout) ──
+_BASE="$HOME/WorkTracker"
+_VENV_PY="$_BASE/daemon/.venv/bin/python"
+_CONFIG="$_BASE/daemon/config.yaml"
+
+_cfg_vals=""
+if [[ -x "$_VENV_PY" && -f "$_CONFIG" ]]; then
+    _cfg_vals=$("$_VENV_PY" -c "
+import os, yaml
+try:
+    with open('$_CONFIG') as f:
+        c = yaml.safe_load(f) or {}
+    print(os.path.expanduser(c.get('collector', {}).get('log_dir', '$_BASE/logs')))
+    print(os.path.expanduser(c.get('aggregator', {}).get('summaries_dir', '$_BASE/summaries')))
+except Exception:
+    pass
+" 2>/dev/null) || _cfg_vals=""
+fi
+LOG_DIR=$(  printf '%s\n' "$_cfg_vals" | awk 'NR==1{print;exit}')
+SUMMARIES=$(printf '%s\n' "$_cfg_vals" | awk 'NR==2{print;exit}')
+LOG_DIR="${LOG_DIR:-$_BASE/logs}"
+SUMMARIES="${SUMMARIES:-$_BASE/summaries}"
+unset _cfg_vals _VENV_PY _CONFIG
 
 case "$1" in
     start)
@@ -96,9 +119,9 @@ case "$1" in
         done
         echo ""
         echo "=== Latest Reports ==="
-        echo "  daily:   $(ls -t ~/WorkTracker/summaries/daily/*.md 2>/dev/null | head -1 || echo 'none')"
-        echo "  weekly:  $(ls -t ~/WorkTracker/summaries/weekly/*.md 2>/dev/null | head -1 || echo 'none')"
-        echo "  monthly: $(ls -t ~/WorkTracker/summaries/monthly/*.md 2>/dev/null | head -1 || echo 'none')"
+        echo "  daily:   $(ls -t "$SUMMARIES"/daily/*.md 2>/dev/null | head -1 || echo 'none')"
+        echo "  weekly:  $(ls -t "$SUMMARIES"/weekly/*.md 2>/dev/null | head -1 || echo 'none')"
+        echo "  monthly: $(ls -t "$SUMMARIES"/monthly/*.md 2>/dev/null | head -1 || echo 'none')"
         ;;
     dashboard)
         exec "$HOME/WorkTracker/daemon/.venv/bin/python" "$HOME/WorkTracker/daemon/dashboard.py"

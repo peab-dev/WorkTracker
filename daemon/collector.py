@@ -38,6 +38,7 @@ from AppKit import (
     NSWorkspaceDidWakeNotification,
     NSWorkspaceWillSleepNotification,
 )
+from Foundation import NSAutoreleasePool
 from Quartz import (
     CFMachPortCreateRunLoopSource,
     CFRunLoopAddSource,
@@ -1296,6 +1297,7 @@ def _capture_all_displays_png(out_path: Path) -> bool:
     """Capture a single PNG covering the union rect of all active displays."""
     global _SCREEN_RECORDING_HINT_LOGGED
     log = logging.getLogger("worktracker.collector")
+    pool = NSAutoreleasePool.alloc().init()
     try:
         err, display_ids, count = CGGetActiveDisplayList(16, None, None)
         if err != 0 or not count:
@@ -1335,6 +1337,8 @@ def _capture_all_displays_png(out_path: Path) -> bool:
     except Exception:
         log.exception("Screenshot capture failed")
         return False
+    finally:
+        del pool
 
 
 # ---------------------------------------------------------------------------
@@ -1438,7 +1442,7 @@ def collect_snapshot(
             local_now = datetime.now()
             day = local_now.strftime("%Y-%m-%d")
             ts_safe = local_now.strftime("%Y%m%dT%H%M%S")
-            base_dir = screenshot_dir or Path("~/WorkTracker/data/screenshots").expanduser()
+            base_dir = screenshot_dir or _DAEMON_DIR.parent / "data" / "screenshots"
             out_dir = base_dir / day
             try:
                 out_dir.mkdir(parents=True, exist_ok=True)
@@ -1611,6 +1615,10 @@ def main():
             sleep_wake_monitor.record_gap(wall_delta)
         last_wall = now_wall
 
+        # Drain autoreleased ObjC objects per iteration — NSWorkspace /
+        # NSPasteboard / CGWindowList / AX calls all return autoreleased
+        # objects that would otherwise accumulate on this Python thread.
+        pool = NSAutoreleasePool.alloc().init()
         try:
             snap = collect_snapshot(
                 input_monitor, clipboard_monitor, config,
@@ -1635,6 +1643,8 @@ def main():
                 )
         except Exception:
             logger.exception("Snapshot error")
+        finally:
+            del pool
 
         elapsed = time.monotonic() - t0
         # Process NSRunLoop in short bursts so that NSWorkspace

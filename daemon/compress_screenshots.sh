@@ -6,7 +6,34 @@
 
 set -euo pipefail
 
-SCREENSHOTS_DIR="${SCREENSHOTS_DIR:-$HOME/WorkTracker/data/screenshots}"
+# ── Screenshots path resolution (env → config.yaml → default) ────────────────
+# Precedence:
+#   1. $SCREENSHOTS_DIR if exported by caller (wt compress sets this).
+#   2. collector.screenshot.dir from ~/WorkTracker/daemon/config.yaml.
+#   3. Hard-coded default ~/WorkTracker/data/screenshots (first-run safety).
+_DEFAULT_SCREENSHOTS_DIR="$HOME/WorkTracker/data/screenshots"
+_CONFIG_FILE="$HOME/WorkTracker/daemon/config.yaml"
+_VENV_PY="$HOME/WorkTracker/daemon/.venv/bin/python"
+if [[ -z "${SCREENSHOTS_DIR:-}" ]]; then
+    # Try reading from config. Falls back silently if python/yaml/config missing.
+    _from_cfg=""
+    if [[ -x "$_VENV_PY" && -f "$_CONFIG_FILE" ]]; then
+        _from_cfg=$("$_VENV_PY" -c "
+import os, sys, yaml
+try:
+    with open('$_CONFIG_FILE') as f:
+        cfg = yaml.safe_load(f) or {}
+    p = cfg.get('collector', {}).get('screenshot', {}).get('dir')
+    if p: print(os.path.expanduser(p))
+except Exception:
+    pass
+" 2>/dev/null) || _from_cfg=""
+    fi
+    SCREENSHOTS_DIR="${_from_cfg:-$_DEFAULT_SCREENSHOTS_DIR}"
+    unset _from_cfg
+fi
+unset _DEFAULT_SCREENSHOTS_DIR _CONFIG_FILE _VENV_PY
+
 QUALITY=75
 TARGET_DATE=""
 SKIP_TODAY=false

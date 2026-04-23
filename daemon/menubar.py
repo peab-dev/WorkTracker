@@ -58,7 +58,33 @@ API_URL = "http://127.0.0.1:7880/api/live"
 POLL_INTERVAL = 30.0  # seconds
 RETRY_INTERVAL = 60.0  # seconds after failure
 
-SESSIONS_DIR = Path.home() / "WorkTracker" / "data" / "sessions"
+# Base dir only used to locate config.yaml — data paths come from config.
+_BASE_DIR = Path.home() / "WorkTracker"
+_CONFIG_PATH = _BASE_DIR / "daemon" / "config.yaml"
+
+
+def _paths_from_config() -> tuple[Path, Path]:
+    """Resolve (sessions_dir, summaries_daily_dir) from config.yaml.
+
+    Falls back to the canonical ~/WorkTracker layout when the config is
+    missing or malformed, so the widget stays usable during first-run /
+    broken-config scenarios.
+    """
+    try:
+        import yaml  # local import — avoids startup cost if never called twice
+        with open(_CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+        sessions = Path(cfg["aggregator"]["sessions_dir"]).expanduser()
+        summaries = Path(cfg["aggregator"]["summaries_dir"]).expanduser()
+        return sessions, summaries / "daily"
+    except Exception:
+        return (
+            _BASE_DIR / "data" / "sessions",
+            _BASE_DIR / "summaries" / "daily",
+        )
+
+
+SESSIONS_DIR, SUMMARIES_DAILY_DIR = _paths_from_config()
 
 # Unicode blocks for progress bars
 BAR_FULL = "█"
@@ -192,9 +218,8 @@ DAY_START_HOUR = 10  # 10:00 is the rhythm-day boundary
 
 def _read_active_hours_for_date(date_obj):
     """Parse the daily markdown timeline and return a set of active hours."""
-    SUMMARY_DIR = Path.home() / "WorkTracker" / "summaries" / "daily"
     ds = date_obj.strftime("%Y-%m-%d")
-    filepath = SUMMARY_DIR / f"{ds}.md"
+    filepath = SUMMARIES_DAILY_DIR / f"{ds}.md"
     hours = set()
     try:
         in_timeline = False

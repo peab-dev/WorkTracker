@@ -42,6 +42,11 @@ daemon/config.yaml
 docs/.codex/
 README\ *.md
 
+# Docs — archived / work-in-progress variants (only docs/index.html is shipped)
+docs/index2.html
+docs/index3.html
+docs/index_old.html
+
 # Excalidraw / planning docs
 WorkTracker-Uebersicht.excalidraw
 WorkTracker-Umsetzungsplan-v3-Final.md

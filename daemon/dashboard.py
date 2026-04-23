@@ -12,12 +12,34 @@ from pathlib import Path
 import yaml
 
 BASE = Path.home() / "WorkTracker"
-DATA_SNAP = BASE / "data" / "snapshots"
-DATA_SESS = BASE / "data" / "sessions"
-SUMMARIES = BASE / "summaries"
-LOGS = BASE / "logs"
 CONFIG_PATH = BASE / "daemon" / "config.yaml"
 CONFIG_DEFAULT_PATH = BASE / "daemon" / "config.default.yaml"
+
+
+def _paths_from_config():
+    try:
+        with open(CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+        col = cfg.get("collector", {})
+        agg = cfg.get("aggregator", {})
+        summaries = Path(agg["summaries_dir"]).expanduser()
+        return (
+            Path(col["data_dir"]),
+            Path(agg["sessions_dir"]),
+            summaries,
+            Path(col["log_dir"]),
+        )
+    except Exception:
+        summaries = BASE / "summaries"
+        return (
+            BASE / "data" / "snapshots",
+            BASE / "data" / "sessions",
+            summaries,
+            BASE / "logs",
+        )
+
+
+DATA_SNAP, DATA_SESS, SUMMARIES, LOGS = _paths_from_config()
 
 
 def _ensure_user_config() -> None:

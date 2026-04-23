@@ -16,13 +16,15 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 from pathlib import Path
 from urllib import request as _urlrequest
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
 
 log = logging.getLogger("worktracker.motivation_extractor")
 
 _SYSTEM_PROMPT = (
+    "/no_think\n"
     "Du bekommst EIN Screenshot einer Arbeits-Session und minimale Metadaten "
     "(App, Projekt, Dauer). Analysiere das Bild GENAU: Welche App ist offen, "
     "welche Datei, welcher Code, welcher Text, welcher Tab, welches "
@@ -79,6 +81,21 @@ def _sample_paths(paths: list[str], max_count: int) -> list[str]:
 
 def _clean_motivation(text: str) -> str:
     s = (text or "").strip()
+    # Strip chain-of-thought blocks from reasoning models (Qwen3, etc.) that
+    # some servers inline into `content` instead of `reasoning_content`.
+    s = re.sub(
+        r"<think(?:ing)?\b[^>]*>.*?</think(?:ing)?>",
+        "",
+        s,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    s = re.sub(
+        r"<think(?:ing)?\b[^>]*>.*",
+        "",
+        s,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    s = s.strip()
     if s.startswith("```"):
         s = s.strip("`")
         # entferne moegliches "json\n" oder Sprach-Tag
@@ -172,6 +189,14 @@ def extract_motivations(sessions: list[dict], cfg: dict,
         }
         try:
             resp = _post_json(endpoint, payload, timeout)
+        except HTTPError as e:
+            try:
+                body_snippet = e.read().decode("utf-8", errors="replace")[:400]
+            except Exception:
+                body_snippet = ""
+            log.warning("motivation_llm HTTP %s: %s | body=%s",
+                        e.code, e.reason, body_snippet)
+            continue
         except (URLError, TimeoutError, OSError, json.JSONDecodeError) as e:
             log.warning("motivation_llm request failed: %s", e)
             continue

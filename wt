@@ -5,19 +5,43 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 set -euo pipefail
+export LC_NUMERIC=C
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 BASE="$HOME/WorkTracker"
 DAEMON="$BASE/daemon"
 VENV="$DAEMON/.venv/bin/python"
-LOG_DIR="$BASE/logs"
 SUMMARIES="$BASE/summaries"
+
+# Read data paths from config.yaml (with fallback to $BASE defaults)
+_cfg_vals=$("$VENV" -c "
+import yaml
+with open('$DAEMON/config.yaml') as f:
+    c=yaml.safe_load(f)
+print(c['collector']['data_dir'])
+print(c['aggregator']['sessions_dir'])
+print(c['collector']['screenshot']['dir'])
+print(c['collector']['log_dir'])
+" 2>/dev/null) || _cfg_vals=""
+SNAP_DIR=$(printf '%s\n' "$_cfg_vals" | awk 'NR==1{print;exit}')
+SESS_DIR=$(printf '%s\n' "$_cfg_vals" | awk 'NR==2{print;exit}')
+SCR_DIR=$( printf '%s\n' "$_cfg_vals" | awk 'NR==3{print;exit}')
+LOG_DIR=$( printf '%s\n' "$_cfg_vals" | awk 'NR==4{print;exit}')
+SNAP_DIR="${SNAP_DIR:-$BASE/data/snapshots}"
+SESS_DIR="${SESS_DIR:-$BASE/data/sessions}"
+SCR_DIR="${SCR_DIR:-$BASE/data/screenshots}"
+LOG_DIR="${LOG_DIR:-$BASE/logs}"
+DATA_DIR="$(dirname "$SNAP_DIR")"
+unset _cfg_vals
 
 LABEL_COL="com.peab.worktracker.collector"
 LABEL_AGG_D="com.peab.worktracker.aggregator.daily"
 LABEL_AGG_W="com.peab.worktracker.aggregator.weekly"
 LABEL_AGG_M="com.peab.worktracker.aggregator.monthly"
 PLIST_COL="$HOME/Library/LaunchAgents/$LABEL_COL.plist"
+PLIST_AGG_D="$HOME/Library/LaunchAgents/$LABEL_AGG_D.plist"
+PLIST_AGG_W="$HOME/Library/LaunchAgents/$LABEL_AGG_W.plist"
+PLIST_AGG_M="$HOME/Library/LaunchAgents/$LABEL_AGG_M.plist"
 
 # ── Colors ───────────────────────────────────────────────────────────────────
 RST='\033[0m'
@@ -32,7 +56,7 @@ CYAN='\033[38;5;154m'
 MAGENTA='\033[38;5;176m'
 ORANGE='\033[38;5;215m'
 WHITE='\033[38;5;252m'
-GRAY='\033[38;5;240m'
+GRAY='\033[38;5;245m'
 GRAY_L='\033[38;5;245m'
 
 BG_GREEN='\033[48;5;22m'
@@ -221,9 +245,9 @@ human_size() {
     local bytes="${1:-0}"
     awk -v b="$bytes" 'BEGIN {
         if      (b < 1024)       printf "%dB",    b
-        else if (b < 1048576)    printf "%dK",    b/1024
-        else if (b < 1073741824) printf "%.1fM",  b/1048576
-        else                     printf "%.1fG",  b/1073741824
+        else if (b < 1048576)    printf "%d KB",   b/1024
+        else if (b < 1073741824) printf "%.1f MB", b/1048576
+        else                     printf "%.1f GB", b/1073741824
     }'
 }
 
@@ -245,52 +269,68 @@ cmd_status() {
 
     section "Data ($today)"
 
-    local snap_file="$BASE/data/snapshots/${today}.jsonl"
-    local sess_file="$BASE/data/sessions/${today}.json"
+    local snap_file="$SNAP_DIR/${today}.jsonl"
+    local sess_file="$SESS_DIR/${today}.json"
+    local scr_dir_today="$SCR_DIR/${today}"
+    local snap_count=0 snap_bytes=0
+    local sess_count=0 sess_bytes=0
+    local scr_count=0 scr_bytes=0
 
     if [[ -f "$snap_file" ]]; then
-        local snap_count snap_bytes snap_size
         snap_count=$(wc -l < "$snap_file" | tr -d ' ')
         snap_bytes=$(stat -f%z "$snap_file" 2>/dev/null || echo 0)
-        snap_size=$(human_size "$snap_bytes")
-        printf "  ${GRAY_L}Snapshots:${RST}    ${WHITE}${BOLD}%s${RST}  ${GRAY}(%s)${RST}\n" "$snap_count" "$snap_size"
+        printf "  ${GRAY_L}Snapshots:${RST}    ${WHITE}${BOLD}%s${RST}  ${GRAY_L}(%s)${RST}\n" "$snap_count" "$(human_size "$snap_bytes")"
     else
-        printf "  ${GRAY_L}Snapshots:${RST}    ${GRAY}none${RST}\n"
+        printf "  ${GRAY_L}Snapshots:${RST}    ${GRAY_L}none${RST}\n"
     fi
 
     if [[ -f "$sess_file" ]]; then
-        local sess_count sess_bytes sess_size
         sess_count=$("$VENV" -c "import json; print(len(json.load(open('$sess_file'))))" 2>/dev/null || echo "0")
         sess_bytes=$(stat -f%z "$sess_file" 2>/dev/null || echo 0)
-        sess_size=$(human_size "$sess_bytes")
-        printf "  ${GRAY_L}Sessions:${RST}     ${WHITE}${BOLD}%s${RST}  ${GRAY}(%s)${RST}\n" "$sess_count" "$sess_size"
+        printf "  ${GRAY_L}Sessions:${RST}     ${WHITE}${BOLD}%s${RST}  ${GRAY_L}(%s)${RST}\n" "$sess_count" "$(human_size "$sess_bytes")"
     else
-        printf "  ${GRAY_L}Sessions:${RST}     ${GRAY}none${RST}\n"
+        printf "  ${GRAY_L}Sessions:${RST}     ${GRAY_L}none${RST}\n"
     fi
 
-    local scr_dir_today="$BASE/data/screenshots/${today}"
     if [[ -d "$scr_dir_today" ]]; then
-        local scr_count scr_size_today
         scr_count=$(find "$scr_dir_today" -maxdepth 1 -name '*.png' 2>/dev/null | wc -l | tr -d ' ')
-        scr_size_today=$(du -sh "$scr_dir_today" 2>/dev/null | awk '{print $1}')
-        printf "  ${GRAY_L}Screenshots:${RST}  ${WHITE}${BOLD}%s${RST}  ${GRAY}(%s)${RST}\n" "$scr_count" "$scr_size_today"
+        scr_bytes=$(( $(du -sk "$scr_dir_today" 2>/dev/null | awk '{print $1}') * 1024 ))
+        printf "  ${GRAY_L}Screenshots:${RST}  ${WHITE}${BOLD}%s${RST}  ${GRAY_L}(%s)${RST}\n" "$scr_count" "$(human_size "$scr_bytes")"
     else
-        printf "  ${GRAY_L}Screenshots:${RST}  ${GRAY}none${RST}\n"
+        printf "  ${GRAY_L}Screenshots:${RST}  ${GRAY_L}none${RST}\n"
     fi
 
-    local data_size
-    data_size=$(du -sh "$BASE/data" 2>/dev/null | awk '{print $1}')
-    local log_size
-    log_size=$(du -sh "$LOG_DIR" 2>/dev/null | awk '{print $1}')
-    printf "  ${GRAY_L}Data:${RST}         ${WHITE}%s${RST}    " "$data_size"
-    printf "${GRAY_L}Logs:${RST} ${WHITE}%s${RST}\n" "$log_size"
+    local today_count=$(( snap_count + sess_count + scr_count ))
+    local today_bytes=$(( snap_bytes + sess_bytes + scr_bytes ))
+    printf "  ${GRAY_L}All:${RST}          ${WHITE}${BOLD}%s${RST}  ${GRAY_L}(%s)${RST}\n" "$today_count" "$(human_size "$today_bytes")"
 
-    local snap_total sess_total scr_total
-    snap_total=$(du -sh "$BASE/data/snapshots"  2>/dev/null | awk '{print $1}')
-    sess_total=$(du -sh "$BASE/data/sessions"   2>/dev/null | awk '{print $1}')
-    scr_total=$(du -sh "$BASE/data/screenshots" 2>/dev/null | awk '{print $1}')
-    printf "  ${GRAY_L}Totals:${RST}       ${GRAY_L}snap${RST} ${WHITE}%s${RST}  ${GRAY_L}sess${RST} ${WHITE}%s${RST}  ${GRAY_L}scr${RST} ${WHITE}%s${RST}\n" \
-        "${snap_total:-0}" "${sess_total:-0}" "${scr_total:-0}"
+    section "Full History"
+
+    local all_snap_count all_sess_count all_scr_count
+    all_snap_count=$(wc -l "$SNAP_DIR"/*.jsonl 2>/dev/null | tail -1 | awk '{print $1}')
+    all_sess_count=$("$VENV" -c "
+import json, pathlib
+total = 0
+for f in pathlib.Path('$SESS_DIR').glob('*.json'):
+    try: total += len(json.load(f.open()))
+    except: pass
+print(total)
+" 2>/dev/null || echo "0")
+    all_scr_count=$(find "$SCR_DIR" -name '*.png' 2>/dev/null | wc -l | tr -d ' ')
+
+    local snap_total sess_total scr_total data_size log_size
+    snap_total=$(du -sh "$SNAP_DIR" 2>/dev/null | awk '{print $1}' | sed 's/K$/ KB/;s/M$/ MB/;s/G$/ GB/')
+    sess_total=$(du -sh "$SESS_DIR" 2>/dev/null | awk '{print $1}' | sed 's/K$/ KB/;s/M$/ MB/;s/G$/ GB/')
+    scr_total=$( du -sh "$SCR_DIR"  2>/dev/null | awk '{print $1}' | sed 's/K$/ KB/;s/M$/ MB/;s/G$/ GB/')
+    data_size=$( du -sh "$DATA_DIR" 2>/dev/null | awk '{print $1}' | sed 's/K$/ KB/;s/M$/ MB/;s/G$/ GB/')
+    log_size=$(  du -sh "$LOG_DIR"  2>/dev/null | awk '{print $1}' | sed 's/K$/ KB/;s/M$/ MB/;s/G$/ GB/')
+
+    printf "  ${GRAY_L}Snapshots:${RST}    ${WHITE}%s${RST}  ${GRAY_L}(%s)${RST}\n" "${all_snap_count:-0}" "${snap_total:-0}"
+    printf "  ${GRAY_L}Sessions:${RST}     ${WHITE}%s${RST}  ${GRAY_L}(%s)${RST}\n" "${all_sess_count:-0}" "${sess_total:-0}"
+    printf "  ${GRAY_L}Screenshots:${RST}  ${WHITE}%s${RST}  ${GRAY_L}(%s)${RST}\n" "${all_scr_count:-0}" "${scr_total:-0}"
+
+    local all_count=$(( ${all_snap_count:-0} + ${all_sess_count:-0} + ${all_scr_count:-0} ))
+    printf "  ${GRAY_L}All:${RST}          ${WHITE}%s${RST}  ${GRAY_L}(%s)${RST}    ${GRAY_L}Logs:${RST} ${WHITE}%s${RST}\n" "$all_count" "$data_size" "$log_size"
 
     section "Reports"
 
@@ -365,6 +405,30 @@ cmd_restart() {
         done
         exit 1
     fi
+    echo ""
+}
+
+cmd_restart_agg() {
+    header "AGGREGATOR RESTART"
+
+    local -a names=("Daily"   "Weekly"   "Monthly")
+    local -a labels=("$LABEL_AGG_D" "$LABEL_AGG_W" "$LABEL_AGG_M")
+    local -a plists=("$PLIST_AGG_D" "$PLIST_AGG_W" "$PLIST_AGG_M")
+
+    for i in "${!names[@]}"; do
+        local name="${names[$i]}" label="${labels[$i]}" plist="${plists[$i]}"
+        msg_info "Reloading ${name} aggregator..."
+        launchctl unload "$plist" 2>/dev/null || true
+        launchctl load   "$plist" 2>/dev/null
+        local result state
+        result=$(svc_status "$label")
+        IFS='|' read -r state _ <<< "$result"
+        if [[ "$state" == "loaded" ]]; then
+            msg_ok "${name} aggregator loaded"
+        else
+            msg_err "${name} aggregator failed to load"
+        fi
+    done
     echo ""
 }
 
@@ -465,17 +529,77 @@ cmd_rhythm() {
 
 cmd_web() {
     header "WEB DASHBOARD"
-    msg_info "Starting on ${CYAN}${BOLD}http://127.0.0.1:7880${RST}"
+
+    local port="${PORT:-7880}"
+    local url="http://127.0.0.1:${port}"
+
+    # ── Replace an already-running WT server on this port ──────────────
+    # Only kill processes whose command line points to our web_dashboard.py —
+    # never touch unrelated processes that happen to hold the same port.
+    local existing_pids
+    existing_pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+
+    if [[ -n "$existing_pids" ]]; then
+        local wt_pids=() foreign_pids=()
+        while IFS= read -r pid; do
+            [[ -z "$pid" ]] && continue
+            local cmd
+            cmd=$(ps -p "$pid" -o command= 2>/dev/null || true)
+            if [[ "$cmd" == *web_dashboard.py* ]]; then
+                wt_pids+=("$pid")
+            else
+                foreign_pids+=("$pid")
+            fi
+        done <<< "$existing_pids"
+
+        if (( ${#foreign_pids[@]} > 0 )); then
+            msg_err "Port ${WHITE}${BOLD}${port}${RST} held by a non-WorkTracker process:"
+            for pid in "${foreign_pids[@]}"; do
+                printf "    ${GRAY_L}PID %s${RST}  %s\n" "$pid" "$(ps -p "$pid" -o command= 2>/dev/null || echo '?')"
+            done
+            msg_info "Set ${WHITE}PORT=<free>${RST} to pick a different port, or stop that process manually."
+            exit 1
+        fi
+
+        if (( ${#wt_pids[@]} > 0 )); then
+            msg_warn "Existing WorkTracker server on port ${WHITE}${BOLD}${port}${RST} (PID: ${wt_pids[*]})"
+            msg_info "Stopping existing instance…"
+            kill "${wt_pids[@]}" 2>/dev/null || true
+
+            # Wait up to 3 s for a clean SIGTERM shutdown.
+            local _waited=0
+            while (( _waited < 30 )); do
+                if ! lsof -tiTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+                    break
+                fi
+                sleep 0.1
+                ((_waited++))
+            done
+
+            # Force-kill anything still holding the port after 3 s.
+            local stubborn
+            stubborn=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+            if [[ -n "$stubborn" ]]; then
+                msg_warn "Force-killing stubborn process(es): ${stubborn//$'\n'/ }"
+                echo "$stubborn" | xargs kill -9 2>/dev/null || true
+                sleep 0.3
+            fi
+            msg_ok "Existing server stopped"
+        fi
+    fi
+
+    # ── Start a fresh server ────────────────────────────────────────────
+    msg_info "Starting on ${CYAN}${BOLD}${url}${RST}"
     msg_info "Press ${WHITE}${BOLD}Ctrl+C${RST} to stop"
     line "$SYM_LINE" "$GRAY"
     echo ""
     "$VENV" "$DAEMON/web_dashboard.py" &
     local _srv_pid=$!
-    # Wait for server to be ready, then open browser
+    # Wait for server to be ready, then open the browser
     for _ in 1 2 3 4 5 6; do
         sleep 0.5
-        if curl -s --max-time 1 http://127.0.0.1:7880 >/dev/null 2>&1; then
-            open http://127.0.0.1:7880
+        if curl -s --max-time 1 "$url" >/dev/null 2>&1; then
+            open "$url"
             break
         fi
     done
@@ -513,6 +637,31 @@ cmd_menubar() {
     echo ""
     trap 'echo ""; msg_info "Menubar widget stopped"; [[ -n "${_web_pid:-}" ]] && kill "$_web_pid" 2>/dev/null; exit 0' INT
     "$VENV" "$DAEMON/menubar.py"
+}
+
+cmd_config() {
+    header "CONFIG EDITOR"
+
+    # Ensure web dashboard is running on port 7880
+    if ! curl -s --max-time 1 http://127.0.0.1:7880 >/dev/null 2>&1; then
+        msg_info "Web dashboard not running — starting in background..."
+        nohup "$VENV" "$DAEMON/web_dashboard.py" >/dev/null 2>&1 &
+        disown
+        for _ in 1 2 3 4 5 6 7 8; do
+            sleep 0.5
+            if curl -s --max-time 1 http://127.0.0.1:7880 >/dev/null 2>&1; then
+                break
+            fi
+        done
+    fi
+
+    if curl -s --max-time 1 http://127.0.0.1:7880 >/dev/null 2>&1; then
+        msg_ok "Opening ${CYAN}${BOLD}http://127.0.0.1:7880/config${RST}"
+        open "http://127.0.0.1:7880/config"
+    else
+        msg_warn "Web dashboard did not come up — try ${WHITE}${BOLD}wt web${RST} manually"
+        exit 1
+    fi
 }
 
 cmd_tail() {
@@ -611,7 +760,7 @@ cmd_help() {
     # Widths: cmd=10, desc=42, alias=right-aligned column.
     help_row() {
         local cmd="$1" desc="$2" alias="$3"
-        printf "    ${WHITE}${BOLD}%-10s${RST}  ${GRAY_L}%-42s${RST}  ${ORANGE}%s${RST}\n" \
+        printf "    ${WHITE}${BOLD}%-12s${RST}  ${GRAY_L}%-42s${RST}  ${ORANGE}%s${RST}\n" \
             "$cmd" "$desc" "$alias"
     }
 
@@ -627,6 +776,7 @@ cmd_help() {
     echo ""
 
     printf "  ${CYAN}${BOLD}Aggregator${RST}\n"
+    help_row "restart-agg" "Reload all aggregator schedules"      "wtra"
     help_row "daily"     "Run daily aggregation"                 "wtd"
     help_row "weekly"    "Run weekly aggregation"                "wtw"
     help_row "monthly"   "Run monthly aggregation"               "wtm"
@@ -640,14 +790,12 @@ cmd_help() {
     help_row "rhythm"    "Weekly activity heatmap"               "wtrh"
     help_row "web"       "Start web dashboard (port 7880)"       "wtweb"
     help_row "menubar"   "Start macOS menubar widget"            "wtmb"
+    help_row "config"    "Edit config in browser"                "wtcfg"
     help_row "docs"      "Open documentation in browser"         "wtdocs"
     echo ""
 
     printf "  ${CYAN}${BOLD}Maintenance${RST}\n"
-    help_row "compress"  "Shrink screenshots PNG → JPEG q75"     "wtcmp"
-    echo ""
-
-    printf "  ${GRAY_L}wtrl${RST} ${GRAY}= reload shell (activate aliases)${RST}\n"
+    help_row "compress"  "Shrink screenshots PNG -> JPEG q75"     "wtcmp"
     echo ""
 
     # ── Blinking colon (cyan/red) + Rainbow Apple ──
@@ -656,16 +804,22 @@ cmd_help() {
 
     local colon_col=$(( 2 + 4 ))  # indent + "WORK" = position of ":"
     local apple_col=$(( 2 + len + 2 + 8 ))  # after "for mac "
+
+    # Title is at row 1; content ends at row 33 (32 lines printed after title).
+    # If terminal height < 34, content scrolls and title moves up (or off screen).
+    local term_h; term_h=$(tput lines)
+    local title_row=$(( term_h - 33 < 1 ? term_h - 33 : 1 ))
+
     local colon_colors=("${RED}" "${CYAN}")
     local rainbow=('\033[38;5;196m' '\033[38;5;208m' '\033[38;5;226m' '\033[38;5;46m' '\033[38;5;33m' '\033[38;5;93m')
     local ci=0
     local ai=0
 
-    while true; do
+    while (( title_row >= 0 )); do
         local cc="${colon_colors[$ci]}"
         local ac="${rainbow[$ai]}"
-        tput cup 1 $colon_col; printf "${cc}${BOLD}:${RST}"
-        tput cup 1 $apple_col; printf "${ac}${RST}"
+        tput cup $title_row $colon_col; printf "${cc}${BOLD}:${RST}"
+        tput cup $title_row $apple_col; printf "${ac}${RST}"
         ci=$(( (ci + 1) % 2 ))
         ai=$(( (ai + 1) % ${#rainbow[@]} ))
 
@@ -721,7 +875,7 @@ cmd_docs() {
 cmd_reprocess() {
     header "REPROCESS SESSIONS"
 
-    local snap_dir="$BASE/data/snapshots"
+    local snap_dir="$SNAP_DIR"
     local dates=()
 
     # Collect all dates with snapshot files
@@ -778,7 +932,7 @@ cmd_reprocess() {
 cmd_backfill() {
     header "BACKFILL MISSING REPORTS"
 
-    local snap_dir="$BASE/data/snapshots"
+    local snap_dir="$SNAP_DIR"
     local daily_dir="$SUMMARIES/daily"
     local weekly_dir="$SUMMARIES/weekly"
     local today
@@ -916,13 +1070,17 @@ cmd_compress() {
     fi
 
     msg_info "PNG → JPEG q75 (macOS sips)"
+    msg_info "Source: ${DIM}${SCR_DIR}${RST}"
     echo ""
 
     local start_time
     start_time=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
 
+    # Pass the config-resolved screenshots dir so the script targets the
+    # right location even when data is relocated (external volume etc.).
+    # The script still reads config itself as a fallback for standalone use.
     local exit_code=0
-    "$script" "$@" || exit_code=$?
+    SCREENSHOTS_DIR="$SCR_DIR" "$script" "$@" || exit_code=$?
 
     local end_time elapsed_ms
     end_time=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
@@ -949,6 +1107,7 @@ _wt_timed=true
 case "${1:-help}" in
     s|status)     cmd_status;;
     r|restart)    cmd_restart;;
+    ra|restart-agg) cmd_restart_agg;;
     start)        cmd_start;;
     stop)         cmd_stop;;
     d|daily)      cmd_agg daily;;
@@ -962,6 +1121,7 @@ case "${1:-help}" in
     reprocess|rp)  cmd_reprocess;;
     compress|cmp)  cmd_compress "${@:2}";;
     docs|docu|documentation)  cmd_docs;;
+    config|cfg)   _wt_timed=false; cmd_config;;
     tail|log)     _wt_timed=false; cmd_tail;;
     h|help|-h|--help)  _wt_timed=false; cmd_help;;
     *)

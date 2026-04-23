@@ -66,12 +66,31 @@ _USER_PATTERNS_TEMPLATE = """\
 
 projects: {}
 """
-SNAPSHOTS_DIR = BASE_DIR / "data" / "snapshots"
-SESSIONS_DIR = BASE_DIR / "data" / "sessions"
-DAILY_DIR = BASE_DIR / "summaries" / "daily"
-WEEKLY_DIR = BASE_DIR / "summaries" / "weekly"
-MONTHLY_DIR = BASE_DIR / "summaries" / "monthly"
-LOG_DIR = BASE_DIR / "logs"
+def _dirs_from_config() -> tuple[Path, Path, Path, Path, Path, Path]:
+    try:
+        with open(CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+        summaries = Path(cfg["aggregator"]["summaries_dir"]).expanduser()
+        return (
+            Path(cfg["collector"]["data_dir"]),
+            Path(cfg["aggregator"]["sessions_dir"]),
+            summaries / "daily",
+            summaries / "weekly",
+            summaries / "monthly",
+            Path(cfg["collector"]["log_dir"]),
+        )
+    except Exception:
+        summaries = BASE_DIR / "summaries"
+        return (
+            BASE_DIR / "data" / "snapshots",
+            BASE_DIR / "data" / "sessions",
+            summaries / "daily",
+            summaries / "weekly",
+            summaries / "monthly",
+            BASE_DIR / "logs",
+        )
+
+SNAPSHOTS_DIR, SESSIONS_DIR, DAILY_DIR, WEEKLY_DIR, MONTHLY_DIR, LOG_DIR = _dirs_from_config()
 TZ = "Europe/Vienna"
 
 def _safe_int(val, default: int = 0) -> int:

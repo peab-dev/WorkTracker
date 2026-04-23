@@ -7,7 +7,25 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-SUMMARY_DIR = Path.home() / "WorkTracker" / "summaries" / "daily"
+# Base dir only used to locate config.yaml — the actual summaries path
+# comes from config so users who relocate their data (e.g. to external
+# volumes) are honoured.
+_BASE_DIR = Path.home() / "WorkTracker"
+_CONFIG_PATH = _BASE_DIR / "daemon" / "config.yaml"
+
+
+def _summary_dir_from_config() -> Path:
+    """Resolve the daily-summaries dir from config.yaml, with fallback."""
+    try:
+        import yaml
+        with open(_CONFIG_PATH) as f:
+            cfg = yaml.safe_load(f) or {}
+        return Path(cfg["aggregator"]["summaries_dir"]).expanduser() / "daily"
+    except Exception:
+        return _BASE_DIR / "summaries" / "daily"
+
+
+SUMMARY_DIR = _summary_dir_from_config()
 HEALTHY_START = 9   # desired work start
 HEALTHY_END = 22    # desired work end
 
