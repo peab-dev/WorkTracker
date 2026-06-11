@@ -40,6 +40,11 @@ SKIP_TODAY=false
 DRY_RUN=false
 MIN_AGE_SECONDS=10   # race-guard against the running collector
 
+# Cache log (set by `wt compress` to LOG_DIR/wt-cache.log). Days that were
+# fully compressed are recorded as "COMPRESS <day> <dir-mtime> ts=<iso>" and
+# skipped on later runs as long as the directory mtime is unchanged.
+CACHE_FILE="${WT_CACHE_FILE:-}"
+
 # ── Colors (TTY only) ────────────────────────────────────────────────────────
 if [[ -t 1 ]]; then
     RST=$'\033[0m'; BOLD=$'\033[1m'; DIM=$'\033[2m'
@@ -65,6 +70,31 @@ human_size() {
 }
 
 die() { printf "%s✗%s  %s\n" "$RED" "$RST" "$1" >&2; exit 1; }
+
+# Is this day recorded as fully compressed with an unchanged dir mtime?
+cache_is_done() {
+    local day="$1" dir="$2"
+    [[ -n "$CACHE_FILE" && -f "$CACHE_FILE" ]] || return 1
+    local dm
+    dm=$(stat -f %m "$dir" 2>/dev/null || echo 0)
+    grep -q "^COMPRESS $day $dm " "$CACHE_FILE"
+}
+
+# Record a day as fully compressed (rewrites its line, keeps everything else).
+cache_mark_done() {
+    local day="$1" dir="$2"
+    [[ -n "$CACHE_FILE" ]] || return 0
+    local dm ts tmp
+    dm=$(stat -f %m "$dir" 2>/dev/null || echo 0)
+    ts=$(date '+%Y-%m-%dT%H:%M:%S')
+    tmp="${CACHE_FILE}.tmp.$$"
+    mkdir -p "$(dirname "$CACHE_FILE")"
+    {
+        grep -v "^COMPRESS $day " "$CACHE_FILE" 2>/dev/null || true
+        printf 'COMPRESS %s %s ts=%s\n' "$day" "$dm" "$ts"
+    } > "$tmp"
+    mv "$tmp" "$CACHE_FILE"
+}
 
 usage() {
     cat <<EOF
@@ -149,8 +179,26 @@ printf "  %s%sScreenshot %s%s  %s(JPEG q%d, %d dir%s)%s\n" \
     "$CYAN" "$BOLD" "$mode_label" "$RST" "$GRAY_L" "$QUALITY" "${#dirs[@]}" "$plural" "$RST"
 printf "  %s%s%s%s\n\n" "$GRAY" "$DIM" "$SCREENSHOTS_DIR" "$RST"
 
+# ── Cache pre-pass: skip past days already fully compressed ─────────────────
+process_dirs=()
+cached_dirs=0
+for dir in "${dirs[@]}"; do
+    day=$(basename "$dir")
+    if [[ "$day" != "$TODAY" ]] && cache_is_done "$day" "$dir"; then
+        cached_dirs=$(( cached_dirs + 1 ))
+    else
+        process_dirs+=("$dir")
+    fi
+done
+
+if (( cached_dirs > 0 )); then
+    printf "  %sSkipped (cached): %d day(s) — see wt-cache.log%s\n\n" \
+        "$GRAY_L" "$cached_dirs" "$RST"
+fi
+
 # ── Process each directory ──────────────────────────────────────────────────
 now_epoch=$(date +%s)
+SPIN=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
 
 total_ok=0
 total_skip=0
@@ -158,7 +206,7 @@ total_fail=0
 total_before=0
 total_after=0
 
-for dir in "${dirs[@]}"; do
+for dir in "${process_dirs[@]}"; do
     day=$(basename "$dir")
 
     shopt -s nullglob
@@ -168,6 +216,9 @@ for dir in "${dirs[@]}"; do
     if [[ ${#pngs[@]} -eq 0 ]]; then
         printf "  %s%-12s%s  %s%sno PNGs%s\n" \
             "$GRAY_L" "$day" "$RST" "$GRAY" "$DIM" "$RST"
+        if [[ "$day" != "$TODAY" ]] && ! $DRY_RUN; then
+            cache_mark_done "$day" "$dir"
+        fi
         continue
     fi
 
@@ -220,8 +271,9 @@ for dir in "${dirs[@]}"; do
             dir_fail=$(( dir_fail + 1 ))
         fi
 
-        if [[ -t 1 ]] && (( (dir_ok + dir_fail) % 25 == 0 )); then
-            printf "\r  %s%-12s  %d/%d%s" \
+        if [[ -t 1 ]]; then
+            printf "\r  %s%s%s  %s%-12s  %d/%d%s " \
+                "$CYAN" "${SPIN[$(( (dir_ok + dir_fail) % 10 ))]}" "$RST" \
                 "$GRAY_L" "$day" $(( dir_ok + dir_fail )) "$total_pngs" "$RST"
         fi
     done
@@ -255,6 +307,11 @@ for dir in "${dirs[@]}"; do
     total_fail=$(( total_fail + dir_fail ))
     total_before=$(( total_before + dir_before ))
     total_after=$(( total_after + dir_after ))
+
+    if [[ "$day" != "$TODAY" ]] && ! $DRY_RUN \
+        && (( dir_fail == 0 && dir_skip == 0 )); then
+        cache_mark_done "$day" "$dir"
+    fi
 done
 
 echo ""

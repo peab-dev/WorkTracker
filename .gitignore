@@ -37,6 +37,8 @@ logs/
 daemon/learned_patterns.yaml
 daemon/project_patterns.yaml
 daemon/config.yaml
+daemon/categories.yaml
+daemon/*.bak
 
 # Codex / misc
 docs/.codex/

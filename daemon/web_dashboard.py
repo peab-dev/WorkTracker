@@ -1358,13 +1358,33 @@ h2::before {
   font-size: 15px; font-weight: 700; color: var(--fg);
   pointer-events: none;
 }
-.gauge.gauge-hero .gauge-value { font-size: 18px; }
+.gauge.gauge-hero .gauge-value {
+  flex-direction: column; line-height: 1.05; font-size: 15px;
+}
+.gauge-value-min { font-size: 11px; font-weight: 600; color: var(--fg2); }
 .gauge-label {
   margin-top: 6px; font-size: 10px; color: var(--fg2);
   text-transform: uppercase; letter-spacing: 0.5px;
 }
 .gauge-sub {
   margin-top: 2px; font-size: 10px; color: var(--fg3);
+}
+/* Combined Work+Pause donut */
+.gauge-combo-center {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  line-height: 1.05; pointer-events: none;
+}
+.gauge-combo-center .cc-main { font-size: 22px; font-weight: 700; }
+.gauge-combo-center .cc-focus { font-size: 22px; font-weight: 900; margin-top: 1px; }
+.gauge-combo-center .cc-sub { font-size: 13px; font-weight: 600; margin-top: 1px; }
+.gauge-combo-legend {
+  margin-top: 6px; display: flex; flex-direction: column; gap: 3px;
+  font-size: 11px; color: var(--fg2);
+}
+.gauge-combo-legend span { display: flex; align-items: center; gap: 6px; }
+.gauge-combo-legend i {
+  width: 8px; height: 8px; border-radius: 2px; flex: none;
 }
 
 /* Project bars */
@@ -1787,7 +1807,7 @@ function spark(arr, hi) {
 // SVG ring gauge: { label, value, pct (0..1), color, hero?, sub? }
 function gaugeHtml(g) {
   const hero = !!g.hero;
-  const size = hero ? 84 : 64;
+  const size = hero ? 104 : 64;
   const stroke = hero ? 7 : 5;
   const r = (size - stroke) / 2;
   const cx = size / 2, cy = size / 2;
@@ -1803,13 +1823,74 @@ function gaugeHtml(g) {
     + ' stroke-dasharray="' + circumference + '" stroke-dashoffset="' + offset + '" />'
     + '</svg>';
   const valueStr = (g.value == null || g.value === '') ? '—' : String(g.value);
+  // Hero: split "18h 35m" so the minutes sit on their own, smaller line.
+  let valueHtml;
+  if (hero && valueStr.indexOf(' ') !== -1) {
+    const parts = valueStr.split(' ');
+    valueHtml = esc(parts[0]) + '<span class="gauge-value-min">' + esc(parts.slice(1).join(' ')) + '</span>';
+  } else {
+    valueHtml = esc(valueStr);
+  }
   return '<div class="gauge ' + (hero ? 'gauge-hero' : '') + '">'
     + '<div style="position:relative;width:' + size + 'px;height:' + size + 'px">'
     + svg
-    + '<div class="gauge-value">' + esc(valueStr) + '</div>'
+    + '<div class="gauge-value">' + valueHtml + '</div>'
     + '</div>'
     + '<div class="gauge-label">' + esc(g.label || '') + '</div>'
     + (g.sub ? '<div class="gauge-sub">' + esc(g.sub) + '</div>' : '')
+    + '</div>';
+}
+
+// Combined day donut over the full 24h. Segments (focus / work-without-focus /
+// pause) plus the idle remainder sum to 24h. The focus part is drawn as a
+// thicker, brighter arc. Center stacks the day shares; durations are below.
+function comboGaugeHtml(workSec, pauseSec, focusSec) {
+  const WORK = 'var(--cyan)', PAUSE = 'var(--orange)', FOCUS = 'var(--green)';
+  const DAY = 24 * 3600;
+  workSec = workSec || 0; pauseSec = pauseSec || 0; focusSec = Math.min(focusSec || 0, workSec);
+  const workOnly = Math.max(0, workSec - focusSec);
+  const focusFrac = focusSec / DAY;
+  const workFrac = workOnly / DAY;
+  const pauseFrac = pauseSec / DAY;
+  const workPct = Math.round(workFrac * 100);
+  const focusPct = Math.round(focusFrac * 100);
+  const pausePct = Math.round(pauseFrac * 100);
+
+  const size = 148, stroke = 9, focusStroke = 15;
+  const r = (size - focusStroke) / 2;
+  const cx = size / 2, cy = size / 2;
+  const circ = 2 * Math.PI * r;
+  const arc = (frac, start, color, sw, cap) =>
+    '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none"'
+    + ' stroke="' + color + '" stroke-width="' + sw + '"'
+    + ' stroke-linecap="' + cap + '"'
+    + ' stroke-dasharray="' + (frac * circ) + ' ' + circ + '"'
+    + ' stroke-dashoffset="' + (-start * circ) + '"'
+    + ' transform="rotate(-90 ' + cx + ' ' + cy + ')" />';
+
+  // Order around the ring: focus, then remaining work, then pause.
+  let svg = '<svg class="gauge-svg" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">'
+    + '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" stroke="var(--bg3)" stroke-width="' + stroke + '" fill="none" />';
+  if (workFrac > 0) svg += arc(workFrac, focusFrac, WORK, stroke, 'butt');
+  if (pauseFrac > 0) svg += arc(pauseFrac, focusFrac + workFrac, PAUSE, stroke, 'butt');
+  if (focusFrac > 0) svg += arc(focusFrac, 0, FOCUS, focusStroke, 'round');
+  svg += '</svg>';
+
+  return '<div class="gauge gauge-combo">'
+    + '<div style="position:relative;width:' + size + 'px;height:' + size + 'px">'
+    + svg
+    + '<div class="gauge-combo-center">'
+    +   '<span class="cc-main" style="color:' + WORK + '">' + workPct + '%</span>'
+    +   '<span class="cc-focus" style="color:' + FOCUS + '">' + focusPct + '%</span>'
+    +   '<span class="cc-sub" style="color:' + PAUSE + '">' + pausePct + '%</span>'
+    + '</div>'
+    + '</div>'
+    + '<div class="gauge-label">Arbeit &amp; Pause</div>'
+    + '<div class="gauge-combo-legend">'
+    +   '<span><i style="background:' + WORK + '"></i>Arbeit ' + esc(fmt(workSec)) + '</span>'
+    +   '<span><i style="background:' + FOCUS + '"></i>Fokus ' + esc(fmt(focusSec || 0)) + '</span>'
+    +   '<span><i style="background:' + PAUSE + '"></i>Pause ' + esc(fmt(pauseSec || 0)) + '</span>'
+    + '</div>'
     + '</div>';
 }
 
@@ -2005,27 +2086,18 @@ function update(d) {
     const pauseQ = dy.span_sec ? (dy.pause_sec || 0) / dy.span_sec : 0;
     const swPh = dy.switches_ph || 0;
     const gauges = [
+      {combo: true},
       {label: 'Sessions', value: dy.sessions, pct: pctSessions, color: 'var(--cyan)'},
       {label: 'Intensität', value: dy.avg_intensity != null ? dy.avg_intensity : '–', pct: pctInt,
        color: pctInt >= 0.6 ? 'var(--green)' : pctInt >= 0.3 ? 'var(--cyan)' : 'var(--yellow)',
        sub: 'von 10'},
-      {label: 'Arbeitszeit', value: fmt(dy.total_sec), pct: pctWork,
-       color: pctWork >= 0.5 ? 'var(--green)' : pctWork >= 0.2 ? 'var(--cyan)' : 'var(--yellow)',
-       hero: true, sub: Math.round(workRatio * 100) + '% von 8h'},
-      {label: 'Fokus-Quote', value: Math.round(focusQ * 100) + '%', pct: focusQ,
-       color: focusQ >= 0.4 ? 'var(--green)' : focusQ >= 0.2 ? 'var(--cyan)' : 'var(--orange)',
-       sub: fmt(dy.focus_sec) + ' im Flow'},
-      {label: 'Pause', value: fmt(dy.pause_sec || 0), pct: pauseQ,
-       color: pauseQ >= 0.25 ? 'var(--green)' : pauseQ >= 0.1 ? 'var(--cyan)' : 'var(--orange)',
-       sub: Math.round(pauseQ * 100) + '% des Tages'},
       {label: 'Switches', value: swPh + '/h', pct: Math.min(1, swPh / 20),
        color: swPh <= 8 ? 'var(--green)' : swPh <= 14 ? 'var(--yellow)' : 'var(--red)',
        sub: dy.switches + ' gesamt'},
-      {label: 'Focus', value: dy.focus_count, pct: pctFocus,
-       color: dy.focus_count > 0 ? 'var(--green)' : 'var(--orange)',
-       sub: fmt(dy.focus_sec)},
     ];
-    $('gauges-row').innerHTML = gauges.map(g => gaugeHtml(g)).join('');
+    $('gauges-row').innerHTML = gauges.map(g =>
+      g.combo ? comboGaugeHtml(dy.total_sec || 0, dy.pause_sec || 0, dy.focus_sec || 0)
+              : gaugeHtml(g)).join('');
     $('gauges-row').style.display = '';
 
     const HS = dy.hourly_series || {};
@@ -7880,10 +7952,11 @@ loadCatPool().finally(() => {
 # ---------------------------------------------------------------------------
 # Einheitliche Navbar — eine Quelle, in alle Templates injiziert
 # ---------------------------------------------------------------------------
-# Read the WorkTracker version once so the navbar badge stays in sync with
-# config.default.yaml (mirrors the docs topnav "v0.3.0" badge).
+# Read the WorkTracker version once. Single source of truth is the shipped
+# config.default.yaml (bumped per release); the user config.yaml is only a
+# fallback, since it is bootstrapped once and may carry a stale version.
 def _wt_version() -> str:
-    for f in (CONFIG_FILE, CONFIG_DEFAULT_FILE):
+    for f in (CONFIG_DEFAULT_FILE, CONFIG_FILE):
         try:
             v = (yaml.safe_load(f.read_text()) or {}).get("version")
             if v:

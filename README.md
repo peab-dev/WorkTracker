@@ -4,7 +4,7 @@ Automatic activity tracker for macOS — captures what you work on every 10 seco
 
 Built for macOS (Apple Silicon), designed as a fully local, private productivity tool.
 
-![Version](https://img.shields.io/badge/version-0.3.0-brightgreen)
+![Version](https://img.shields.io/badge/version-0.3.1-brightgreen)
 ![Status](https://img.shields.io/badge/status-public%20beta-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)
 ![License](https://img.shields.io/badge/license-open%20source-green)
@@ -46,11 +46,18 @@ wt status
 - macOS app + activity tracking
 - Sessions, intensity, and reports
 - Daily / weekly / monthly aggregation
+- Web dashboard with day explorer, statistics, and screenshot browser
+
+### Configure in the Browser
+- `/projects` — visual editor for project patterns (drag & drop visited URLs, live match test)
+- `/config` — documented config editor with service start/stop/restart
+- Shared category pool: same names and colors across reports and dashboards
 
 ### Local-First
 - Runs entirely on your Mac
 - No black box, no fees
 - Your data stays local
+- Screenshot privacy rules: block capture per URL, project, or category
 
 ### Optional: AI Power Up
 Level up your Work:Tracker output. Uncover unseen activity patterns & time-wastings with the power of AI. Connect local LLMs of your choice & improve your workflow.
@@ -69,7 +76,7 @@ Level up your Work:Tracker output. Uncover unseen activity patterns & time-wasti
 
 ## Made in Austria
 
-WorkTracker v0.3.0 — made with <3 by [peab.at](https://peab.at)
+WorkTracker v0.3.1 — made with <3 by [peab.at](https://peab.at)
 
 ---
 

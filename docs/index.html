@@ -430,7 +430,7 @@
 <nav class="topnav">
   <a class="logo" href="index.html">
     WORK<span class="colon">:</span>TRACKER
-    <span class="version">v0.3.0</span>
+    <span class="version">v0.3.1</span>
     <span class="beta">public beta</span>
   </a>
   <div class="topnav-links">
@@ -461,6 +461,7 @@
   <a href="#menubar">Menubar Widget</a>
   <a href="#rhythm">Rhythm Heatmap</a>
   <a href="#statistics">Statistics &amp; Screenshots</a>
+  <a href="#projects-editor">Projects &amp; Config Editor</a>
   <a href="#http-api">HTTP API</a>
   <a href="#reports">Reports</a>
   <a href="#enrichment">Topic &amp; Motivation</a>
@@ -474,6 +475,7 @@
   <a href="#config-motivation-llm">Motivation LLM</a>
   <a href="#config-patterns">Project Patterns</a>
   <a href="#web-categories">Web Categories</a>
+  <a href="#categories-pool">Categories Pool</a>
 
   <h3>Architecture</h3>
   <a href="#how-it-works">How It Works</a>
@@ -577,7 +579,7 @@ wt status</code></pre>
   <div class="gradient-box-inner">
     <div class="label">Optional Power Up</div>
     <p>Plug a <strong>local LLM</strong> into WorkTracker to enrich every session with a short topic and an optional motivational one-liner. Works out of the box with <strong>LM Studio</strong> or <strong>Ollama</strong> on localhost &mdash; see <a href="#config-topic-llm">Topic LLM</a> and <a href="#config-motivation-llm">Motivation LLM</a>. Nothing leaves your machine.</p>
-    <p style="margin-top:10px;color:var(--text2);font-size:13px;">LLM-Prompts for scheduled summaries (weekly/daily/monthly) will land in <b>v0.2.1 or above</b>.</p>
+    <p style="margin-top:10px;color:var(--text2);font-size:13px;">LLM-Prompts for scheduled summaries (weekly/daily/monthly) will land in an upcoming release.</p>
   </div>
 </div>
 
@@ -767,16 +769,31 @@ wtrh 8         # last 8 weeks</code></pre>
 
 <h2 id="statistics">Statistics &amp; Screenshots Explorer</h2>
 
-<p>The web dashboard ships three extra pages on top of the main view:</p>
+<p>The web dashboard ships five extra pages on top of the main view:</p>
 
 <table>
   <tr><th>Route</th><th>Purpose</th></tr>
   <tr><td><code>/explore</code><br><code>/explore/&lt;date&gt;</code></td><td>Drill into a specific day: full session list, topics, timeline, snapshot-level detail.</td></tr>
   <tr><td><code>/statistics</code></td><td>Cross-day aggregates: project trends, per-hour intensity, weekday patterns &mdash; the long-view analytics.</td></tr>
   <tr><td><code>/screenshots</code></td><td>Visual explorer for captured screenshots, grouped by day. Only populated when <code>screenshot.enabled: true</code>.</td></tr>
+  <tr><td><code>/projects</code></td><td>Visual editor for <code>project_patterns.yaml</code> &mdash; see <a href="#projects-editor">Projects &amp; Config Editor</a>.</td></tr>
+  <tr><td><code>/config</code></td><td>Config editor for <code>config.yaml</code> with per-key documentation and service controls.</td></tr>
 </table>
 
-<p>All three pages are reachable once <code>wt web</code> is running.</p>
+<p>All pages are reachable once <code>wt web</code> is running.</p>
+
+<h2 id="projects-editor">Projects &amp; Config Editor</h2>
+
+<p><strong><code>/projects</code></strong> edits <code>project_patterns.yaml</code> straight from the browser &mdash; no YAML editing required:</p>
+<ul style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li>Create, edit and delete projects with their title/URL glob patterns and category.</li>
+  <li>Category picker backed by the shared <a href="#categories-pool">category pool</a>.</li>
+  <li>Live match test: paste a window title or URL and see which project wins.</li>
+  <li>Visited-URL chips from your browsing history &mdash; drag one onto a project (or onto &ldquo;+ New Project&rdquo;) to turn it into a pattern.</li>
+  <li>Recognized-topics view and ignore lists for hosts/titles you never want matched.</li>
+</ul>
+
+<p><strong><code>/config</code></strong> renders <code>config.yaml</code> as a documented form: every key with its default, inline help, and safe editing (writes are validated, <code>version</code>/<code>author</code> are read-only). It also exposes service controls &mdash; start, stop or restart the collector and aggregator launchd jobs without leaving the browser.</p>
 
 <h2 id="http-api">HTTP API</h2>
 
@@ -798,6 +815,11 @@ wtrh 8         # last 8 weeks</code></pre>
   <tr><td><code>GET /api/screenshots/dates</code></td><td>Days that have screenshots</td></tr>
   <tr><td><code>GET /api/screenshots/&lt;date&gt;</code></td><td>Filenames for a given day</td></tr>
   <tr><td><code>GET /screenshots/file/&lt;date&gt;/&lt;filename&gt;</code></td><td>Serve one screenshot file directly</td></tr>
+  <tr><td><code>GET /api/categories</code></td><td>Shared category pool (names, colors, aliases)</td></tr>
+  <tr><td><code>GET/POST /api/projects</code></td><td>Read / save <code>project_patterns.yaml</code> (backs the <code>/projects</code> editor)</td></tr>
+  <tr><td><code>POST /api/projects/match</code></td><td>Test a title/URL against the current patterns</td></tr>
+  <tr><td><code>GET/POST /api/config</code></td><td>Read / save <code>config.yaml</code> (backs the <code>/config</code> editor)</td></tr>
+  <tr><td><code>POST /api/service/&lt;key&gt;/&lt;action&gt;</code></td><td>Start / stop / restart a launchd service</td></tr>
 </table>
 
 <div class="callout callout-info">
@@ -871,6 +893,14 @@ wt compress --quality 60 --skip-today # tighter quality, spare today&rsquo;s fol
 
 <p>Override the source directory with the <code>SCREENSHOTS_DIR</code> env var.</p>
 
+<h2>Incremental Cache (<code>wt-cache.log</code>)</h2>
+<p>Both <code>wt status</code> and <code>wt compress</code> keep per-day results in <code>logs/wt-cache.log</code> so repeated runs stay fast even with months of history:</p>
+<ul style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li><strong><code>wt status</code></strong> caches each day&rsquo;s snapshot/session/screenshot counts and sizes (<code>STATUS</code> records). Only days whose files changed since the last run are recomputed; today is always counted fresh.</li>
+  <li><strong><code>wt compress</code></strong> records fully compressed days (<code>COMPRESS</code> records) and skips them on later runs as long as the folder is unchanged.</li>
+</ul>
+<p>The cache is plain text and safe to delete at any time &mdash; the next run simply rebuilds it.</p>
+
 <!-- ════════════════════════════════════════════════════════════════ -->
 <h1 id="config">Configuration</h1>
 
@@ -900,7 +930,12 @@ wt compress --quality 60 --skip-today # tighter quality, spare today&rsquo;s fol
   <tr><td><code>screenshot.interval_seconds</code></td><td><code>60</code></td><td>Capture cadence (independent of snapshot interval)</td></tr>
   <tr><td><code>screenshot.dir</code></td><td><code>~/WorkTracker/data/screenshots</code></td><td>Output directory, one subfolder per day</td></tr>
   <tr><td><code>screenshot.skip_bundle_ids</code></td><td><code>[1Password, &hellip;]</code></td><td>Bundle IDs whose frontmost focus suppresses capture</td></tr>
+  <tr><td><code>screenshot.skip_urls</code></td><td><code>[]</code></td><td>Glob patterns against the active browser URL (e.g. <code>"*youtube.com*"</code>) &mdash; no screenshot while it matches</td></tr>
+  <tr><td><code>screenshot.skip_projects</code></td><td><code>[]</code></td><td>Project names from <code>project_patterns.yaml</code> &mdash; no screenshot while one is active</td></tr>
+  <tr><td><code>screenshot.skip_categories</code></td><td><code>[]</code></td><td>Category names (e.g. <code>Social Media</code>) &mdash; no screenshot while one is active</td></tr>
 </table>
+
+<p>Every suppressed capture is recorded with its reason in <code>logs/screenshot-skips.log</code>, so you can verify the rules are doing what you expect.</p>
 
 <h3>Distraction Notifications</h3>
 <table>
@@ -990,7 +1025,24 @@ default_project: "Other"</code></pre>
 
 <p><code>daemon/web_categories.py</code> is a stdlib-only knowledge base mapping domains to a two-level hierarchy <code>(main_category, subcategory)</code> &mdash; Development / Code Hosting, Development / Q&amp;A, Social Media / &hellip;, Media/Entertainment / &hellip;. The aggregator uses it to build the &ldquo;Browsing Analysis&rdquo; section of each report and to evaluate distraction thresholds against <code>notifications.distraction_categories</code>.</p>
 
-<p>Add new domains by editing the <code>DOMAIN_CATEGORIES</code> dict at the top of the file &mdash; no config, no restart.</p>
+<p>Since v0.3.0 domain classification delegates to the shared <a href="#categories-pool">category pool</a>: add or override domains in <code>categories.yaml</code> under <code>domain_categories</code> &mdash; no code edit needed.</p>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<h2 id="categories-pool">Categories Pool</h2>
+
+<p>Since v0.3.0 all category knowledge lives in one shared pool consumed by the aggregator, the reports and every dashboard view, so the same activity always gets the same name and color:</p>
+
+<pre><code>~/WorkTracker/daemon/categories.default.yaml   # shipped defaults
+~/WorkTracker/daemon/categories.yaml           # your overlay (auto-created, gitignored)</code></pre>
+
+<ul style="margin:8px 0 8px 24px; color:var(--text2);">
+  <li><strong>Activity categories</strong> &mdash; the canonical names (Development, AI/Research, Social Media, &hellip;) with a fixed color and alias list. Legacy or alias names are canonicalized everywhere.</li>
+  <li><strong>Domain categories</strong> &mdash; overlay for <code>web_categories.py</code>: map any domain to <code>[activity, subcategory]</code>.</li>
+  <li><strong>Tool bridge</strong> &mdash; app/tool categories (Terminal, Browser, &hellip;) map to activity categories, so sessions without a project still land in a meaningful bucket.</li>
+  <li><strong>Topic inheritance</strong> &mdash; each session gets a canonical <code>activity_category</code>: project category first, then web category, then the tool bridge.</li>
+</ul>
+
+<p>Add your own categories, colors or domain mappings in <code>categories.yaml</code> &mdash; the file overlays the defaults and survives updates.</p>
 
 <!-- ════════════════════════════════════════════════════════════════ -->
 <h1 id="how-it-works">How It Works</h1>
@@ -1038,6 +1090,10 @@ default_project: "Other"</code></pre>
 │   ├── <span class="file">topic_extractor.py</span>       <span class="desc"># Local LLM topic enrichment</span>
 │   ├── <span class="file">motivation_extractor.py</span>  <span class="desc"># Local vision-LLM motivation enrichment</span>
 │   ├── <span class="file">web_categories.py</span>        <span class="desc"># Domain &rarr; category knowledge base</span>
+│   ├── <span class="file">categories.py</span>            <span class="desc"># Shared category pool (apps, web, topics)</span>
+│   ├── <span class="file">categories.default.yaml</span>  <span class="desc"># Category pool defaults</span>
+│   ├── <span class="file">categories.yaml</span>          <span class="desc"># User category overlay (auto-created)</span>
+│   ├── <span class="file">history_stats.py</span>         <span class="desc"># Incremental stats cache for wt status</span>
 │   ├── <span class="file">review_patterns.py</span>       <span class="desc"># Interactive pattern review (TTY)</span>
 │   ├── <span class="file">compress_screenshots.sh</span>  <span class="desc"># PNG &rarr; JPEG q75 via sips</span>
 │   ├── <span class="file">ctl.sh</span>                   <span class="desc"># Alternative control script</span>
@@ -1232,7 +1288,7 @@ python aggregator.py --mode monthly</code></pre>
 <p>Native apps (Spotify, Apple Music, VLC, IINA, Podcasts) via their own APIs; browser tabs (YouTube, Netflix, Twitch, SoundCloud) via window-title pattern matching. Parallel media is tracked alongside work sessions and shown in the report.</p>
 
 <div class="footer">
-  <p>WorkTracker v0.3.0 &mdash; made in Austria with <span style="color:var(--red)">&lt;3</span> by <a href="https://peab.at">peab.at</a></p>
+  <p>WorkTracker v0.3.1 &mdash; made in Austria with <span style="color:var(--red)">&lt;3</span> by <a href="https://peab.at">peab.at</a></p>
 </div>
 
 </main>

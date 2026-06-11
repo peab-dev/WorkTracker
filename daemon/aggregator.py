@@ -21,6 +21,7 @@ import pandas as pd
 import yaml
 from rapidfuzz.fuzz import ratio as levenshtein_ratio
 
+import categories
 from web_categories import classify_url, build_web_category_tree
 from motivation_extractor import extract_motivations
 from topic_extractor import extract_topics
@@ -319,6 +320,9 @@ def load_patterns() -> tuple[dict[str, dict], str, dict[str, list[str]], dict]:
     data = _merge_patterns(default_data, user_data)
 
     app_categories = data.get("app_categories", {})
+    for proj, cat in categories.validate_project_categories(data.get("projects", {})):
+        log.warning("Projekt %r: Kategorie %r ist nicht im Kategorie-Pool "
+                    "(categories.yaml) — wird unverändert übernommen", proj, cat)
     tool_ctx = {
         "tool_apps": {str(a).strip().lower() for a in data.get("tool_apps", []) if a},
         "tool_app_url_hosts": {str(h).strip().lower() for h in data.get("tool_app_url_hosts", []) if h},
@@ -335,101 +339,9 @@ def load_patterns() -> tuple[dict[str, dict], str, dict[str, list[str]], dict]:
 def match_app_category(app_name: str, app_categories: dict) -> str:
     """Match app name against app_categories. Always returns a category string.
 
-    Supports both flat (list) and structured (dict with 'apps') formats.
+    Thin wrapper over the shared category pool (categories.classify_app).
     """
-    if not app_name:
-        return "Other"
-    app_lower = app_name.lower()
-    for category, cat_info in app_categories.items():
-        if category == "Other":
-            continue
-        # Support both formats: list or dict with "apps" key
-        apps_list = cat_info if isinstance(cat_info, list) else cat_info.get("apps", [])
-        for pattern in apps_list:
-            if fnmatch.fnmatch(app_lower, pattern.lower()):
-                return category
-    return "Other"
-
-
-# Browser subcategory mapping: project category → browser subcategory
-_BROWSER_SUBCAT_MAP = {
-    "Development": "Development",
-    "AI": "AI",
-    "News": "News",
-    "Social Media": "Social Media",
-    "Media/Entertainment": "Entertainment",
-    "Entertainment": "Entertainment",
-    "Finance": "Finance",
-    "Crypto": "Finance",
-    "Communication": "Communication",
-    "Research": "Searching",
-    "Business": "Business",
-    "Creative": "Creative",
-    "Music": "Music",
-}
-
-# Media app → subcategory mapping
-_MEDIA_SUBCAT_MAP = {
-    "spotify": "Music", "musik": "Music",
-    "podcasts": "Podcasts",
-    "vlc": "Video", "iina": "Video", "quicktime player": "Video",
-    "fotos": "Photos", "photos": "Photos", "photo booth": "Photos",
-}
-
-# Development app → subcategory mapping
-_DEV_SUBCAT_MAP = {
-    "webstorm": "IDE", "xcode": "IDE",
-    "terminal": "Terminal",
-    "docker desktop": "Dev Tools", "mongodb compass": "Dev Tools",
-    "filezilla": "Dev Tools", "github desktop": "Dev Tools",
-    "bambu studio": "Dev Tools", "jetbrains toolbox": "Dev Tools",
-}
-
-# Communication app → subcategory mapping
-_COMM_SUBCAT_MAP = {
-    "mail": "Mail",
-    "nachrichten": "Chat", "whatsapp": "Chat", "slack": "Chat", "telegram": "Chat",
-}
-
-# Productivity app → subcategory mapping
-_PROD_SUBCAT_MAP = {
-    "notizen": "Notes",
-    "pages": "Office", "numbers": "Office", "textEdit": "Office",
-    "ticktick": "Tasks", "erinnerungen": "Tasks",
-    "vorschau": "Office",
-}
-
-# Mapping tables per category
-_SUBCAT_MAPS: dict[str, dict[str, str]] = {
-    "Media": _MEDIA_SUBCAT_MAP,
-    "Development": _DEV_SUBCAT_MAP,
-    "Communication": _COMM_SUBCAT_MAP,
-    "Productivity": _PROD_SUBCAT_MAP,
-}
-
-
-def _resolve_subcategory(app_category: str, app_name: str,
-                          project_category: str) -> str:
-    """Determine the subcategory for a session.
-
-    For Browser: derived from the *project* category (News, AI, etc.).
-    For other categories: derived from the *app* name.
-    """
-    if app_category == "Browser":
-        return _BROWSER_SUBCAT_MAP.get(project_category, project_category or "Other")
-
-    subcat_map = _SUBCAT_MAPS.get(app_category)
-    if subcat_map:
-        app_lower = app_name.lower()
-        for pattern, sub in subcat_map.items():
-            if fnmatch.fnmatch(app_lower, pattern.lower()):
-                return sub
-        # fnmatch fallback for IDE patterns like "IntelliJ*"
-        for pattern, sub in subcat_map.items():
-            if "*" in pattern and fnmatch.fnmatch(app_lower, pattern.lower()):
-                return sub
-
-    return ""
+    return categories.classify_app(app_name, app_categories)
 
 
 _FORGE_DOMAINS = {"github.com", "gitlab.com", "bitbucket.org"}
@@ -697,6 +609,54 @@ def match_project(
     if is_tool_app:
         return default, "", "tool_app_unresolved"
     return default, "", "default"
+
+
+def assign_projects_by_topic(
+    sessions: list[dict],
+    projects: dict[str, dict],
+    default_project: str = "Other",
+) -> int:
+    """Nachrangige Zuordnung: noch unaufgelöste Sessions anhand ihres (vom
+    LLM erkannten) Topics einem Projekt zuordnen.
+
+    Greift NUR für Sessions, die sonst unter dem Default-Projekt („Other“)
+    bzw. als tool_app_unresolved landen würden — stärkere Signale (Git, URL,
+    Titel, Verzeichnis, Inheritance) behalten Vorrang. Matcht das ``topics``-
+    Glob jedes Projekts case-insensitiv gegen das Session-Topic.
+
+    Muss NACH ``extract_topics`` laufen (vorher ist ``topic`` leer).
+    Gibt die Anzahl neu zugeordneter Sessions zurück.
+    """
+    # (proj_name, category, topic_glob_lower) — in Projektreihenfolge
+    rules = []
+    for proj_name, info in projects.items():
+        if not isinstance(info, dict):
+            continue
+        for pat in info.get("topics") or []:
+            rules.append((proj_name, info.get("category", ""), str(pat).lower()))
+    if not rules:
+        return 0
+
+    n = 0
+    for s in sessions:
+        if not _is_unresolved(s, default_project):
+            continue
+        topic = str(s.get("topic") or "").strip().lower()
+        if not topic:
+            continue
+        for proj_name, category, glob in rules:
+            if fnmatch.fnmatch(topic, glob):
+                s["project"] = proj_name
+                s["category"] = category
+                # sanitize_session_for_report liest _match_reason für das
+                # gespeicherte match_reason — beide setzen, damit der Grund
+                # in Stats (match_reason) und Roh-Session (_match_reason) steht.
+                reason = f"topic:{topic[:40]}"
+                s["match_reason"] = reason
+                s["_match_reason"] = reason
+                n += 1
+                break
+    return n
 
 
 # ---------------------------------------------------------------------------
@@ -969,7 +929,7 @@ def _new_session(row: pd.Series, projects: dict, default_project: str,
         ambient_titles=ambient,
         tool_ctx=tool_ctx or {},
     )
-    app_subcat = _resolve_subcategory(app_cat, app_name, cat)
+    app_subcat = categories.app_subcategory(app_cat, app_name, cat)
     return {
         "start": row["ts"],
         "end": row["ts"],
@@ -1116,7 +1076,7 @@ def _finalize_session(session: dict, interval: int, min_snapshots: int) -> dict:
         "app_subcategory": session.get("app_subcategory", ""),
         "window_title": window_title,
         "project": session["project"],
-        "category": session["category"],
+        "category": categories.canonical(session["category"]),
         "match_reason": session.get("_match_reason", ""),
         "is_tool_app": bool(session.get("_is_tool_app", False)),
         "topic": session.get("topic", ""),
@@ -1141,6 +1101,9 @@ def _finalize_session(session: dict, interval: int, min_snapshots: int) -> dict:
             wc_main, wc_sub = classify_url(url)
             result["web_category"] = wc_main
             result["web_subcategory"] = wc_sub
+    # Canonical activity category from the shared pool — inherited by the
+    # session's topic (project category → web category → tool bridge).
+    result["activity_category"] = categories.derive_activity_category(result)
     if git_repo:
         result["git_repo"] = git_repo
         result["git_branch"] = git_branch
@@ -1343,9 +1306,11 @@ def propagate_project_context(sessions: list[dict],
 
 
 def aggregate_topics(sessions: list[dict], top_n: int = 12, min_sec: int = 60) -> list[dict]:
-    """Aggregate sessions by topic → [{name, sec, pct, project, sessions}]."""
+    """Aggregate sessions by topic → [{name, sec, pct, project, category, sessions}]."""
     totals: dict[str, int] = {}
     projects: dict[str, tuple[str, int]] = {}
+    cats: dict[str, Counter] = {}
+    longs: dict[str, tuple[str, int]] = {}
     counts: dict[str, int] = {}
     total_topic_sec = 0
     for s in sessions:
@@ -1360,12 +1325,24 @@ def aggregate_topics(sessions: list[dict], top_n: int = 12, min_sec: int = 60) -
         cur_proj = projects.get(topic)
         if not cur_proj or dur > cur_proj[1]:
             projects[topic] = (s.get("project", ""), dur)
+        # Pool category: dominant activity category across the topic's sessions.
+        act = s.get("activity_category") or categories.derive_activity_category(s)
+        if act and act != "Other":
+            cats.setdefault(topic, Counter())[act] += dur
+        # Likewise keep the topic_long from the longest session that has one.
+        tl = (s.get("topic_long") or "").strip()
+        if tl:
+            cur_long = longs.get(topic)
+            if not cur_long or dur > cur_long[1]:
+                longs[topic] = (tl, dur)
     items = [
         {
             "name": t,
             "sec": totals[t],
             "pct": round((totals[t] / total_topic_sec) * 100, 1) if total_topic_sec else 0,
             "project": projects[t][0],
+            "category": cats[t].most_common(1)[0][0] if cats.get(t) else "Other",
+            "topic_long": longs.get(t, ("", 0))[0],
             "sessions": counts[t],
         }
         for t in totals
@@ -2305,7 +2282,7 @@ def run_daily(date: datetime, progress: "Progress | None" = None) -> None:
     # Topic extraction via local LLM (best-effort, silent on failure)
     set_count = 0
     try:
-        _, _, _, _tool_ctx = load_patterns()
+        _proj, _default_proj, _, _tool_ctx = load_patterns()
         _suffixes = _tool_ctx.get("tool_app_title_suffixes", [])
 
         def _topic_progress(done: int, total: int, topics_set: int) -> None:
@@ -2318,6 +2295,14 @@ def run_daily(date: datetime, progress: "Progress | None" = None) -> None:
         if set_count:
             log.info("Topic-LLM: %d Sessions mit Topic angereichert", set_count)
         progress.update("topics", f"{set_count} set")
+
+        # Nachrangige Topic→Projekt-Zuordnung: noch unaufgelöste Sessions
+        # anhand ihres Topics einem Projekt zuordnen (topics-Regel im
+        # project_patterns.yaml). Muss NACH extract_topics laufen.
+        topic_assigned = assign_projects_by_topic(sessions, _proj, _default_proj)
+        if topic_assigned:
+            log.info("Topic→Projekt: %d Sessions zugeordnet", topic_assigned)
+            progress.update("topics", f"{set_count} set, {topic_assigned} via topic")
     except Exception as e:
         log.warning("Topic-Extraktion fehlgeschlagen: %s", e, exc_info=True)
 

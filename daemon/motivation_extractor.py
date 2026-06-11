@@ -21,7 +21,9 @@ from pathlib import Path
 from urllib import request as _urlrequest
 from urllib.error import URLError, HTTPError
 
-log = logging.getLogger("worktracker.motivation_extractor")
+# Child of the "aggregator" logger so warnings reach aggregator.log —
+# under "worktracker.*" they had no handler and were silently dropped.
+log = logging.getLogger("aggregator.motivation_extractor")
 
 _SYSTEM_PROMPT = (
     "/no_think\n"

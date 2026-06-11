@@ -208,12 +208,12 @@ def mb_color(name):
     return NSColor.labelColor()
 
 
-# ── Rhythm data helpers (10:00 → 10:00 day definition) ─────────────────
-# A "rhythm day" starts at 10:00 on its start date and runs to 10:00 the
+# ── Rhythm data helpers (06:00 → 06:00 day definition) ─────────────────
+# A "rhythm day" starts at 06:00 on its start date and runs to 06:00 the
 # next calendar day. That means each rhythm row spans two markdown files.
 
 _INACTIVE_APPS = {"loginwindow"}
-DAY_START_HOUR = 10  # 10:00 is the rhythm-day boundary
+DAY_START_HOUR = 6  # 06:00 is the rhythm-day boundary (first column = 06:00–07:00)
 
 
 def _read_active_hours_for_date(date_obj):
@@ -253,21 +253,21 @@ def _read_active_hours_for_date(date_obj):
 
 
 def rhythm_day_active_hours(start_date):
-    """Return the set of active hours for a 10:00→10:00 rhythm day.
+    """Return the set of active hours for a 06:00→06:00 rhythm day.
 
     The span is:
-      * start_date 10:00 … 23:59 → from ``start_date``'s report
-      * (start_date + 1) 00:00 … 09:59 → from next day's report
+      * start_date 06:00 … 23:59 → from ``start_date``'s report
+      * (start_date + 1) 00:00 … 05:59 → from next day's report
 
     Returned hours are in 0..23 (actual wall-clock). Use ``DAY_START_HOUR``
     to map them to display order.
     """
     hours = set()
-    # Hours 10..23 from start_date
+    # Hours 06..23 from start_date
     for h in _read_active_hours_for_date(start_date):
         if h >= DAY_START_HOUR:
             hours.add(h)
-    # Hours 0..9 from next day
+    # Hours 0..5 from next day
     next_day = start_date + timedelta(days=1)
     for h in _read_active_hours_for_date(next_day):
         if h < DAY_START_HOUR:
@@ -699,10 +699,10 @@ class WTHeroView(NSView):
 
 
 class WTRhythmView(NSView):
-    """7-day × 24h rhythm heatmap, day boundary at 10:00.
+    """7-day × 24h rhythm heatmap, day boundary at 06:00.
 
     Rows: 7 rhythm days, bottom row = today (highlighted).
-    Columns: 24 hours starting at 10:00, ending at 09:00 next day.
+    Columns: 24 hours starting at 06:00, ending at 05:00 next day.
     Each cell is a rounded square; color encodes active / healthy / weekend.
     """
 
@@ -820,17 +820,21 @@ class WTRhythmView(NSView):
                     path.fill()
                     continue
 
-                # Active cell — color based on healthy hour range and weekday
-                healthy = 10 <= hr < 22
+                # Active cell — hellblau = Tagesarbeitszeit (06–20), dunkelblau = Nachtarbeitszeit
+                healthy = 6 <= hr < 20
+                day_blue = NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                    0.42, 0.71, 1.0, 1.0
+                )
+                night_blue = NSColor.colorWithCalibratedRed_green_blue_alpha_(
+                    0.12, 0.23, 0.54, 1.0
+                )
+                base = day_blue if healthy else night_blue
                 if is_today:
-                    base = NSColor.systemGreenColor() if healthy else NSColor.systemPurpleColor()
-                    alpha = 1.0 if healthy else 0.85
+                    alpha = 1.0 if healthy else 0.95
                 elif is_weekend:
-                    base = NSColor.systemOrangeColor() if healthy else NSColor.systemPurpleColor()
-                    alpha = 0.90 if healthy else 0.70
+                    alpha = 0.90 if healthy else 0.80
                 else:
-                    base = NSColor.systemTealColor() if healthy else NSColor.systemPurpleColor()
-                    alpha = 0.80 if healthy else 0.60
+                    alpha = 0.80 if healthy else 0.70
 
                 base.colorWithAlphaComponent_(alpha).setFill()
                 path.fill()
@@ -868,9 +872,8 @@ class WTRhythmView(NSView):
             NSForegroundColorAttributeName: NSColor.tertiaryLabelColor(),
         }
         leg_specs = [
-            (NSColor.systemTealColor(), "Tag"),
-            (NSColor.systemOrangeColor(), "Weekend"),
-            (NSColor.systemPurpleColor(), "spät/früh"),
+            (NSColor.colorWithCalibratedRed_green_blue_alpha_(0.42, 0.71, 1.0, 1.0), "Tag (06–20)"),
+            (NSColor.colorWithCalibratedRed_green_blue_alpha_(0.12, 0.23, 0.54, 1.0), "Nacht (20–06)"),
         ]
         lx = leg_pad
         for color, label in leg_specs:
@@ -1226,7 +1229,7 @@ class WorkTrackerMenubar(NSObject):
             # ── Nutzungsverlauf (Hourly Line Chart) ─────────────
             hourly = day.get("hourly", [])
             if hourly and any(h > 0 for h in hourly):
-                self._add_header("Nutzungsverlauf · ab 10:00")
+                self._add_header("Nutzungsverlauf · ab 06:00")
                 rotated, display_hours = rotate_hourly_to_day_start(hourly)
                 self._add_line_chart(
                     rotated,
@@ -1356,14 +1359,14 @@ class WorkTrackerMenubar(NSObject):
         self._add_action("Beenden", "terminate:")
 
     def _build_rhythm_section(self):
-        """Add a 7-day rhythm heatmap with a 10:00→10:00 day definition.
+        """Add a 7-day rhythm heatmap with a 06:00→06:00 day definition.
 
-        Each rhythm row represents a 24-hour span starting at 10:00 on its
+        Each rhythm row represents a 24-hour span starting at 06:00 on its
         start date. The 'current' rhythm day is the one that contains now:
-          * if now.hour >= 10 → starts at today 10:00
-          * if now.hour <  10 → starts at yesterday 10:00
+          * if now.hour >= 6 → starts at today 06:00
+          * if now.hour <  6 → starts at yesterday 06:00
         """
-        self._add_header("Rhythmus · 7 Tage · 10 → 10")
+        self._add_header("Rhythmus · 7 Tage · 06 → 06")
 
         now = datetime.now()
         # Determine start date of the rhythm day containing 'now'.
@@ -1396,7 +1399,7 @@ class WorkTrackerMenubar(NSObject):
 
     # ── Menu helpers ────────────────────────────────────────────
     # Menu item target width — used to place right-aligned tab stops.
-    MENU_WIDTH = 300.0
+    MENU_WIDTH = 420.0
 
     def _add_header(self, text):
         """Stats-app style centered section title (replaces dim gray headers).

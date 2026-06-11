@@ -1,0 +1,1871 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WorkTracker Dashboard — April & Mai 2026</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --bg2: #13161e;
+    --bg3: #1a1e2a;
+    --bg4: #21263a;
+    --border: #2a3050;
+    --text: #e2e8f0;
+    --muted: #8892a4;
+    --accent: #6366f1;
+    --accent2: #818cf8;
+    --green: #34d399;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --orange: #fb923c;
+    --pink: #f472b6;
+    --cyan: #22d3ee;
+    --purple: #a78bfa;
+    --april: #6366f1;
+    --may: #34d399;
+    --w15: #818cf8;
+    --w16: #34d399;
+    --w17: #f87171;
+    --w18: #fbbf24;
+    --w19: #fb923c;
+    --w20: #f87171;
+    --w21: #4ade80;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  .header {
+    background: linear-gradient(135deg, #0d0f14 0%, #1a1033 50%, #0d1a0f 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 28px 32px 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(20px);
+  }
+  .header-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .header-title {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .header-icon {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  .header-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .header-nav {
+    display: flex; gap: 4px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px;
+  }
+  .nav-btn {
+    padding: 7px 16px;
+    border-radius: 7px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .nav-btn:hover { color: var(--text); background: var(--bg4); }
+  .nav-btn.active { background: var(--accent); color: white; }
+  .header-badge {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .header-badge span { color: var(--text); font-weight: 600; }
+
+  /* LAYOUT */
+  .main {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 28px 32px;
+  }
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* GRID */
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
+  .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .grid-1-2 { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; margin-bottom: 24px; }
+
+  /* CARDS */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+  }
+  .card-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-weight: 600;
+  }
+  .badge-green { background: rgba(52,211,153,0.15); color: var(--green); }
+  .badge-red { background: rgba(248,113,113,0.15); color: var(--red); }
+  .badge-yellow { background: rgba(251,191,36,0.15); color: var(--yellow); }
+  .badge-purple { background: rgba(99,102,241,0.15); color: var(--accent2); }
+  .badge-cyan { background: rgba(34,211,238,0.15); color: var(--cyan); }
+
+  /* KPI CARDS */
+  .kpi-value {
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .kpi-label {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .kpi-compare {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .kpi-april {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .kpi-may {
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .kpi-delta {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: auto;
+  }
+  .delta-pos { background: rgba(52,211,153,0.15); color: var(--green); }
+  .delta-neg { background: rgba(248,113,113,0.15); color: var(--red); }
+  .delta-neu { background: rgba(136,146,164,0.15); color: var(--muted); }
+
+  .score-bar {
+    height: 6px;
+    background: var(--bg4);
+    border-radius: 3px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  .score-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 1s ease;
+  }
+
+  /* CHART CONTAINERS */
+  .chart-container {
+    position: relative;
+    height: 260px;
+  }
+  .chart-container.tall {
+    height: 320px;
+  }
+  .chart-container.short {
+    height: 200px;
+  }
+
+  /* SECTION HEADERS */
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* WEEKLY PILLS */
+  .week-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid;
+  }
+  .week-pill.w15 { background: rgba(129,140,248,0.12); color: var(--w15); border-color: rgba(129,140,248,0.2); }
+  .week-pill.w16 { background: rgba(52,211,153,0.12); color: var(--w16); border-color: rgba(52,211,153,0.2); }
+  .week-pill.w17 { background: rgba(248,113,113,0.12); color: var(--w17); border-color: rgba(248,113,113,0.2); }
+  .week-pill.w18 { background: rgba(251,191,36,0.12); color: var(--w18); border-color: rgba(251,191,36,0.2); }
+  .week-pill.w19 { background: rgba(251,146,60,0.12); color: var(--w19); border-color: rgba(251,146,60,0.2); }
+  .week-pill.w20 { background: rgba(248,113,113,0.12); color: var(--w20); border-color: rgba(248,113,113,0.2); }
+  .week-pill.w21 { background: rgba(74,222,128,0.12); color: var(--w21); border-color: rgba(74,222,128,0.2); }
+
+  /* INSIGHT CARDS */
+  .insight {
+    display: flex;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    margin-bottom: 10px;
+  }
+  .insight-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .insight-title {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .insight-text {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .insight.positive { border-color: rgba(52,211,153,0.25); background: rgba(52,211,153,0.05); }
+  .insight.negative { border-color: rgba(248,113,113,0.25); background: rgba(248,113,113,0.05); }
+  .insight.warning { border-color: rgba(251,191,36,0.25); background: rgba(251,191,36,0.05); }
+  .insight.info { border-color: rgba(99,102,241,0.25); background: rgba(99,102,241,0.05); }
+
+  /* TABLE */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .data-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(42,48,80,0.5);
+    vertical-align: middle;
+  }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: var(--bg3); }
+  .data-table .num { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .data-table .right { text-align: right; }
+
+  /* PROGRESS BARS */
+  .mini-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mini-bar-track {
+    flex: 1;
+    height: 5px;
+    background: var(--bg4);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .mini-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+  }
+
+  /* SCROLLABLE TABLE WRAPPER */
+  .table-scroll {
+    overflow-x: auto;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+
+  /* LEGEND */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* SCORE INDICATOR */
+  .score-big {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  .score-big .num { font-size: 40px; font-weight: 800; letter-spacing: -2px; }
+  .score-big .denom { font-size: 18px; color: var(--muted); }
+
+  /* MEDIA HEATMAP */
+  .heatmap-row {
+    display: grid;
+    grid-template-columns: 80px repeat(7, 1fr);
+    gap: 3px;
+    margin-bottom: 3px;
+    align-items: center;
+    font-size: 11px;
+  }
+  .heatmap-cell {
+    height: 28px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    transition: transform 0.1s;
+    cursor: default;
+  }
+  .heatmap-cell:hover { transform: scale(1.05); }
+  .heatmap-label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .heatmap-header {
+    display: grid;
+    grid-template-columns: 80px repeat(7, 1fr);
+    gap: 3px;
+    margin-bottom: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* TOOLTIP */
+  .tooltip-wrapper { position: relative; display: inline-flex; }
+  .tooltip-wrapper:hover .tooltip-box { opacity: 1; pointer-events: all; }
+  .tooltip-box {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg4);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 11px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* PATTERN TIMELINE */
+  .pattern-track {
+    display: flex;
+    gap: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    height: 36px;
+    margin-bottom: 6px;
+  }
+  .pattern-segment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: white;
+    transition: opacity 0.15s;
+    cursor: default;
+    position: relative;
+  }
+  .pattern-segment:hover { opacity: 0.85; }
+
+  /* DRIFT INDICATOR */
+  .drift-meter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--bg3);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    margin-bottom: 10px;
+  }
+  .drift-icon { font-size: 18px; }
+  .drift-info { flex: 1; }
+  .drift-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+  .drift-sub { font-size: 11px; color: var(--muted); }
+  .drift-value { font-size: 20px; font-weight: 800; }
+
+  /* RESPONSIVE */
+  @media (max-width: 1100px) {
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: repeat(2, 1fr); }
+    .grid-2-1, .grid-1-2 { grid-template-columns: 1fr; }
+    .header-nav { display: none; }
+    .mobile-nav {
+      display: flex;
+      overflow-x: auto;
+      gap: 8px;
+      margin-bottom: 20px;
+      padding-bottom: 8px;
+    }
+  }
+  @media (min-width: 1101px) {
+    .mobile-nav { display: none; }
+  }
+
+  .mobile-nav {
+    display: none;
+  }
+  .mobile-nav .nav-btn {
+    white-space: nowrap;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 16px;
+  }
+  .mobile-nav .nav-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-inner">
+    <div class="header-title">
+      <div class="header-icon">📊</div>
+      <div>
+        <h1>WorkTracker Dashboard</h1>
+        <div class="header-sub">April & Mai 2026 — Wochen- & Monatsanalyse</div>
+      </div>
+    </div>
+    <div class="header-nav">
+      <button class="nav-btn active" onclick="showSection('overview')">Übersicht</button>
+      <button class="nav-btn" onclick="showSection('weekly')">Wochen</button>
+      <button class="nav-btn" onclick="showSection('projects')">Projekte</button>
+      <button class="nav-btn" onclick="showSection('media')">Medien & Muster</button>
+      <button class="nav-btn" onclick="showSection('insights')">Erkenntnisse</button>
+    </div>
+    <div class="header-badge">Stand: <span>22.05.2026</span></div>
+  </div>
+</div>
+
+<div class="main">
+  <!-- MOBILE NAV -->
+  <div class="mobile-nav">
+    <button class="nav-btn active" onclick="showSection('overview')">Übersicht</button>
+    <button class="nav-btn" onclick="showSection('weekly')">Wochen</button>
+    <button class="nav-btn" onclick="showSection('projects')">Projekte</button>
+    <button class="nav-btn" onclick="showSection('media')">Medien & Muster</button>
+    <button class="nav-btn" onclick="showSection('insights')">Erkenntnisse</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- SECTION: ÜBERSICHT -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="section-overview" class="section active">
+
+    <!-- KPI ROW -->
+    <div class="section-label">Monatsvergleich auf einen Blick</div>
+    <div class="grid-4">
+      <!-- Gesamt-Score -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Monats-Score</span>
+          <span class="card-badge badge-purple">Ø/10</span>
+        </div>
+        <div class="kpi-value" style="color:var(--accent2)">3.3</div>
+        <div class="kpi-label">Ø über beide Monate</div>
+        <div class="kpi-compare">
+          <div style="flex:1">
+            <div style="font-size:11px; color:var(--muted); margin-bottom:3px">April 3.4 / Mai 3.2</div>
+            <div class="score-bar"><div class="score-fill" style="width:33%; background:linear-gradient(90deg,var(--accent),var(--purple))"></div></div>
+          </div>
+        </div>
+      </div>
+      <!-- Focus Sessions -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Focus Sessions</span>
+          <span class="card-badge badge-green">+62%</span>
+        </div>
+        <div class="kpi-value" style="color:var(--green)">125</div>
+        <div class="kpi-label">Mai vs. 77 im April</div>
+        <div class="kpi-compare">
+          <div class="kpi-april">Apr: 77</div>
+          <div style="width: 1px; height: 12px; background: var(--border); margin: 0 4px;"></div>
+          <div class="kpi-may" style="color:var(--green)">Mai: 125</div>
+          <div class="kpi-delta delta-pos">↑ +62%</div>
+        </div>
+      </div>
+      <!-- YouTube -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">YouTube</span>
+          <span class="card-badge badge-green">−47%</span>
+        </div>
+        <div class="kpi-value" style="color:var(--yellow)">~21h</div>
+        <div class="kpi-label">Mai vs. ~40h im April</div>
+        <div class="kpi-compare">
+          <div class="kpi-april">Apr: ~40h</div>
+          <div style="width: 1px; height: 12px; background: var(--border); margin: 0 4px;"></div>
+          <div class="kpi-may" style="color:var(--yellow)">Mai: ~21h</div>
+          <div class="kpi-delta delta-pos">↓ −47%</div>
+        </div>
+      </div>
+      <!-- WorkTracker Dev -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">WorkTracker Dev</span>
+          <span class="card-badge badge-red">−79%</span>
+        </div>
+        <div class="kpi-value" style="color:var(--red)">~6h</div>
+        <div class="kpi-label">Mai vs. 30h im April</div>
+        <div class="kpi-compare">
+          <div class="kpi-april">Apr: 30h</div>
+          <div style="width: 1px; height: 12px; background: var(--border); margin: 0 4px;"></div>
+          <div class="kpi-may" style="color:var(--red)">Mai: ~6h</div>
+          <div class="kpi-delta delta-neg">↓ −79%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECOND ROW KPI -->
+    <div class="grid-4">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Erfasste Zeit</span></div>
+        <div style="display:flex; gap:16px; align-items:center; margin-bottom:10px">
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">April</div>
+            <div style="font-size:22px;font-weight:800;color:var(--april)">395h</div>
+          </div>
+          <div style="font-size:20px;color:var(--border)">→</div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Mai</div>
+            <div style="font-size:22px;font-weight:800;color:var(--may)">~385h</div>
+          </div>
+        </div>
+        <div class="kpi-delta delta-neu" style="display:inline-block">−3% ≈ stabil</div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Aktive Tage</span></div>
+        <div style="display:flex; gap:16px; align-items:center; margin-bottom:10px">
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">April</div>
+            <div style="font-size:22px;font-weight:800;color:var(--april)">18</div>
+          </div>
+          <div style="font-size:20px;color:var(--border)">→</div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Mai</div>
+            <div style="font-size:22px;font-weight:800;color:var(--may)">~22</div>
+          </div>
+        </div>
+        <div class="kpi-delta delta-pos" style="display:inline-block">↑ +22%</div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Ø App-Wechsel/h</span></div>
+        <div style="display:flex; gap:16px; align-items:center; margin-bottom:10px">
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">April</div>
+            <div style="font-size:22px;font-weight:800;color:var(--red)">~25</div>
+          </div>
+          <div style="font-size:20px;color:var(--border)">→</div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Mai</div>
+            <div style="font-size:22px;font-weight:800;color:var(--green)">~14</div>
+          </div>
+        </div>
+        <div class="kpi-delta delta-pos" style="display:inline-block">↓ −44% (besser)</div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Git-Commits</span></div>
+        <div style="display:flex; gap:16px; align-items:center; margin-bottom:10px">
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">April</div>
+            <div style="font-size:22px;font-weight:800;color:var(--april)">9</div>
+          </div>
+          <div style="font-size:20px;color:var(--border)">→</div>
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Mai</div>
+            <div style="font-size:22px;font-weight:800;color:var(--red)">0</div>
+          </div>
+        </div>
+        <div class="kpi-delta delta-neg" style="display:inline-block">↓ −100%</div>
+      </div>
+    </div>
+
+    <!-- SCORE TIMELINE + MONTH OVERVIEW -->
+    <div class="grid-2-1">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Wochen-Score Verlauf — W15 bis W21</span>
+          <div style="display:flex;gap:8px">
+            <span class="week-pill w15" style="font-size:10px;padding:2px 7px">April</span>
+            <span class="week-pill w21" style="font-size:10px;padding:2px 7px">Mai</span>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="scoreTimelineChart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Score pro Woche</span>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Woche</th>
+              <th>Score</th>
+              <th class="right">Trend</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="week-pill w15">W15</span></td>
+              <td><span class="num">3.7</span><span style="color:var(--muted);font-size:11px">/10</span></td>
+              <td class="right"><div class="score-bar" style="width:120px;margin-left:auto"><div class="score-fill" style="width:37%;background:var(--w15)"></div></div></td>
+            </tr>
+            <tr>
+              <td><span class="week-pill w16">W16 🏆</span></td>
+              <td><span class="num">4.1</span><span style="color:var(--muted);font-size:11px">/10</span></td>
+              <td class="right"><div class="score-bar" style="width:120px;margin-left:auto"><div class="score-fill" style="width:41%;background:var(--w16)"></div></div></td>
+            </tr>
+            <tr>
+              <td><span class="week-pill w17">W17</span></td>
+              <td><span class="num">2.5</span><span style="color:var(--muted);font-size:11px">/10</span></td>
+              <td class="right"><div class="score-bar" style="width:120px;margin-left:auto"><div class="score-fill" style="width:25%;background:var(--w17)"></div></div></td>
+            </tr>
+            <tr>
+              <td><span class="week-pill w18">W18</span></td>
+              <td><span class="num">3.5</span><span style="color:var(--muted);font-size:11px">/10</span></td>
+              <td class="right"><div class="score-bar" style="width:120px;margin-left:auto"><div class="score-fill" style="width:35%;background:var(--w18)"></div></div></td>
+            </tr>
+            <tr>
+              <td><span class="week-pill w19">W19</span></td>
+              <td><span class="num">3.0</span><span style="color:var(--muted);font-size:11px">/10</span></td>
+              <td class="right"><div class="score-bar" style="width:120px;margin-left:auto"><div class="score-fill" style="width:30%;background:var(--w19)"></div></div></td>
+            </tr>
+            <tr>
+              <td><span class="week-pill w20">W20</span></td>
+              <td><span class="num">2.5</span><span style="color:var(--muted);font-size:11px">/10</span></td>
+              <td class="right"><div class="score-bar" style="width:120px;margin-left:auto"><div class="score-fill" style="width:25%;background:var(--w20)"></div></div></td>
+            </tr>
+            <tr>
+              <td><span class="week-pill w21">W21</span></td>
+              <td><span class="num">4.0</span><span style="color:var(--muted);font-size:11px">/10</span></td>
+              <td class="right"><div class="score-bar" style="width:120px;margin-left:auto"><div class="score-fill" style="width:40%;background:var(--w21)"></div></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TIME DISTRIBUTION CHART -->
+    <div class="section-label">Zeitverteilung pro Woche</div>
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-header">
+        <span class="card-title">Erfasste Stunden — Kategorie-Aufschlüsselung</span>
+      </div>
+      <div class="chart-container tall">
+        <canvas id="timeDistChart"></canvas>
+      </div>
+    </div>
+
+  </div><!-- /overview -->
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- SECTION: WOCHEN -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="section-weekly" class="section">
+
+    <div class="section-label">Wochen-Detail — W15 bis W21</div>
+    <div class="grid-3" style="margin-bottom:24px">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Focus Sessions / Woche</span>
+          <span class="card-badge badge-green">+62% Mai</span>
+        </div>
+        <div class="chart-container short">
+          <canvas id="focusChart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">App-Wechsel/h</span>
+          <span class="card-badge badge-green">↓ Mai</span>
+        </div>
+        <div class="chart-container short">
+          <canvas id="switchChart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Hintergrundmedien / Woche</span>
+          <span class="card-badge badge-yellow">Pattern</span>
+        </div>
+        <div class="chart-container short">
+          <canvas id="mediaRotChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- WEEKLY DETAIL TABLE -->
+    <div class="section-label">Vollständiger Wochenvergleich</div>
+    <div class="card" style="margin-bottom:24px">
+      <div class="table-scroll">
+        <table class="data-table" style="min-width:900px">
+          <thead>
+            <tr>
+              <th>Woche</th>
+              <th>Score</th>
+              <th>Focus</th>
+              <th>YouTube</th>
+              <th>Netflix</th>
+              <th>Social</th>
+              <th>ORF</th>
+              <th>Bitget</th>
+              <th>Top Projekt</th>
+              <th>Highlight / Tief</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="week-pill w15">W15</span></td>
+              <td class="num">3.7</td>
+              <td class="num">~20</td>
+              <td class="num">5h</td>
+              <td class="num">0h</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td>WorkTracker</td>
+              <td>Do 14:00 Block: 5.712 Keys/h</td>
+            </tr>
+            <tr style="background:rgba(52,211,153,0.04)">
+              <td><span class="week-pill w16">W16 🏆</span></td>
+              <td class="num" style="color:var(--green)">4.1</td>
+              <td class="num" style="color:var(--green)">~30</td>
+              <td class="num">9h</td>
+              <td class="num">2h</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td style="color:var(--green)">ai-brainmap</td>
+              <td style="color:var(--green)">28.227 Keys Rekord, 9 Commits</td>
+            </tr>
+            <tr style="background:rgba(248,113,113,0.04)">
+              <td><span class="week-pill w17">W17</span></td>
+              <td class="num" style="color:var(--red)">2.5</td>
+              <td class="num">~12</td>
+              <td class="num" style="color:var(--red)">25.8h</td>
+              <td class="num" style="color:var(--red)">18.2h</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td style="color:var(--red)">Media (44%!)</td>
+              <td style="color:var(--red)">Post-Peak-Kollaps: 44h Konsum</td>
+            </tr>
+            <tr>
+              <td><span class="week-pill w18">W18</span></td>
+              <td class="num">3.5</td>
+              <td class="num">~25</td>
+              <td class="num">5.6h</td>
+              <td class="num">—</td>
+              <td class="num" style="color:var(--yellow)">16.3h</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td>ChatGPT/Research</td>
+              <td>YouTube ↓78%, aber Social ↑</td>
+            </tr>
+            <tr>
+              <td><span class="week-pill w19">W19</span></td>
+              <td class="num">3.0</td>
+              <td class="num">~22</td>
+              <td class="num">9.6h</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num" style="color:var(--orange)">25h</td>
+              <td class="num">—</td>
+              <td>ORF Hintergrund</td>
+              <td>Amazon Prime 15h, Kanu-Trip 2.8h</td>
+            </tr>
+            <tr style="background:rgba(248,113,113,0.04)">
+              <td><span class="week-pill w20">W20</span></td>
+              <td class="num" style="color:var(--red)">2.5</td>
+              <td class="num">~20</td>
+              <td class="num">4.2h</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num" style="color:var(--red)">18.7h</td>
+              <td style="color:var(--red)">Bitget passiv</td>
+              <td style="color:var(--red)">Sa allein: 8.4h Bitget-Staring</td>
+            </tr>
+            <tr style="background:rgba(74,222,128,0.04)">
+              <td><span class="week-pill w21">W21</span></td>
+              <td class="num" style="color:var(--green)">4.0</td>
+              <td class="num" style="color:var(--green)">~26</td>
+              <td class="num">~1h</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">—</td>
+              <td class="num">~0.7h</td>
+              <td style="color:var(--green)">Hippieparty 4.4h</td>
+              <td style="color:var(--green)">Bitget normalisiert, Mi offline</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- W16 vs W21 Vergleich -->
+    <div class="section-label">Beste Woche des Monats im Vergleich</div>
+    <div class="grid-2">
+      <div class="card" style="border-color:rgba(52,211,153,0.3)">
+        <div class="card-header">
+          <span class="card-title">W16 — Bester April</span>
+          <span class="week-pill w16">4.1/10</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+          <div style="background:var(--bg3);border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:24px;font-weight:800;color:var(--green)">28.227</div>
+            <div style="font-size:11px;color:var(--muted)">Keys Rekord (So)</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:24px;font-weight:800;color:var(--green)">9</div>
+            <div style="font-size:11px;color:var(--muted)">Git-Commits</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6">Ostersonntag 07:30–14:00 · Claude Code + ai-brainmap · Live-Preview. Bester Tageslicht-Produktivitätsbeweis. 3.064 Keys/h Ø.</div>
+      </div>
+      <div class="card" style="border-color:rgba(74,222,128,0.3)">
+        <div class="card-header">
+          <span class="card-title">W21 — Bester Mai</span>
+          <span class="week-pill w21">4.0/10</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+          <div style="background:var(--bg3);border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:24px;font-weight:800;color:var(--w21)">4h 26m</div>
+            <div style="font-size:11px;color:var(--muted)">Hippieparty</div>
+          </div>
+          <div style="background:var(--bg3);border-radius:8px;padding:12px;text-align:center">
+            <div style="font-size:24px;font-weight:800;color:var(--w21)">~45min</div>
+            <div style="font-size:11px;color:var(--muted)">Bitget (W20: 18.7h)</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6">Sender.net + Photopea · Austro Intelligence Mo-Nacht 1h 35min · Mi offline ("Anna Essen") als positiver Reset. Bitget normalisiert.</div>
+      </div>
+    </div>
+
+  </div><!-- /weekly -->
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- SECTION: PROJEKTE -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="section-projects" class="section">
+
+    <div class="section-label">Projektverteilung — April vs. Mai</div>
+    <div class="grid-2" style="margin-bottom:24px">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">April 2026 — Projekte</span>
+          <span style="font-size:12px;color:var(--muted)">395h gesamt</span>
+        </div>
+        <div class="chart-container">
+          <canvas id="aprilDonutChart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Mai 2026 — Projekte</span>
+          <span style="font-size:12px;color:var(--muted)">~385h bis 22.05.</span>
+        </div>
+        <div class="chart-container">
+          <canvas id="mayDonutChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Side-by-side bar comparison -->
+    <div class="section-label">Projektvergleich April → Mai</div>
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-header">
+        <span class="card-title">Stunden pro Projekt — Direktvergleich</span>
+      </div>
+      <div class="chart-container tall">
+        <canvas id="projectCompChart"></canvas>
+      </div>
+    </div>
+
+    <!-- PROJECT DETAIL TABLE -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Projektdetails</span>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Projekt</th>
+            <th>April</th>
+            <th>April %</th>
+            <th>Mai</th>
+            <th>Mai %</th>
+            <th>Δ Stunden</th>
+            <th>Trend</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Other</strong> <span style="font-size:11px;color:var(--muted)">(unkategorisiert)</span></td>
+            <td class="num">240h</td>
+            <td class="num">61%</td>
+            <td class="num">~232h</td>
+            <td class="num">64%</td>
+            <td><span class="kpi-delta delta-neg">+3%pt</span></td>
+            <td>→ chronisch</td>
+          </tr>
+          <tr>
+            <td><strong>Media</strong> <span style="font-size:11px;color:var(--muted)">(YT+Netflix)</span></td>
+            <td class="num">54h</td>
+            <td class="num">14%</td>
+            <td class="num">~18h</td>
+            <td class="num">5%</td>
+            <td><span class="kpi-delta delta-pos">−36h</span></td>
+            <td style="color:var(--green)">↓↓ −67%</td>
+          </tr>
+          <tr>
+            <td><strong>WorkTracker</strong></td>
+            <td class="num">30h</td>
+            <td class="num">8%</td>
+            <td class="num">~6h</td>
+            <td class="num">2%</td>
+            <td><span class="kpi-delta delta-neg">−24h</span></td>
+            <td style="color:var(--red)">↓↓ −79%</td>
+          </tr>
+          <tr>
+            <td><strong>ORF</strong> <span style="font-size:11px;color:var(--muted)">(Hintergrund)</span></td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">~26h</td>
+            <td class="num">7%</td>
+            <td><span class="kpi-delta delta-neg">neu</span></td>
+            <td style="color:var(--orange)">↑↑ W19-Spike</td>
+          </tr>
+          <tr>
+            <td><strong>Social Media</strong></td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">~15h</td>
+            <td class="num">4%</td>
+            <td><span class="kpi-delta delta-neg">neu</span></td>
+            <td style="color:var(--yellow)">↑ W18-Spike</td>
+          </tr>
+          <tr>
+            <td><strong>Bitget</strong></td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">~8h</td>
+            <td class="num">2%</td>
+            <td><span class="kpi-delta delta-neg">neu</span></td>
+            <td style="color:var(--red)">↑↑↑ W20-Explosion</td>
+          </tr>
+          <tr>
+            <td><strong>Hippieparty / PEAB</strong></td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num">~7h</td>
+            <td class="num">2%</td>
+            <td><span class="kpi-delta delta-pos">neu</span></td>
+            <td style="color:var(--green)">↑↑ W21-Durchbruch</td>
+          </tr>
+          <tr>
+            <td><strong>Studio / LM Studio</strong></td>
+            <td class="num">9h</td>
+            <td class="num">2%</td>
+            <td class="num">~3h</td>
+            <td class="num">1%</td>
+            <td><span class="kpi-delta delta-neg">−6h</span></td>
+            <td>→ kein Output</td>
+          </tr>
+          <tr>
+            <td><strong>ElevenLabs</strong></td>
+            <td class="num">5.3h</td>
+            <td class="num">1%</td>
+            <td class="num">~4h</td>
+            <td class="num">1%</td>
+            <td><span class="kpi-delta delta-neu">≈</span></td>
+            <td>→ 0 Deliverables</td>
+          </tr>
+          <tr>
+            <td><strong>Austro Intelligence</strong></td>
+            <td class="num">3.3h</td>
+            <td class="num">1%</td>
+            <td class="num">~2h</td>
+            <td class="num">&lt;1%</td>
+            <td><span class="kpi-delta delta-neg">−1h</span></td>
+            <td style="color:var(--red)">↓↓ eingeschlafen</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div><!-- /projects -->
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- SECTION: MEDIEN & MUSTER -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="section-media" class="section">
+
+    <!-- HINTERGRUNDMEDIEN ROTATION -->
+    <div class="section-label">Hintergrundmedien-Rotation — Das Kernmuster</div>
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <span class="card-title">Primäres Hintergrundmedium pro Woche</span>
+        <span class="card-badge badge-yellow">Pattern erkannt</span>
+      </div>
+      <div style="margin-bottom:16px">
+        <div class="pattern-track">
+          <div class="pattern-segment" style="flex:14;background:#f87171;gap:4px;font-size:9px">
+            <span style="writing-mode:horizontal-tb">W15<br>YT 5h</span>
+          </div>
+          <div class="pattern-segment" style="flex:11;background:#34d399;font-size:9px">
+            <span>W16<br>YT 9h</span>
+          </div>
+          <div class="pattern-segment" style="flex:44;background:#dc2626;font-size:9px">
+            <span>W17 YT+Netflix 44h 🔴</span>
+          </div>
+          <div class="pattern-segment" style="flex:16;background:#fbbf24;color:#1a1a1a;font-size:9px">
+            <span>W18<br>Social 16h</span>
+          </div>
+          <div class="pattern-segment" style="flex:40;background:#ea580c;font-size:9px">
+            <span>W19 ORF+Amazon 40h</span>
+          </div>
+          <div class="pattern-segment" style="flex:19;background:#f87171;font-size:9px">
+            <span>W20<br>Bitget 19h</span>
+          </div>
+          <div class="pattern-segment" style="flex:2;background:#4ade80;color:#1a1a1a;font-size:9px">
+            <span>W21</span>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px">Breite proportional zu Konsumstunden. Jede Woche ein anderes Medium — gleiche Funktion.</div>
+      </div>
+
+      <div class="chart-container">
+        <canvas id="mediaStackChart"></canvas>
+      </div>
+      <div class="legend" style="margin-top:14px">
+        <div class="legend-item"><div class="legend-dot" style="background:#ff4444"></div>YouTube</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#e50914"></div>Netflix</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div>Social Media</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ea580c"></div>ORF</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#00a8e0"></div>Amazon Prime</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#1a6b3c"></div>Bitget</div>
+      </div>
+    </div>
+
+    <!-- DRIFT METERS -->
+    <div class="section-label">Post-Flow-Drift — Task-Ende → Passivkonsum</div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">YouTube Wochenverlauf</span>
+          <span class="card-badge badge-yellow">W17 Kollaps</span>
+        </div>
+        <div class="chart-container">
+          <canvas id="ytTrendChart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Konsum-Diversifikation</span>
+          <span class="card-badge badge-purple">Rotation</span>
+        </div>
+        <div style="padding-top:8px">
+          <div class="drift-meter">
+            <div class="drift-icon">📺</div>
+            <div class="drift-info">
+              <div class="drift-title">W17 — Netflix Explosion</div>
+              <div class="drift-sub">Post-W16-Peak-Kollaps · 18h 10min in einer Woche</div>
+            </div>
+            <div class="drift-value" style="color:var(--red)">18h</div>
+          </div>
+          <div class="drift-meter">
+            <div class="drift-icon">📱</div>
+            <div class="drift-info">
+              <div class="drift-title">W18 — Social Media Switch</div>
+              <div class="drift-sub">YouTube ↓78% aber Energie wechselt Medium</div>
+            </div>
+            <div class="drift-value" style="color:var(--yellow)">16h</div>
+          </div>
+          <div class="drift-meter">
+            <div class="drift-icon">📻</div>
+            <div class="drift-info">
+              <div class="drift-title">W19 — ORF Hintergrundberieselung</div>
+              <div class="drift-sub">+ Amazon Prime 15h · 40h Passivkonsum total</div>
+            </div>
+            <div class="drift-value" style="color:var(--orange)">40h</div>
+          </div>
+          <div class="drift-meter">
+            <div class="drift-icon">📊</div>
+            <div class="drift-info">
+              <div class="drift-title">W20 — Bitget Passiv-Staring</div>
+              <div class="drift-sub">Samstag allein: 8h 23min Chart-Watching</div>
+            </div>
+            <div class="drift-value" style="color:var(--red)">19h</div>
+          </div>
+          <div class="drift-meter" style="border-color:rgba(74,222,128,0.25);background:rgba(74,222,128,0.05)">
+            <div class="drift-icon">✅</div>
+            <div class="drift-info">
+              <div class="drift-title">W21 — Normalisierung</div>
+              <div class="drift-sub">Bitget ~45min · Mi offline · Projekt-Fokus</div>
+            </div>
+            <div class="drift-value" style="color:var(--green)">&lt;2h</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONSUMPTION VS PRODUCTIVITY -->
+    <div class="section-label">Konsum vs. Produktivität — Korrelation</div>
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-header">
+        <span class="card-title">Konsumstunden vs. Wochen-Score — inverse Korrelation</span>
+      </div>
+      <div class="chart-container">
+        <canvas id="correlationChart"></canvas>
+      </div>
+    </div>
+
+  </div><!-- /media -->
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- SECTION: ERKENNTNISSE -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div id="section-insights" class="section">
+
+    <div class="section-label">Kernerkenntnisse aus 7 Wochen Tracking</div>
+
+    <div class="grid-2">
+      <div>
+        <div class="insight positive">
+          <div class="insight-icon">🚀</div>
+          <div>
+            <div class="insight-title">W16-Ostersonntag: Der Beweis ist dokumentiert</div>
+            <div class="insight-text">07:30–14:00, Claude Code + ai-brainmap + Live-Preview = 28.227 Keystrokes, 9 Git-Commits. Die Kombination Tageslicht + klares Ziel + kein Konsum vorher ist reproduzierbar. Score 4.1/10 — das Ceiling ist noch nicht erreicht.</div>
+          </div>
+        </div>
+        <div class="insight positive">
+          <div class="insight-icon">📉</div>
+          <div>
+            <div class="insight-title">YouTube −47% ohne Script-Zwang (Mai vs. April)</div>
+            <div class="insight-text">Focus-Sessions +62% gleichzeitig. Das zeigt: Verhaltensänderung ist möglich wenn ein konkretes Projekt Priorität hat. W21 beweist es erneut mit Hippieparty als Anker.</div>
+          </div>
+        </div>
+        <div class="insight positive">
+          <div class="insight-icon">🎉</div>
+          <div>
+            <div class="insight-title">Hippieparty — stärkstes wachsendes Projekt W21</div>
+            <div class="insight-text">4h 26min in W21, Sender.net Email-Marketing + Photopea Visual-Work. Erstmals ein externes Deliverable-Projekt mit echter Momentum. Sender.net-Account läuft bereits.</div>
+          </div>
+        </div>
+        <div class="insight info">
+          <div class="insight-icon">🔄</div>
+          <div>
+            <div class="insight-title">App-Wechsel: April 25/h → Mai 14/h</div>
+            <div class="insight-text">−44% App-Wechsel bei stabiler Gesamtzeit ist ein starkes Signal für tiefere Fokus-Fähigkeit. Weniger Multitasking-Fragmentierung, auch wenn das Medium wechselt.</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="insight negative">
+          <div class="insight-icon">🔁</div>
+          <div>
+            <div class="insight-title">Hintergrundmedien-Rotationsmuster — 5 Wochen in Folge</div>
+            <div class="insight-text">W17 Netflix → W18 Social → W19 ORF → W20 Bitget → W21 normalisiert. Jede Woche ein anderes Medium, gleiche Funktion: passives Auffüllen von unstrukturierten Stunden. Das Grundproblem (kein definierter nächster Schritt) rotiert nur das Symptom.</div>
+          </div>
+        </div>
+        <div class="insight negative">
+          <div class="insight-icon">🛑</div>
+          <div>
+            <div class="insight-title">WorkTracker Dev: −79%, 0 Git-Commits in 4 Maiwochen</div>
+            <div class="insight-text">Das Kerntool, das alle anderen Systeme verbessern würde, hat seit W16 keinen einzigen Commit. project_patterns.yaml ist 7+ Wochen offen. Night-Lock-Script 7+ Wochen offen. Identifiziert, dokumentiert, nicht umgesetzt.</div>
+          </div>
+        </div>
+        <div class="insight negative">
+          <div class="insight-icon">😴</div>
+          <div>
+            <div class="insight-title">Austro Intelligence: 3h 19min April → ~2h Mai</div>
+            <div class="insight-text">Das kommerzielle Hauptprojekt verliert in beiden Monaten Zeit. W19: 6min. W20: nicht messbar. Nur W21 Montagsnacht 1h 35min als Signal. Ohne regelmäßige Slot-Bindung stirbt das Projekt in W22.</div>
+          </div>
+        </div>
+        <div class="insight warning">
+          <div class="insight-icon">⚠️</div>
+          <div>
+            <div class="insight-title">61–64% "Other" — Blindspot bleibt ungeklärt</div>
+            <div class="insight-text">project_patterns.yaml würde 20–25% des Blindspots auflösen (30 Minuten Arbeit). Stattdessen wächst der unkategorisierte Bereich von 61% auf 64%. Diagnose ohne Umsetzung ist das Kernmuster über beide Monate.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECOMMENDATIONS -->
+    <div class="section-label" style="margin-top:8px">Strategische Empfehlungen — Priorität für Juni</div>
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Maßnahme</th>
+            <th>Aufwand</th>
+            <th>Impact</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="card-badge badge-red">1</span></td>
+            <td>
+              <strong>Night-Lock-Script + youtube_guard.py installieren</strong><br>
+              <span style="font-size:11px;color:var(--muted)">Code fertig seit W15/W21. LaunchAgent. Verhindert Post-Flow-Drift automatisch.</span>
+            </td>
+            <td><span class="card-badge badge-green">15 min</span></td>
+            <td style="color:var(--green)">🔥 Höchster ROI</td>
+            <td><span class="card-badge badge-red">7 Wochen offen</span></td>
+          </tr>
+          <tr>
+            <td><span class="card-badge badge-yellow">2</span></td>
+            <td>
+              <strong>project_patterns.yaml updaten</strong><br>
+              <span style="font-size:11px;color:var(--muted)">64% Blindspot auf ~40% senken. Kategorien für ORF, Bitget, Hippieparty, Social Media.</span>
+            </td>
+            <td><span class="card-badge badge-green">30 min</span></td>
+            <td style="color:var(--yellow)">Dashboard wird sinnvoll</td>
+            <td><span class="card-badge badge-red">7 Wochen offen</span></td>
+          </tr>
+          <tr>
+            <td><span class="card-badge badge-purple">3</span></td>
+            <td>
+              <strong>Austro Intelligence — wöchentlicher Slot Mo oder Mi 19–21 Uhr</strong><br>
+              <span style="font-size:11px;color:var(--muted)">W21-Montagsnacht zeigt: Abendslots funktionieren. Recurring Calendar-Block setzen.</span>
+            </td>
+            <td><span class="card-badge badge-green">5 min</span></td>
+            <td style="color:var(--cyan)">Kommerziell kritisch</td>
+            <td><span class="card-badge badge-yellow">offen</span></td>
+          </tr>
+          <tr>
+            <td><span class="card-badge badge-cyan">4</span></td>
+            <td>
+              <strong>Hippieparty-Momentum halten</strong><br>
+              <span style="font-size:11px;color:var(--muted)">Sender.net läuft. Nächster Schritt definieren (erste Mail-Campaign oder Flyer). W21 als Baseline.</span>
+            </td>
+            <td><span class="card-badge badge-yellow">2h/Woche</span></td>
+            <td style="color:var(--green)">Einziges Wachstumsprojekt</td>
+            <td><span class="card-badge badge-green">aktiv W21</span></td>
+          </tr>
+          <tr>
+            <td><span class="card-badge badge-purple">5</span></td>
+            <td>
+              <strong>ElevenLabs: Deadline oder streichen</strong><br>
+              <span style="font-size:11px;color:var(--muted)">2 Monate Research, 0 Deliverables. Entweder bis W23 ein konkretes Audio-Produkt oder Projekt pausieren.</span>
+            </td>
+            <td><span class="card-badge badge-yellow">Entscheidung</span></td>
+            <td style="color:var(--muted)">Ressourcen freigeben</td>
+            <td><span class="card-badge badge-yellow">entscheiden</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- RADAR / MONTH COMPARE -->
+    <div class="section-label" style="margin-top:24px">Monatsprofil im Vergleich</div>
+    <div class="grid-1-2">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Radar — April vs. Mai</span>
+        </div>
+        <div class="chart-container" style="height:280px">
+          <canvas id="radarChart"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Entwicklungsrichtung</span>
+        </div>
+        <div style="padding-top:4px">
+          <div style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:13px;font-weight:600">Focus-Qualität</span>
+              <span style="font-size:12px;color:var(--green)">April 6.2 → Mai 7.1 ↑</span>
+            </div>
+            <div class="score-bar"><div class="score-fill" style="width:71%;background:linear-gradient(90deg,var(--april),var(--may))"></div></div>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:13px;font-weight:600">Media-Kontrolle</span>
+              <span style="font-size:12px;color:var(--green)">April 3.1 → Mai 5.8 ↑</span>
+            </div>
+            <div class="score-bar"><div class="score-fill" style="width:58%;background:linear-gradient(90deg,#f87171,#34d399)"></div></div>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:13px;font-weight:600">Projekt-Output</span>
+              <span style="font-size:12px;color:var(--red)">April 5.5 → Mai 2.1 ↓</span>
+            </div>
+            <div class="score-bar"><div class="score-fill" style="width:21%;background:linear-gradient(90deg,var(--accent),#f87171)"></div></div>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:13px;font-weight:600">System-Konsistenz</span>
+              <span style="font-size:12px;color:var(--red)">April 4.0 → Mai 3.2 ↓</span>
+            </div>
+            <div class="score-bar"><div class="score-fill" style="width:32%;background:linear-gradient(90deg,var(--accent),#f87171)"></div></div>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:13px;font-weight:600">Neue Projekte</span>
+              <span style="font-size:12px;color:var(--green)">April 2.0 → Mai 4.5 ↑</span>
+            </div>
+            <div class="score-bar"><div class="score-fill" style="width:45%;background:linear-gradient(90deg,var(--muted),var(--cyan))"></div></div>
+          </div>
+          <div style="margin-bottom:4px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:13px;font-weight:600">Script-Umsetzung</span>
+              <span style="font-size:12px;color:var(--red)">7 Wochen → 0%</span>
+            </div>
+            <div class="score-bar"><div class="score-fill" style="width:5%;background:var(--red)"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /insights -->
+
+</div><!-- /main -->
+
+<script>
+// ─── CHART DEFAULTS ───────────────────────────────────────
+Chart.defaults.color = '#8892a4';
+Chart.defaults.borderColor = '#2a3050';
+Chart.defaults.font.family = "-apple-system, 'Inter', system-ui, sans-serif";
+
+const WEEKS = ['W15', 'W16', 'W17', 'W18', 'W19', 'W20', 'W21'];
+const WEEK_COLORS = ['#818cf8','#34d399','#f87171','#fbbf24','#fb923c','#f87171','#4ade80'];
+
+// ─── NAVIGATION ───────────────────────────────────────────
+function showSection(name) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('section-' + name).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    if (b.textContent.toLowerCase().includes(name.substring(0,4)) ||
+        (name === 'overview' && b.textContent === 'Übersicht') ||
+        (name === 'weekly' && b.textContent === 'Wochen') ||
+        (name === 'projects' && b.textContent === 'Projekte') ||
+        (name === 'media' && b.textContent.includes('Medien')) ||
+        (name === 'insights' && b.textContent === 'Erkenntnisse')) {
+      b.classList.add('active');
+    }
+  });
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+}
+
+// ─── CHART 1: SCORE TIMELINE ──────────────────────────────
+new Chart(document.getElementById('scoreTimelineChart'), {
+  type: 'line',
+  data: {
+    labels: WEEKS,
+    datasets: [{
+      label: 'Wochen-Score',
+      data: [3.7, 4.1, 2.5, 3.5, 3.0, 2.5, 4.0],
+      borderColor: '#6366f1',
+      backgroundColor: 'rgba(99,102,241,0.08)',
+      pointBackgroundColor: WEEK_COLORS,
+      pointBorderColor: WEEK_COLORS,
+      pointRadius: 7,
+      pointHoverRadius: 10,
+      tension: 0.3,
+      fill: true,
+      borderWidth: 2.5,
+    }, {
+      label: 'April Ø (3.4)',
+      data: [3.4, 3.4, 3.4, null, null, null, null],
+      borderColor: '#818cf8',
+      borderDash: [5,4],
+      borderWidth: 1.5,
+      pointRadius: 0,
+      fill: false,
+    }, {
+      label: 'Mai Ø (3.2)',
+      data: [null, null, null, 3.2, 3.2, 3.2, 3.2],
+      borderColor: '#34d399',
+      borderDash: [5,4],
+      borderWidth: 1.5,
+      pointRadius: 0,
+      fill: false,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      y: {
+        min: 0, max: 5.5,
+        ticks: { stepSize: 1, callback: v => v + '/10' },
+        grid: { color: 'rgba(42,48,80,0.5)' }
+      },
+      x: { grid: { display: false } }
+    },
+    plugins: {
+      legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16, font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => ` Score: ${ctx.parsed.y}/10`
+        }
+      }
+    }
+  }
+});
+
+// ─── CHART 2: TIME DISTRIBUTION ───────────────────────────
+new Chart(document.getElementById('timeDistChart'), {
+  type: 'bar',
+  data: {
+    labels: WEEKS,
+    datasets: [
+      {
+        label: 'Produktiv / Fokus',
+        data: [48, 77, 30, 55, 45, 38, 45],
+        backgroundColor: 'rgba(99,102,241,0.85)',
+        stack: 'time',
+      },
+      {
+        label: 'YouTube',
+        data: [5, 9, 25.8, 5.6, 9.6, 4.2, 1],
+        backgroundColor: 'rgba(255,68,68,0.85)',
+        stack: 'time',
+      },
+      {
+        label: 'Netflix',
+        data: [0, 2, 18.2, 0, 0, 0, 0],
+        backgroundColor: 'rgba(229,9,20,0.85)',
+        stack: 'time',
+      },
+      {
+        label: 'Social Media',
+        data: [0, 0, 0, 16.3, 0, 0, 0],
+        backgroundColor: 'rgba(251,191,36,0.85)',
+        stack: 'time',
+      },
+      {
+        label: 'ORF',
+        data: [0, 0, 0, 0, 25, 0, 0],
+        backgroundColor: 'rgba(234,88,12,0.85)',
+        stack: 'time',
+      },
+      {
+        label: 'Amazon Prime',
+        data: [0, 0, 0, 0, 15, 0, 0],
+        backgroundColor: 'rgba(0,168,224,0.85)',
+        stack: 'time',
+      },
+      {
+        label: 'Bitget',
+        data: [0, 0, 0, 0, 0, 18.7, 0.75],
+        backgroundColor: 'rgba(26,107,60,0.85)',
+        stack: 'time',
+      },
+      {
+        label: 'Other / Idle',
+        data: [37, 32, 31, 23, 16, 34, 9],
+        backgroundColor: 'rgba(42,48,80,0.7)',
+        stack: 'time',
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { stacked: true, grid: { display: false } },
+      y: { stacked: true, ticks: { callback: v => v + 'h' }, grid: { color: 'rgba(42,48,80,0.5)' } }
+    },
+    plugins: {
+      legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12, font: { size: 11 } } },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}h` } }
+    }
+  }
+});
+
+// ─── CHART 3: FOCUS SESSIONS ──────────────────────────────
+new Chart(document.getElementById('focusChart'), {
+  type: 'bar',
+  data: {
+    labels: WEEKS,
+    datasets: [{
+      data: [20, 30, 12, 25, 22, 20, 26],
+      backgroundColor: WEEK_COLORS.map(c => c + 'cc'),
+      borderColor: WEEK_COLORS,
+      borderWidth: 1.5,
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false } },
+      y: { grid: { color: 'rgba(42,48,80,0.5)' } }
+    }
+  }
+});
+
+// ─── CHART 4: APP SWITCHES ────────────────────────────────
+new Chart(document.getElementById('switchChart'), {
+  type: 'line',
+  data: {
+    labels: WEEKS,
+    datasets: [{
+      data: [27, 25, 26, 16, 15, 13, 11],
+      borderColor: '#f472b6',
+      backgroundColor: 'rgba(244,114,182,0.08)',
+      pointBackgroundColor: WEEK_COLORS,
+      tension: 0.3,
+      fill: true,
+      borderWidth: 2,
+      pointRadius: 5,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false } },
+      y: { grid: { color: 'rgba(42,48,80,0.5)' }, ticks: { callback: v => v + '/h' } }
+    }
+  }
+});
+
+// ─── CHART 5: MEDIA ROTATION ──────────────────────────────
+new Chart(document.getElementById('mediaRotChart'), {
+  type: 'bar',
+  data: {
+    labels: WEEKS,
+    datasets: [
+      { label: 'YouTube', data: [5,9,25.8,5.6,9.6,4.2,1], backgroundColor: 'rgba(255,68,68,0.85)', stack:'m', borderRadius: 4 },
+      { label: 'Netflix', data: [0,2,18.2,0,0,0,0], backgroundColor: 'rgba(229,9,20,0.85)', stack:'m', borderRadius: 4 },
+      { label: 'Social', data: [0,0,0,16.3,0,0,0], backgroundColor: 'rgba(251,191,36,0.85)', stack:'m', borderRadius: 4 },
+      { label: 'ORF+Amazon', data: [0,0,0,0,40,0,0], backgroundColor: 'rgba(234,88,12,0.85)', stack:'m', borderRadius: 4 },
+      { label: 'Bitget', data: [0,0,0,0,0,18.7,0.75], backgroundColor: 'rgba(26,107,60,0.85)', stack:'m', borderRadius: 4 },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { stacked: true, grid: { display: false } },
+      y: { stacked: true, ticks: { callback: v => v + 'h' }, grid: { color: 'rgba(42,48,80,0.5)' } }
+    }
+  }
+});
+
+// ─── CHART 6: APRIL DONUT ─────────────────────────────────
+new Chart(document.getElementById('aprilDonutChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Other (61%)', 'Media YT+Netflix (14%)', 'WorkTracker (8%)', 'Studio/LM (2%)', 'ElevenLabs (1%)', 'Austro Intel. (1%)', 'Sonstiges (13%)'],
+    datasets: [{
+      data: [240, 54, 30, 9, 5.3, 3.3, 54],
+      backgroundColor: ['#374151','#ff4444','#6366f1','#a78bfa','#22d3ee','#34d399','#2a3050'],
+      borderColor: '#0d0f14',
+      borderWidth: 3,
+      hoverOffset: 8,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    cutout: '62%',
+    plugins: {
+      legend: { position: 'right', labels: { boxWidth: 10, padding: 10, font: { size: 11 } } },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}h` } }
+    }
+  }
+});
+
+// ─── CHART 7: MAI DONUT ───────────────────────────────────
+new Chart(document.getElementById('mayDonutChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Other (64%)', 'ORF (7%)', 'Media YT (5%)', 'Social Media (4%)', 'Bitget (2%)', 'PEAB/Hippieparty (2%)', 'WorkTracker (2%)', 'Sonstiges (14%)'],
+    datasets: [{
+      data: [232, 26, 18, 15, 8, 7, 6, 53],
+      backgroundColor: ['#374151','#ea580c','#ff4444','#fbbf24','#1a6b3c','#f472b6','#6366f1','#2a3050'],
+      borderColor: '#0d0f14',
+      borderWidth: 3,
+      hoverOffset: 8,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    cutout: '62%',
+    plugins: {
+      legend: { position: 'right', labels: { boxWidth: 10, padding: 10, font: { size: 11 } } },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ~${ctx.parsed}h` } }
+    }
+  }
+});
+
+// ─── CHART 8: PROJECT COMPARISON ──────────────────────────
+new Chart(document.getElementById('projectCompChart'), {
+  type: 'bar',
+  data: {
+    labels: ['Other', 'Media (YT+Netflix)', 'WorkTracker', 'ORF', 'Social Media', 'Bitget', 'PEAB/Hippieparty', 'Studio/LM', 'ElevenLabs', 'Austro Intel.'],
+    datasets: [
+      {
+        label: 'April 2026',
+        data: [240, 54, 30, 0, 0, 0, 0, 9, 5.3, 3.3],
+        backgroundColor: 'rgba(99,102,241,0.7)',
+        borderColor: '#6366f1',
+        borderWidth: 1.5,
+        borderRadius: 6,
+      },
+      {
+        label: 'Mai 2026',
+        data: [232, 18, 6, 26, 15, 8, 7, 3, 4, 2],
+        backgroundColor: 'rgba(52,211,153,0.7)',
+        borderColor: '#34d399',
+        borderWidth: 1.5,
+        borderRadius: 6,
+      }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { grid: { display: false } },
+      y: { grid: { color: 'rgba(42,48,80,0.5)' }, ticks: { callback: v => v + 'h' } }
+    },
+    plugins: {
+      legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16 } },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}h` } }
+    }
+  }
+});
+
+// ─── CHART 9: MEDIA STACK SECTION ─────────────────────────
+new Chart(document.getElementById('mediaStackChart'), {
+  type: 'bar',
+  data: {
+    labels: WEEKS,
+    datasets: [
+      { label: 'YouTube', data: [5,9,25.8,5.6,9.6,4.2,1], backgroundColor: '#ff4444cc', stack:'s', borderRadius:4 },
+      { label: 'Netflix', data: [0,2,18.2,0,0,0,0], backgroundColor: '#e50914cc', stack:'s', borderRadius:4 },
+      { label: 'Social Media', data: [0,0,0,16.3,0,0,0], backgroundColor: '#fbbf24cc', stack:'s', borderRadius:4 },
+      { label: 'ORF', data: [0,0,0,0,25,0,0], backgroundColor: '#ea580ccc', stack:'s', borderRadius:4 },
+      { label: 'Amazon Prime', data: [0,0,0,0,15,0,0], backgroundColor: '#00a8e0cc', stack:'s', borderRadius:4 },
+      { label: 'Bitget', data: [0,0,0,0,0,18.7,0.75], backgroundColor: '#1a6b3ccc', stack:'s', borderRadius:4 },
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      x: { stacked: true, grid: { display: false } },
+      y: { stacked: true, ticks: { callback: v => v + 'h' }, grid: { color: 'rgba(42,48,80,0.5)' } }
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}h` } }
+    }
+  }
+});
+
+// ─── CHART 10: YOUTUBE TREND ──────────────────────────────
+new Chart(document.getElementById('ytTrendChart'), {
+  type: 'line',
+  data: {
+    labels: WEEKS,
+    datasets: [{
+      label: 'YouTube Stunden',
+      data: [5, 9, 25.8, 5.6, 9.6, 4.2, 1],
+      borderColor: '#ff4444',
+      backgroundColor: 'rgba(255,68,68,0.08)',
+      pointBackgroundColor: [
+        '#818cf8','#34d399','#dc2626','#fbbf24','#fb923c','#f87171','#4ade80'
+      ],
+      pointRadius: 7,
+      tension: 0.3,
+      fill: true,
+      borderWidth: 2,
+    }, {
+      label: 'Score ×6',
+      data: [22.2, 24.6, 15, 21, 18, 15, 24],
+      borderColor: '#6366f155',
+      borderDash: [4,3],
+      borderWidth: 1.5,
+      pointRadius: 0,
+      fill: false,
+      tension: 0.3,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16, font: { size: 11 } } },
+      tooltip: { callbacks: { label: ctx => ctx.datasetIndex === 0 ? ` YouTube: ${ctx.parsed.y}h` : ` Score: ${(ctx.parsed.y/6).toFixed(1)}/10` } }
+    },
+    scales: {
+      x: { grid: { display: false } },
+      y: { grid: { color: 'rgba(42,48,80,0.5)' }, ticks: { callback: v => v + 'h' } }
+    }
+  }
+});
+
+// ─── CHART 11: CORRELATION ────────────────────────────────
+new Chart(document.getElementById('correlationChart'), {
+  type: 'bar',
+  data: {
+    labels: WEEKS,
+    datasets: [{
+      label: 'Konsum gesamt (h)',
+      data: [5, 11, 44, 22, 40, 23, 2],
+      backgroundColor: WEEK_COLORS.map((c,i) => `rgba(248,113,113,${0.4 + i*0.02})`),
+      borderColor: '#f87171',
+      borderWidth: 1.5,
+      borderRadius: 6,
+      yAxisID: 'y',
+    }, {
+      label: 'Score',
+      data: [3.7, 4.1, 2.5, 3.5, 3.0, 2.5, 4.0],
+      type: 'line',
+      borderColor: '#6366f1',
+      backgroundColor: 'rgba(99,102,241,0)',
+      pointBackgroundColor: WEEK_COLORS,
+      pointRadius: 7,
+      tension: 0.3,
+      borderWidth: 2.5,
+      yAxisID: 'y2',
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      y: { position: 'left', ticks: { callback: v => v + 'h' }, grid: { color: 'rgba(42,48,80,0.5)' } },
+      y2: { position: 'right', min: 0, max: 6, ticks: { callback: v => v + '/10' }, grid: { display: false } },
+      x: { grid: { display: false } }
+    },
+    plugins: {
+      legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16 } },
+      tooltip: {
+        callbacks: {
+          label: ctx => ctx.datasetIndex === 0 ? ` Konsum: ${ctx.parsed.y}h` : ` Score: ${ctx.parsed.y}/10`
+        }
+      }
+    }
+  }
+});
+
+// ─── CHART 12: RADAR ──────────────────────────────────────
+new Chart(document.getElementById('radarChart'), {
+  type: 'radar',
+  data: {
+    labels: ['Focus-Qualität', 'Media-Kontrolle', 'Projekt-Output', 'Konsistenz', 'System-Pflege', 'Neue Projekte'],
+    datasets: [{
+      label: 'April 2026',
+      data: [6.2, 3.1, 5.5, 4.0, 2.0, 2.0],
+      borderColor: '#6366f1',
+      backgroundColor: 'rgba(99,102,241,0.15)',
+      pointBackgroundColor: '#6366f1',
+      borderWidth: 2,
+      pointRadius: 4,
+    }, {
+      label: 'Mai 2026',
+      data: [7.1, 5.8, 2.1, 3.2, 1.0, 4.5],
+      borderColor: '#34d399',
+      backgroundColor: 'rgba(52,211,153,0.12)',
+      pointBackgroundColor: '#34d399',
+      borderWidth: 2,
+      pointRadius: 4,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    scales: {
+      r: {
+        min: 0, max: 10,
+        ticks: { display: false, stepSize: 2 },
+        grid: { color: 'rgba(42,48,80,0.7)' },
+        pointLabels: { font: { size: 11 }, color: '#8892a4' },
+        angleLines: { color: 'rgba(42,48,80,0.7)' }
+      }
+    },
+    plugins: {
+      legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16 } }
+    }
+  }
+});
+
+</script>
+</body>
+</html>

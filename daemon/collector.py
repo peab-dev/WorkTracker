@@ -228,6 +228,29 @@ def setup_logging(log_dir: Path, level_name: str = "INFO") -> logging.Logger:
     return logger
 
 
+def setup_skip_logging(log_dir: Path) -> logging.Logger:
+    """Dedicated log for screenshots suppressed by skip_urls / skip_projects /
+    skip_categories / skip_bundle_ids. Kept separate from collector.log."""
+    log_dir.mkdir(parents=True, exist_ok=True)
+    skip_logger = logging.getLogger("worktracker.screenshot_skips")
+    skip_logger.setLevel(logging.INFO)
+    skip_logger.propagate = False
+    if not skip_logger.handlers:
+        fh = logging.handlers.RotatingFileHandler(
+            log_dir / "screenshot-skips.log",
+            maxBytes=2 * 1024 * 1024,
+            backupCount=3,
+        )
+        fh.setFormatter(
+            logging.Formatter(
+                "%(asctime)s [%(levelname)s] %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+        skip_logger.addHandler(fh)
+    return skip_logger
+
+
 # ---------------------------------------------------------------------------
 # Permission check
 # ---------------------------------------------------------------------------
@@ -1342,6 +1365,78 @@ def _capture_all_displays_png(out_path: Path) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Screenshot context gating (skip_urls / skip_projects / skip_categories)
+# ---------------------------------------------------------------------------
+
+
+def _match_app_category(app_name: str, patterns: dict) -> Optional[str]:
+    """Map a macOS app name to a broad category via app_categories patterns."""
+    if not app_name:
+        return None
+    name_lower = app_name.lower()
+    for category, apps in (patterns.get("app_categories") or {}).items():
+        for ap in apps or []:
+            if fnmatch.fnmatch(name_lower, str(ap).lower()):
+                return category
+    return None
+
+
+def _match_project_category(
+    title: str, app_name: str, patterns: dict
+) -> tuple[Optional[str], Optional[str]]:
+    """Lightweight project + category resolution for screenshot gating.
+
+    Matches the window title against the project patterns (same title pass
+    the aggregator uses). Falls back to app_categories for the category when
+    no project pattern matches. Returns (project_name, category)."""
+    title_lower = (title or "").lower()
+    for proj_name, proj_info in (patterns.get("projects") or {}).items():
+        for pattern in (proj_info.get("patterns", []) or []):
+            if fnmatch.fnmatch(title_lower, str(pattern).lower()):
+                return proj_name, proj_info.get("category", "")
+    return None, _match_app_category(app_name, patterns)
+
+
+def _screenshot_skip_reason(
+    active: Optional[dict],
+    screenshot_cfg: dict,
+    collector_cfg: dict,
+    patterns: Optional[dict],
+) -> Optional[str]:
+    """Return a human-readable reason if a screenshot must be suppressed for
+    the current foreground context, else None.
+
+    Checks in order: bundle id, URL pattern, project, category."""
+    active = active or {}
+    bundle = active.get("bundle_id", "") or ""
+    url = active.get("url", "") or ""
+    title = active.get("window_title", "") or ""
+    app_name = active.get("name", "") or ""
+
+    skip_bundles = set(screenshot_cfg.get("skip_bundle_ids", []) or [])
+    if bundle and bundle in skip_bundles:
+        return f"bundle_id={bundle}"
+
+    skip_urls = collector_cfg.get("skip_urls", []) or []
+    if url:
+        url_lower = url.lower()
+        for pat in skip_urls:
+            if fnmatch.fnmatch(url_lower, str(pat).lower()):
+                return f"url={url} (pattern={pat})"
+
+    skip_projects = collector_cfg.get("skip_projects", []) or []
+    skip_categories = collector_cfg.get("skip_categories", []) or []
+    if (skip_projects or skip_categories) and patterns is not None:
+        project, category = _match_project_category(title, app_name, patterns)
+        if project and project in skip_projects:
+            return f"project={project}"
+        if category and category in skip_categories:
+            return f"category={category}"
+
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Snapshot assembly & writing
 # ---------------------------------------------------------------------------
 
@@ -1357,6 +1452,7 @@ def collect_snapshot(
     screenshot_cfg: Optional[dict] = None,
     screenshot_state: Optional[dict] = None,
     screenshot_dir: Optional[Path] = None,
+    patterns: Optional[dict] = None,
 ) -> dict:
     ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
     cfg = config.get("collector", {})
@@ -1432,29 +1528,36 @@ def collect_snapshot(
         interval_s = int(screenshot_cfg.get("interval_seconds", 60))
         now = time.time()
         last = float((screenshot_state or {}).get("last_ts", 0.0))
-        bundle = (active or {}).get("bundle_id", "") or ""
-        skip_bundles = set(screenshot_cfg.get("skip_bundle_ids", []) or [])
-        if (
-            (now - last) >= interval_s
-            and bundle not in skip_bundles
-            and not _screen_is_locked()
-        ):
-            local_now = datetime.now()
-            day = local_now.strftime("%Y-%m-%d")
-            ts_safe = local_now.strftime("%Y%m%dT%H%M%S")
-            base_dir = screenshot_dir or _DAEMON_DIR.parent / "data" / "screenshots"
-            out_dir = base_dir / day
-            try:
-                out_dir.mkdir(parents=True, exist_ok=True)
-                out_path = out_dir / f"{ts_safe}.png"
-                if _capture_all_displays_png(out_path):
-                    screenshot_path = str(out_path)
-                    if screenshot_state is not None:
-                        screenshot_state["last_ts"] = now
-            except Exception:
-                logging.getLogger("worktracker.collector").exception(
-                    "Screenshot write failed"
+        if (now - last) >= interval_s and not _screen_is_locked():
+            skip_reason = _screenshot_skip_reason(
+                active, screenshot_cfg, cfg, patterns
+            )
+            if skip_reason:
+                # Blockiert: kein Screenshot, nur Vermerk im Skip-Log. last_ts
+                # wird trotzdem gesetzt, damit pro Screenshot-Intervall (nicht
+                # pro Collector-Tick) höchstens ein Skip-Eintrag entsteht.
+                logging.getLogger("worktracker.screenshot_skips").info(
+                    "Screenshot übersprungen — blockiert durch %s", skip_reason
                 )
+                if screenshot_state is not None:
+                    screenshot_state["last_ts"] = now
+            else:
+                local_now = datetime.now()
+                day = local_now.strftime("%Y-%m-%d")
+                ts_safe = local_now.strftime("%Y%m%dT%H%M%S")
+                base_dir = screenshot_dir or _DAEMON_DIR.parent / "data" / "screenshots"
+                out_dir = base_dir / day
+                try:
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    out_path = out_dir / f"{ts_safe}.png"
+                    if _capture_all_displays_png(out_path):
+                        screenshot_path = str(out_path)
+                        if screenshot_state is not None:
+                            screenshot_state["last_ts"] = now
+                except Exception:
+                    logging.getLogger("worktracker.collector").exception(
+                        "Screenshot write failed"
+                    )
 
     return {
         "ts": ts,
@@ -1494,6 +1597,11 @@ def main():
     log_dir = Path(cfg.get("log_dir", "~/WorkTracker/logs")).expanduser()
     log_level = cfg.get("log_level", "INFO")
     logger = setup_logging(log_dir, log_level)
+    setup_skip_logging(log_dir)
+
+    # Project/category patterns for screenshot skip gating (skip_projects /
+    # skip_categories). Loaded once; default + user overlay.
+    skip_patterns = _load_merged_patterns_data()
 
     data_dir = Path(cfg.get("data_dir", "~/WorkTracker/data/snapshots")).expanduser()
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -1511,10 +1619,17 @@ def main():
     logger.info("Config: interval=%ds  data_dir=%s", interval, data_dir)
     if scr_cfg.get("enabled"):
         logger.info(
-            "Screenshots: ON  interval=%ds  dir=%s  skip=%s",
+            "Screenshots: ON  interval=%ds  dir=%s  skip_bundles=%s",
             scr_cfg.get("interval_seconds", 60),
             scr_dir,
             scr_cfg.get("skip_bundle_ids", []),
+        )
+        logger.info(
+            "Screenshot skips: urls=%s  projects=%s  categories=%s  -> %s",
+            cfg.get("skip_urls", []),
+            cfg.get("skip_projects", []),
+            cfg.get("skip_categories", []),
+            log_dir / "screenshot-skips.log",
         )
 
     # ── Permission check ──────────────────────────────────────────────
@@ -1629,6 +1744,7 @@ def main():
                 screenshot_cfg=scr_cfg,
                 screenshot_state=screenshot_state,
                 screenshot_dir=scr_dir,
+                patterns=skip_patterns,
             )
             write_snapshot(snap, data_dir)
             n += 1

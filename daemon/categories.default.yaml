@@ -1,0 +1,171 @@
+# WorkTracker — Default category pool (committed to git)
+#
+# Single source of truth for category names, colors, aliases and the
+# tool→activity bridge. Apps, web URLs, projects and topics all draw
+# from this pool (see daemon/categories.py).
+#
+# Two axes:
+#   activity_categories — WHAT kind of activity (Development, AI, News, …).
+#                         This is the shared pool: web URLs (domain_categories),
+#                         project `category:` values and derived topic
+#                         categories all resolve into this set.
+#   tool_categories     — WHAT kind of app (Browser, IDE, Media, …).
+#                         Matching patterns (app name → tool category) stay in
+#                         `app_categories` in project_patterns.*.yaml; this file
+#                         adds colors, the activity bridge and app subcategories.
+#
+# Merge strategy with the gitignored user file `categories.yaml`:
+#   activity_categories / tool_categories — user dict extends/overrides per key
+#   domain_categories                     — user dict extends/overrides per domain
+#
+# Schema:
+#   activity_categories:
+#     <Name>:
+#       color: "#rrggbb"        # badge/dot color in the dashboard
+#       aliases: [..]           # legacy names mapped to this canonical name on read
+#       subcategories: [..]     # informative; used for dropdowns
+#   tool_categories:
+#     <Name>:
+#       color: "#rrggbb"
+#       activity: <ActivityName|null>   # null = derived from URL/project (Browser)
+#       app_subcategories:              # app-name fnmatch pattern → subcategory
+#         <pattern>: <Subcategory>
+#   domain_categories:
+#     <domain>: [<ActivityName>, <Subcategory>]   # overrides/extends the built-in
+#                                                  # DOMAIN_CATEGORIES seed in
+#                                                  # web_categories.py
+
+activity_categories:
+  Development:
+    color: "#6fe28a"
+    subcategories: [Code Hosting, Q&A, Packages, Documentation, DevOps, Playground, Local]
+    aliases: []
+  AI:
+    color: "#d4f500"
+    subcategories: [Chatbots, Platforms, Tools]
+    aliases: []
+  Business:
+    color: "#ffb347"
+    aliases: []
+  Creative:
+    color: "#ff79c6"
+    aliases: []
+  Music:
+    color: "#c792ea"
+    aliases: []
+  Crypto:
+    color: "#f5d400"
+    aliases: []
+  Finance:
+    color: "#4fc3d8"
+    subcategories: [Crypto, Trading, Stocks, Banking, Prediction Markets]
+    aliases: []
+  News:
+    color: "#ff8a5c"
+    subcategories: [Austrian, German, International, Tech]
+    aliases: []
+  Communication:
+    color: "#7aa2f7"
+    subcategories: [Email, Chat, Video Calls]
+    aliases: [Kommunikation]
+  Social Media:
+    color: "#5ab0f7"
+    subcategories: [Reddit, Instagram, Twitter/X, Facebook, TikTok, LinkedIn]
+    aliases: []
+  Entertainment:
+    color: "#ff5a8a"
+    subcategories: [Video, Music, Gaming, Gambling, Reference]
+    aliases: [Media/Entertainment]
+  Research:
+    color: "#9ece6a"
+    subcategories: [Search, Wikipedia, Academic, Translation]
+    aliases: [Searching]
+  Shopping:
+    color: "#f7768e"
+    aliases: []
+  Productivity:
+    color: "#73daca"
+    subcategories: [Documents, Notes, Project Management, Design, Cloud Storage]
+    aliases: []
+  Government:
+    color: "#a9b1d6"
+    aliases: []
+  Travel:
+    color: "#7dcfff"
+    aliases: []
+  Other:
+    color: "#8a95a3"
+    aliases: [Uncategorized]
+
+tool_categories:
+  Browser:
+    color: "#5ab0f7"
+    activity: null          # activity comes from the URL / project category
+  IDE:
+    color: "#6fe28a"
+    activity: Development
+    app_subcategories:
+      webstorm: IDE
+      xcode: IDE
+      "intellij*": IDE
+      "visual studio*": IDE
+  "AI Assistant":
+    color: "#d4f500"
+    activity: AI
+  Media:
+    color: "#ff5a8a"
+    activity: Entertainment
+    app_subcategories:
+      spotify: Music
+      musik: Music
+      podcasts: Podcasts
+      vlc: Video
+      iina: Video
+      quicktime player: Video
+      fotos: Photos
+      photos: Photos
+      photo booth: Photos
+  "Dev Tools":
+    color: "#6fe28a"
+    activity: Development
+    app_subcategories:
+      terminal: Terminal
+      "iterm*": Terminal
+      docker desktop: Dev Tools
+      mongodb compass: Dev Tools
+      filezilla: Dev Tools
+      github desktop: Dev Tools
+      bambu studio: Dev Tools
+      jetbrains toolbox: Dev Tools
+  Communication:
+    color: "#7aa2f7"
+    activity: Communication
+    app_subcategories:
+      mail: Mail
+      nachrichten: Chat
+      whatsapp: Chat
+      slack: Chat
+      telegram: Chat
+  Productivity:
+    color: "#73daca"
+    activity: Productivity
+    app_subcategories:
+      notizen: Notes
+      pages: Office
+      numbers: Office
+      textedit: Office
+      vorschau: Office
+      ticktick: Tasks
+      erinnerungen: Tasks
+  System:
+    color: "#a9b1d6"
+    activity: Other
+  Other:
+    color: "#8a95a3"
+    activity: Other
+
+# User additions/overrides for the built-in DOMAIN_CATEGORIES seed
+# (web_categories.py). Example:
+#   domain_categories:
+#     example.com: [News, Magazines]
+domain_categories: {}

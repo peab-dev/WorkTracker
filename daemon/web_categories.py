@@ -267,55 +267,12 @@ DOMAIN_CATEGORIES: dict[str, tuple[str, str]] = {
 def classify_url(url: str) -> tuple[str, str]:
     """Classify a URL into (main_category, subcategory).
 
-    Strategy:
-    1. Extract domain, strip 'www.'
-    2. Exact lookup in DOMAIN_CATEGORIES
-    3. Parent-domain fallback (e.g. on.orf.at → orf.at)
-    4. Fallback: ("Other", "Uncategorized")
+    Delegates to the shared category pool (categories.classify_domain),
+    which overlays YAML `domain_categories` on the DOMAIN_CATEGORIES seed
+    above and canonicalizes the main category name.
     """
-    try:
-        netloc = urlparse(url).netloc.lower()
-    except Exception:
-        return ("Other", "Uncategorized")
-
-    if not netloc:
-        return ("Other", "Uncategorized")
-
-    # Strip www.
-    if netloc.startswith("www."):
-        netloc = netloc[4:]
-
-    # Strip port
-    if ":" in netloc:
-        netloc = netloc.split(":")[0]
-
-    # Localhost / local development
-    if netloc in ("localhost", "127.0.0.1", "0.0.0.0", "[::]", "[::1]"):
-        return ("Development", "Local")
-
-    # Exact match
-    result = DOMAIN_CATEGORIES.get(netloc)
-    if result:
-        return result
-
-    # Parent-domain fallback: try stripping subdomains one level at a time
-    parts = netloc.split(".")
-    while len(parts) > 2:
-        parts = parts[1:]
-        parent = ".".join(parts)
-        result = DOMAIN_CATEGORIES.get(parent)
-        if result:
-            return result
-
-    # Special case for two-part TLDs (co.uk, gv.at, or.at, co.at)
-    # e.g. "news.bbc.co.uk" → try "bbc.co.uk"
-    if len(parts) >= 3 and parts[-2] in ("co", "or", "gv", "ac", "org"):
-        parent = ".".join(parts[-3:])
-        result = DOMAIN_CATEGORIES.get(parent)
-        if result:
-            return result
-
-    return ("Other", "Uncategorized")
+    import categories  # lazy: categories imports this module lazily too
+    return categories.classify_domain(url)
 
 
 def _extract_domain(url: str) -> str:

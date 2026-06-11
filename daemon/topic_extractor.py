@@ -20,7 +20,9 @@ from urllib import request as _urlrequest
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlparse
 
-log = logging.getLogger("worktracker.topic_extractor")
+# Child of the "aggregator" logger so warnings reach aggregator.log —
+# under "worktracker.*" they had no handler and were silently dropped.
+log = logging.getLogger("aggregator.topic_extractor")
 
 _SYSTEM_PROMPT = (
     "Du bekommst ein JSON-Array von Arbeits-Sessions, jede mit einem 'idx'-Feld. "

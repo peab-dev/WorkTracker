@@ -147,6 +147,58 @@ fmt_uptime() {
     echo "$result"
 }
 
+# Run a command with a spinner while it works. The command's stdout is
+# captured and echoed afterwards; the spinner is drawn on stderr (TTY only),
+# so command substitution still captures only the real output.
+run_with_spinner() {
+    local msg="$1"; shift
+    local tmp
+    tmp=$(mktemp)
+    "$@" >"$tmp" 2>/dev/null &
+    local pid=$!
+
+    if [[ -t 2 ]]; then
+        local -a frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+        local i=0 t0=$SECONDS
+        printf '\033[?25l' >&2
+        while kill -0 "$pid" 2>/dev/null; do
+            printf '\r  %b%s%b  %b%s%b %b%b%ds%b ' \
+                "$CYAN" "${frames[i % 10]}" "$RST" \
+                "$GRAY_L" "$msg" "$RST" \
+                "$GRAY" "$DIM" "$(( SECONDS - t0 ))" "$RST" >&2
+            i=$(( i + 1 ))
+            sleep 0.1
+        done
+        printf '\r\033[K\033[?25h' >&2
+    fi
+
+    local rc=0
+    wait "$pid" || rc=$?
+    cat "$tmp"
+    rm -f "$tmp"
+    return $rc
+}
+
+# Today's data counts/sizes (used by cmd_status, run behind a spinner).
+# Output: snap_n|snap_b|sess_n|sess_b|scr_n|scr_b
+today_stats() {
+    local snap_file="$1" sess_file="$2" scr_dir="$3"
+    local sn=0 sb=0 en=0 eb=0 cn=0 cb=0
+    if [[ -f "$snap_file" ]]; then
+        sn=$(wc -l < "$snap_file" | tr -d ' ')
+        sb=$(stat -f%z "$snap_file" 2>/dev/null || echo 0)
+    fi
+    if [[ -f "$sess_file" ]]; then
+        en=$("$VENV" -c "import json; print(len(json.load(open('$sess_file'))))" 2>/dev/null || echo 0)
+        eb=$(stat -f%z "$sess_file" 2>/dev/null || echo 0)
+    fi
+    if [[ -d "$scr_dir" ]]; then
+        cn=$(find "$scr_dir" -maxdepth 1 \( -name '*.png' -o -name '*.jpg' \) ! -name '._*' 2>/dev/null | wc -l | tr -d ' ')
+        cb=$(( $(du -sk "$scr_dir" 2>/dev/null | awk '{print $1}') * 1024 ))
+    fi
+    echo "$sn|$sb|$en|$eb|$cn|$cb"
+}
+
 # Service status check
 svc_status() {
     local label="$1"
@@ -272,29 +324,30 @@ cmd_status() {
     local snap_file="$SNAP_DIR/${today}.jsonl"
     local sess_file="$SESS_DIR/${today}.json"
     local scr_dir_today="$SCR_DIR/${today}"
-    local snap_count=0 snap_bytes=0
-    local sess_count=0 sess_bytes=0
-    local scr_count=0 scr_bytes=0
+
+    local tstats
+    tstats=$(run_with_spinner "Berechne Daten von heute…" \
+        today_stats "$snap_file" "$sess_file" "$scr_dir_today") || tstats=""
+
+    local snap_count snap_bytes sess_count sess_bytes scr_count scr_bytes
+    IFS='|' read -r snap_count snap_bytes sess_count sess_bytes scr_count scr_bytes <<< "$tstats"
+    snap_count=${snap_count:-0}; snap_bytes=${snap_bytes:-0}
+    sess_count=${sess_count:-0}; sess_bytes=${sess_bytes:-0}
+    scr_count=${scr_count:-0};   scr_bytes=${scr_bytes:-0}
 
     if [[ -f "$snap_file" ]]; then
-        snap_count=$(wc -l < "$snap_file" | tr -d ' ')
-        snap_bytes=$(stat -f%z "$snap_file" 2>/dev/null || echo 0)
         printf "  ${GRAY_L}Snapshots:${RST}    ${WHITE}${BOLD}%s${RST}  ${GRAY_L}(%s)${RST}\n" "$snap_count" "$(human_size "$snap_bytes")"
     else
         printf "  ${GRAY_L}Snapshots:${RST}    ${GRAY_L}none${RST}\n"
     fi
 
     if [[ -f "$sess_file" ]]; then
-        sess_count=$("$VENV" -c "import json; print(len(json.load(open('$sess_file'))))" 2>/dev/null || echo "0")
-        sess_bytes=$(stat -f%z "$sess_file" 2>/dev/null || echo 0)
         printf "  ${GRAY_L}Sessions:${RST}     ${WHITE}${BOLD}%s${RST}  ${GRAY_L}(%s)${RST}\n" "$sess_count" "$(human_size "$sess_bytes")"
     else
         printf "  ${GRAY_L}Sessions:${RST}     ${GRAY_L}none${RST}\n"
     fi
 
     if [[ -d "$scr_dir_today" ]]; then
-        scr_count=$(find "$scr_dir_today" -maxdepth 1 -name '*.png' 2>/dev/null | wc -l | tr -d ' ')
-        scr_bytes=$(( $(du -sk "$scr_dir_today" 2>/dev/null | awk '{print $1}') * 1024 ))
         printf "  ${GRAY_L}Screenshots:${RST}  ${WHITE}${BOLD}%s${RST}  ${GRAY_L}(%s)${RST}\n" "$scr_count" "$(human_size "$scr_bytes")"
     else
         printf "  ${GRAY_L}Screenshots:${RST}  ${GRAY_L}none${RST}\n"
@@ -306,31 +359,35 @@ cmd_status() {
 
     section "Full History"
 
-    local all_snap_count all_sess_count all_scr_count
-    all_snap_count=$(wc -l "$SNAP_DIR"/*.jsonl 2>/dev/null | tail -1 | awk '{print $1}')
-    all_sess_count=$("$VENV" -c "
-import json, pathlib
-total = 0
-for f in pathlib.Path('$SESS_DIR').glob('*.json'):
-    try: total += len(json.load(f.open()))
-    except: pass
-print(total)
-" 2>/dev/null || echo "0")
-    all_scr_count=$(find "$SCR_DIR" -name '*.png' 2>/dev/null | wc -l | tr -d ' ')
+    # Incremental: per-day results are cached in $LOG_DIR/wt-cache.log;
+    # only days whose files changed since the last run are recomputed.
+    local cache_file="$LOG_DIR/wt-cache.log"
+    local hist
+    hist=$(run_with_spinner "Berechne Full History…" \
+        "$VENV" "$DAEMON/history_stats.py" "$SNAP_DIR" "$SESS_DIR" "$SCR_DIR" "$cache_file") || hist=""
 
-    local snap_total sess_total scr_total data_size log_size
-    snap_total=$(du -sh "$SNAP_DIR" 2>/dev/null | awk '{print $1}' | sed 's/K$/ KB/;s/M$/ MB/;s/G$/ GB/')
-    sess_total=$(du -sh "$SESS_DIR" 2>/dev/null | awk '{print $1}' | sed 's/K$/ KB/;s/M$/ MB/;s/G$/ GB/')
-    scr_total=$( du -sh "$SCR_DIR"  2>/dev/null | awk '{print $1}' | sed 's/K$/ KB/;s/M$/ MB/;s/G$/ GB/')
-    data_size=$( du -sh "$DATA_DIR" 2>/dev/null | awk '{print $1}' | sed 's/K$/ KB/;s/M$/ MB/;s/G$/ GB/')
-    log_size=$(  du -sh "$LOG_DIR"  2>/dev/null | awk '{print $1}' | sed 's/K$/ KB/;s/M$/ MB/;s/G$/ GB/')
+    local all_snap_count all_snap_bytes all_sess_count all_sess_bytes all_scr_count all_scr_bytes refreshed
+    IFS='|' read -r all_snap_count all_snap_bytes all_sess_count all_sess_bytes all_scr_count all_scr_bytes refreshed <<< "$hist"
+    all_snap_count=${all_snap_count:-0}; all_snap_bytes=${all_snap_bytes:-0}
+    all_sess_count=${all_sess_count:-0}; all_sess_bytes=${all_sess_bytes:-0}
+    all_scr_count=${all_scr_count:-0};   all_scr_bytes=${all_scr_bytes:-0}
+    refreshed=${refreshed:-0}
 
-    printf "  ${GRAY_L}Snapshots:${RST}    ${WHITE}%s${RST}  ${GRAY_L}(%s)${RST}\n" "${all_snap_count:-0}" "${snap_total:-0}"
-    printf "  ${GRAY_L}Sessions:${RST}     ${WHITE}%s${RST}  ${GRAY_L}(%s)${RST}\n" "${all_sess_count:-0}" "${sess_total:-0}"
-    printf "  ${GRAY_L}Screenshots:${RST}  ${WHITE}%s${RST}  ${GRAY_L}(%s)${RST}\n" "${all_scr_count:-0}" "${scr_total:-0}"
+    local log_size
+    log_size=$(du -sh "$LOG_DIR" 2>/dev/null | awk '{print $1}' | sed 's/K$/ KB/;s/M$/ MB/;s/G$/ GB/')
 
-    local all_count=$(( ${all_snap_count:-0} + ${all_sess_count:-0} + ${all_scr_count:-0} ))
-    printf "  ${GRAY_L}All:${RST}          ${WHITE}%s${RST}  ${GRAY_L}(%s)${RST}    ${GRAY_L}Logs:${RST} ${WHITE}%s${RST}\n" "$all_count" "$data_size" "$log_size"
+    printf "  ${GRAY_L}Snapshots:${RST}    ${WHITE}%s${RST}  ${GRAY_L}(%s)${RST}\n" "$all_snap_count" "$(human_size "$all_snap_bytes")"
+    printf "  ${GRAY_L}Sessions:${RST}     ${WHITE}%s${RST}  ${GRAY_L}(%s)${RST}\n" "$all_sess_count" "$(human_size "$all_sess_bytes")"
+    printf "  ${GRAY_L}Screenshots:${RST}  ${WHITE}%s${RST}  ${GRAY_L}(%s)${RST}\n" "$all_scr_count" "$(human_size "$all_scr_bytes")"
+
+    local all_count=$(( all_snap_count + all_sess_count + all_scr_count ))
+    local all_bytes=$(( all_snap_bytes + all_sess_bytes + all_scr_bytes ))
+    printf "  ${GRAY_L}All:${RST}          ${WHITE}%s${RST}  ${GRAY_L}(%s)${RST}    ${GRAY_L}Logs:${RST} ${WHITE}%s${RST}\n" "$all_count" "$(human_size "$all_bytes")" "$log_size"
+    if (( refreshed > 0 )); then
+        printf "  ${GRAY}${DIM}cache: %s Tag(e) neu berechnet${RST}\n" "$refreshed"
+    else
+        printf "  ${GRAY}${DIM}cache: alle Tage aus wt-cache.log${RST}\n"
+    fi
 
     section "Reports"
 
@@ -1080,7 +1137,7 @@ cmd_compress() {
     # right location even when data is relocated (external volume etc.).
     # The script still reads config itself as a fallback for standalone use.
     local exit_code=0
-    SCREENSHOTS_DIR="$SCR_DIR" "$script" "$@" || exit_code=$?
+    WT_CACHE_FILE="$LOG_DIR/wt-cache.log" SCREENSHOTS_DIR="$SCR_DIR" "$script" "$@" || exit_code=$?
 
     local end_time elapsed_ms
     end_time=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
