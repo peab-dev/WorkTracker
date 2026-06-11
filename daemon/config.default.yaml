@@ -7,7 +7,7 @@
 # Every loader in the daemon bootstraps the user file from this default
 # if it is missing.
 
-version: "0.2.0"
+version: "0.3.0"
 author: "peab.at"
 
 collector:
@@ -47,6 +47,24 @@ collector:
     skip_bundle_ids:
       - com.agilebits.onepassword7
       - com.1password.1password
+
+  # Screenshot-Sperren nach Kontext. Greift zur selben Zeit wie der
+  # Screenshot: Ist die aktive App/URL/das Projekt/die Kategorie betroffen,
+  # entsteht KEIN Screenshot. Stattdessen wird ein Vermerk in
+  # logs/screenshot-skips.log geschrieben (mit Grund der Blockierung).
+  #
+  # skip_urls:        fnmatch-Muster gegen die aktive Browser-URL (Wildcards
+  #                   wie bei skip_bundle_ids nötig, z.B. "*orf.at*").
+  # skip_projects:    Projektnamen aus project_patterns.yaml (exakter Name).
+  # skip_categories:  Kategorien aus project_patterns.yaml (exakter Name).
+  skip_urls: []
+  #  - "*orf.at*"
+  #  - "*youtube.com*"
+  skip_projects: []
+  #  - "Privat"
+  skip_categories: []
+  #  - "Social Media"
+  #  - "Media/Entertainment"
 
   # Distraction warning — macOS notification on prolonged distraction
   notifications:

@@ -407,6 +407,21 @@
     50% { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
   }
+  /* Highlight a config-value row when reached via #cfg-<path> from the
+     config editor. The matched <tr> gets .cfg-flash for a few seconds. */
+  tr.cfg-flash > td {
+    background: rgba(212, 245, 0, .14);
+    box-shadow: inset 3px 0 0 var(--acid);
+    animation: cfgFlash 2.4s ease-out 1;
+  }
+  tr.cfg-flash > td:first-child code {
+    color: var(--acid);
+  }
+  @keyframes cfgFlash {
+    0%   { background: rgba(212, 245, 0, .42); }
+    100% { background: rgba(212, 245, 0, .14); }
+  }
+  html { scroll-behavior: smooth; }
 </style>
 </head>
 <body>
@@ -415,7 +430,7 @@
 <nav class="topnav">
   <a class="logo" href="index.html">
     WORK<span class="colon">:</span>TRACKER
-    <span class="version">v0.2.0</span>
+    <span class="version">v0.3.0</span>
     <span class="beta">public beta</span>
   </a>
   <div class="topnav-links">
@@ -1217,7 +1232,7 @@ python aggregator.py --mode monthly</code></pre>
 <p>Native apps (Spotify, Apple Music, VLC, IINA, Podcasts) via their own APIs; browser tabs (YouTube, Netflix, Twitch, SoundCloud) via window-title pattern matching. Parallel media is tracked alongside work sessions and shown in the report.</p>
 
 <div class="footer">
-  <p>WorkTracker v0.2.0 &mdash; made in Austria with <span style="color:var(--red)">&lt;3</span> by <a href="https://peab.at">peab.at</a></p>
+  <p>WorkTracker v0.3.0 &mdash; made in Austria with <span style="color:var(--red)">&lt;3</span> by <a href="https://peab.at">peab.at</a></p>
 </div>
 
 </main>
@@ -1389,10 +1404,70 @@ python aggregator.py --mode monthly</code></pre>
     });
   }
 
+  // Give every config-value table row an id matching its full config path
+  // (e.g. id="cfg-collector.interval_seconds"), so the /config editor can
+  // deep-link straight to a single value. The key cell already shows either
+  // the bare leaf ("interval_seconds") or a partial path ("screenshot.dir",
+  // "topic_llm.endpoint"); we prepend the editor's top-level section.
+  function setupConfigAnchors() {
+    // section heading id  ->  config path prefix in config.yaml
+    const SECTION_PREFIX = {
+      'config-collector': 'collector',
+      'config-aggregator': 'aggregator',
+      'config-topic-llm': 'aggregator',       // topic_llm.* lives under aggregator
+      'config-motivation-llm': 'aggregator',  // motivation_llm.* too
+    };
+    // Walk each config section; for every <table> until the next <h1/h2>,
+    // tag its rows.
+    Object.entries(SECTION_PREFIX).forEach(([secId, prefix]) => {
+      const head = document.getElementById(secId);
+      if (!head) return;
+      let node = head.nextElementSibling;
+      while (node && !/^H[12]$/.test(node.tagName)) {
+        if (node.tagName === 'TABLE') {
+          node.querySelectorAll('tr').forEach((tr) => {
+            const codeCell = tr.querySelector('td:first-child code');
+            if (!codeCell) return;  // skip header row
+            const key = codeCell.textContent.trim();
+            if (!key) return;
+            const full = prefix + '.' + key;
+            tr.id = 'cfg-' + full;
+          });
+        }
+        node = node.nextElementSibling;
+      }
+    });
+  }
+
+  function flashConfigRow(hash) {
+    if (!hash || !hash.startsWith('#cfg-')) return;
+    let el = document.getElementById(hash.slice(1));
+    if (!el) {
+      // No exact value row — fall back to the closest section heading.
+      const path = hash.slice(5); // strip "#cfg-"
+      let secId = 'config';
+      if (path.startsWith('aggregator.topic_llm')) secId = 'config-topic-llm';
+      else if (path.startsWith('aggregator.motivation_llm')) secId = 'config-motivation-llm';
+      else if (path.startsWith('aggregator')) secId = 'config-aggregator';
+      else if (path.startsWith('collector')) secId = 'config-collector';
+      el = document.getElementById(secId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.querySelectorAll('tr.cfg-flash').forEach((r) => r.classList.remove('cfg-flash'));
+    // Restart the animation reliably.
+    void el.offsetWidth;
+    el.classList.add('cfg-flash');
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     setupPreCopy();
     setupInlineCopy();
     setupSidebarActive();
+    setupConfigAnchors();
+    flashConfigRow(location.hash);
+    window.addEventListener('hashchange', () => flashConfigRow(location.hash));
   });
 </script>
 
