@@ -5220,6 +5220,80 @@ h1 a:hover { color: var(--cyan); }
 .dp-day.dp-empty { visibility: hidden; padding: 0; }
 .dp-day.today:not(.sel) { box-shadow: inset 0 0 0 1px var(--cyan); }
 .dp-day.muted { color: var(--bg3); }
+
+/* Skip-Regeln-Modal (Glas-Backdrop) */
+.skip-backdrop {
+  position: fixed; inset: 0; z-index: 95;
+  background: rgba(12,17,22,0.45);
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  backdrop-filter: blur(12px) saturate(130%);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  opacity: 0; pointer-events: none; transition: opacity .18s ease;
+}
+.skip-backdrop.active { opacity: 1; pointer-events: auto; }
+.skip-modal {
+  background: rgba(20,26,32,0.92);
+  border: 1px solid var(--border); border-radius: 14px;
+  width: min(680px, 100%); max-height: 86vh; overflow-y: auto;
+  box-shadow: 0 24px 64px -16px rgba(0,0,0,.7);
+  transform: translateY(10px) scale(.985); transition: transform .18s ease;
+}
+.skip-backdrop.active .skip-modal { transform: none; }
+.skip-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: rgba(20,26,32,0.97); z-index: 1;
+  border-radius: 14px 14px 0 0;
+}
+.skip-head h2 { font-size: 14px; color: var(--cyan); font-weight: 600; }
+.skip-close {
+  background: none; border: none; color: var(--fg2); cursor: pointer;
+  font-size: 20px; line-height: 1; padding: 2px 8px; border-radius: 6px;
+  font-family: inherit;
+}
+.skip-close:hover { background: var(--bg3); color: var(--fg); }
+.skip-hint { color: var(--fg2); font-size: 11.5px; padding: 10px 18px 0; line-height: 1.5; }
+.skip-hint code { color: var(--cyan); }
+.skip-body { padding: 6px 18px 4px; }
+.skip-field { padding: 12px 0; border-bottom: 1px solid var(--bg3); }
+.skip-field:last-child { border-bottom: none; }
+.skip-field .skip-label { font-size: 12.5px; color: var(--fg); font-weight: 600; }
+.skip-field .skip-sub { color: var(--fg2); font-size: 11px; margin: 2px 0 8px; }
+.skip-field textarea {
+  width: 100%; min-height: 64px; resize: vertical;
+  background: var(--bg); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 7px 10px; font: 12px/1.5 inherit;
+  outline: none; white-space: pre; overflow-x: auto;
+}
+.skip-field textarea:focus { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan); }
+.skip-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 18px 14px; border-top: 1px solid var(--border);
+}
+.skip-status { color: var(--fg2); font-size: 11.5px; min-height: 1em; }
+.skip-status.ok { color: var(--green); }
+.skip-status.err { color: var(--red); }
+.skip-restart {
+  background: var(--bg3); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 12px; font-family: inherit; font-size: 12px;
+  cursor: pointer; transition: border-color .12s, background .12s;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.skip-restart:hover { border-color: var(--cyan); color: var(--white); }
+.skip-restart:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Toast (wie /config) */
+.toast {
+  position: fixed; bottom: 18px; right: 20px; padding: 8px 14px;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
+  font-size: 12px; opacity: 0; transform: translateY(6px);
+  transition: opacity .15s, transform .15s; pointer-events: none;
+  max-width: 420px; z-index: 120;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.ok { border-color: var(--green); }
+.toast.err { border-color: var(--red); }
 </style>
 </head>
 <body>
@@ -5232,6 +5306,28 @@ h1 a:hover { color: var(--cyan); }
   <img id="lightbox-img" alt="">
   <div class="lightbox-info" id="lightbox-info"></div>
 </div>
+
+<div id="skip-modal" class="skip-backdrop">
+  <div class="skip-modal" role="dialog" aria-modal="true" aria-labelledby="skip-title">
+    <div class="skip-head">
+      <h2 id="skip-title">Screenshot-Skip-Regeln</h2>
+      <button class="skip-close" id="skip-close" type="button" title="Schließen">&times;</button>
+    </div>
+    <div class="skip-hint">
+      Solange eine Regel zutrifft, entsteht kein Screenshot — Blockierungen werden in
+      <code>logs/screenshot-skips.log</code> vermerkt. Ein Eintrag pro Zeile, gespeichert
+      wird beim Verlassen des Feldes. Änderungen werden erst nach „Restart Collector“ aktiv.
+    </div>
+    <div class="skip-body" id="skip-body"></div>
+    <div class="skip-foot">
+      <span class="skip-status" id="skip-status"></span>
+      <button class="skip-restart" id="skip-restart" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        Restart Collector</button>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
 
 <script>
 const $ = sel => document.querySelector(sel);
@@ -5314,7 +5410,145 @@ function openLightbox(it) {
 
 lightbox.addEventListener('click', () => lightbox.classList.remove('active'));
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') lightbox.classList.remove('active');
+  if (e.key === 'Escape') {
+    lightbox.classList.remove('active');
+    closeSkipModal();
+  }
+});
+
+// ── Skip-Regeln-Modal — editiert die screenshot.skip_*-Listen via /api/config ──
+const SKIP_FIELDS = [
+  { path: 'collector.screenshot.skip_bundle_ids', label: 'skip_bundle_ids',
+    sub: 'Bundle IDs — kein Screenshot, solange diese App im Vordergrund ist',
+    ph: 'com.1password.1password' },
+  { path: 'collector.skip_urls', label: 'skip_urls',
+    sub: 'Glob-Muster gegen die aktive Browser-URL (Wildcards nötig, z.B. *youtube.com*)',
+    ph: '*youtube.com*' },
+  { path: 'collector.skip_projects', label: 'skip_projects',
+    sub: 'Projektnamen aus project_patterns.yaml (exakter Name)',
+    ph: 'Privat' },
+  { path: 'collector.skip_categories', label: 'skip_categories',
+    sub: 'Kategorienamen (exakter Name, z.B. Social Media)',
+    ph: 'Social Media' },
+];
+
+const skipModal = $('#skip-modal');
+const skipBody = $('#skip-body');
+const skipStatus = $('#skip-status');
+let skipLoaded = false;
+
+let toastTimer = null;
+function toast(msg, kind) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (kind || '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast ' + (kind || ''); }, 2400);
+}
+
+async function postJSON(url, body) {
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body || {}),
+  });
+  let j = null;
+  try { j = await r.json(); } catch (_) {}
+  if (!r.ok || (j && j.ok === false)) throw new Error((j && j.error) || r.statusText);
+  return j;
+}
+
+function cfgGet(obj, path) {
+  let cur = obj;
+  for (const p of path.split('.')) {
+    if (!cur || typeof cur !== 'object') return undefined;
+    cur = cur[p];
+  }
+  return cur;
+}
+
+function setSkipStatus(msg, kind) {
+  skipStatus.textContent = msg;
+  skipStatus.className = 'skip-status ' + (kind || '');
+}
+
+async function loadSkipFields() {
+  skipBody.innerHTML = '<div class="wt-loading"><div class="wt-spinner"></div><span class="wt-load-label">Lade Konfiguration…</span></div>';
+  let data;
+  try {
+    const r = await fetch('/api/config');
+    data = await r.json();
+  } catch (e) {
+    skipBody.innerHTML = '<div class="skip-sub" style="color:var(--red);padding:12px 0">Fehler beim Laden: ' + escapeHtml(e.message) + '</div>';
+    return;
+  }
+  skipBody.innerHTML = '';
+  for (const f of SKIP_FIELDS) {
+    const userV = cfgGet(data.user, f.path);
+    const defV = cfgGet(data.default, f.path);
+    const current = Array.isArray(userV) ? userV : (Array.isArray(defV) ? defV : []);
+
+    const field = document.createElement('div');
+    field.className = 'skip-field';
+    field.innerHTML = '<div class="skip-label">' + escapeHtml(f.label) + '</div>'
+      + '<div class="skip-sub">' + escapeHtml(f.sub) + '</div>';
+    const ta = document.createElement('textarea');
+    ta.placeholder = f.ph;
+    ta.spellcheck = false;
+    ta.value = current.join('\n');
+    let lastSaved = ta.value;
+    ta.addEventListener('blur', async () => {
+      if (ta.value === lastSaved) return;
+      const arr = ta.value.split('\n').map(s => s.trim()).filter(s => s);
+      setSkipStatus('speichern…', '');
+      try {
+        await postJSON('/api/config', { path: f.path, value: arr });
+        lastSaved = ta.value;
+        setSkipStatus('gespeichert · ' + f.label + ' — aktiv nach Restart Collector', 'ok');
+        toast('gespeichert · ' + f.path, 'ok');
+      } catch (e) {
+        setSkipStatus('Fehler: ' + e.message, 'err');
+        toast('Fehler: ' + e.message, 'err');
+      }
+    });
+    field.appendChild(ta);
+    skipBody.appendChild(field);
+  }
+  skipLoaded = true;
+}
+
+function openSkipModal() {
+  skipModal.classList.add('active');
+  setSkipStatus('', '');
+  if (!skipLoaded) loadSkipFields();
+}
+
+function closeSkipModal() {
+  // Blur eines fokussierten Textfelds löst noch den Save-Handler aus
+  if (document.activeElement && skipModal.contains(document.activeElement)) {
+    document.activeElement.blur();
+  }
+  skipModal.classList.remove('active');
+}
+
+$('#skip-btn').addEventListener('click', openSkipModal);
+$('#skip-close').addEventListener('click', closeSkipModal);
+skipModal.addEventListener('click', e => { if (e.target === skipModal) closeSkipModal(); });
+
+$('#skip-restart').addEventListener('click', async e => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  setSkipStatus('Collector wird neu gestartet…', '');
+  try {
+    await postJSON('/api/config/restart/collector', {});
+    setSkipStatus('Collector neu gestartet — Regeln sind aktiv', 'ok');
+    toast('Collector neu gestartet', 'ok');
+  } catch (err) {
+    setSkipStatus('Restart fehlgeschlagen: ' + err.message, 'err');
+    toast('Restart fehlgeschlagen: ' + err.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 async function loadDate(date) {
@@ -8173,6 +8407,15 @@ _NAV_RIGHT = {
         '<span>Do</span><span>Fr</span><span>Sa</span><span>So</span></div>'
         '<div class="dp-grid" id="dp-grid"></div>'
         '</div></div>'
+        '<button class="dp-trigger" id="skip-btn" type="button" '
+        'title="Screenshot-Skip-Regeln bearbeiten">'
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">'
+        '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>'
+        '<line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>'
+        '<line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>'
+        '<line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/>'
+        '<line x1="17" y1="16" x2="23" y2="16"/></svg>'
+        '<span>Skip-Regeln</span></button>'
         '<span class="summary" id="summary"></span>'
     ),
     "projects": '<span><span id="proj-count">—</span> Projekte</span>',
