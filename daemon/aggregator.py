@@ -321,8 +321,8 @@ def load_patterns() -> tuple[dict[str, dict], str, dict[str, list[str]], dict]:
 
     app_categories = data.get("app_categories", {})
     for proj, cat in categories.validate_project_categories(data.get("projects", {})):
-        log.warning("Projekt %r: Kategorie %r ist nicht im Kategorie-Pool "
-                    "(categories.yaml) — wird unverändert übernommen", proj, cat)
+        log.warning("Project %r: category %r is not in the category pool "
+                    "(categories.yaml) — keeping it unchanged", proj, cat)
     tool_ctx = {
         "tool_apps": {str(a).strip().lower() for a in data.get("tool_apps", []) if a},
         "tool_app_url_hosts": {str(h).strip().lower() for h in data.get("tool_app_url_hosts", []) if h},
@@ -616,18 +616,17 @@ def assign_projects_by_topic(
     projects: dict[str, dict],
     default_project: str = "Other",
 ) -> int:
-    """Nachrangige Zuordnung: noch unaufgelöste Sessions anhand ihres (vom
-    LLM erkannten) Topics einem Projekt zuordnen.
+    """Assign unresolved sessions to projects based on LLM-generated topics.
 
-    Greift NUR für Sessions, die sonst unter dem Default-Projekt („Other“)
-    bzw. als tool_app_unresolved landen würden — stärkere Signale (Git, URL,
-    Titel, Verzeichnis, Inheritance) behalten Vorrang. Matcht das ``topics``-
-    Glob jedes Projekts case-insensitiv gegen das Session-Topic.
+    Applies ONLY to sessions that would otherwise use the default project
+    ("Other") or be marked tool_app_unresolved. Stronger signals such as Git,
+    URL, title, directory, and inheritance retain priority. Matches each
+    project's ``topics`` glob against the session topic case-insensitively.
 
-    Muss NACH ``extract_topics`` laufen (vorher ist ``topic`` leer).
-    Gibt die Anzahl neu zugeordneter Sessions zurück.
+    Must run AFTER ``extract_topics`` because ``topic`` is empty beforehand.
+    Returns the number of newly assigned sessions.
     """
-    # (proj_name, category, topic_glob_lower) — in Projektreihenfolge
+    # (proj_name, category, topic_glob_lower) in project order
     rules = []
     for proj_name, info in projects.items():
         if not isinstance(info, dict):
@@ -648,9 +647,9 @@ def assign_projects_by_topic(
             if fnmatch.fnmatch(topic, glob):
                 s["project"] = proj_name
                 s["category"] = category
-                # sanitize_session_for_report liest _match_reason für das
-                # gespeicherte match_reason — beide setzen, damit der Grund
-                # in Stats (match_reason) und Roh-Session (_match_reason) steht.
+                # sanitize_session_for_report reads _match_reason for the
+                # persisted match_reason. Set both so stats and the raw session
+                # contain the same reason.
                 reason = f"topic:{topic[:40]}"
                 s["match_reason"] = reason
                 s["_match_reason"] = reason
@@ -2043,7 +2042,7 @@ def render_weekly_md(date: datetime, all_sessions: list[dict], daily_stats_list:
             lines.append(f"| {repo} | {count} |")
         lines.append("")
 
-    # --- Browser Top-Domains Woche ---
+    # --- Weekly top browser domains ---
     url_domains_week: dict[str, int] = {}
     for s in all_sessions:
         url = s.get("url", "")
@@ -2272,7 +2271,7 @@ def run_daily(date: datetime, progress: "Progress | None" = None) -> None:
     unresolved_after = sum(1 for s in sessions if _is_unresolved(s))
     n_inherited = unresolved_before - unresolved_after
     log.info(
-        "%d Sessions (%d via inherit_projects aufgelöst, %d übrig)",
+        "%d sessions (%d resolved via inherit_projects, %d remaining)",
         len(sessions),
         n_inherited,
         unresolved_after,
@@ -2293,20 +2292,19 @@ def run_daily(date: datetime, progress: "Progress | None" = None) -> None:
             sessions, cfg, title_suffixes=_suffixes, progress=_topic_progress
         )
         if set_count:
-            log.info("Topic-LLM: %d Sessions mit Topic angereichert", set_count)
+            log.info("Topic LLM: enriched %d sessions with a topic", set_count)
         progress.update("topics", f"{set_count} set")
 
-        # Nachrangige Topic→Projekt-Zuordnung: noch unaufgelöste Sessions
-        # anhand ihres Topics einem Projekt zuordnen (topics-Regel im
-        # project_patterns.yaml). Muss NACH extract_topics laufen.
+        # Secondary topic-to-project assignment for unresolved sessions using
+        # the topics rule in project_patterns.yaml. Must run after extract_topics.
         topic_assigned = assign_projects_by_topic(sessions, _proj, _default_proj)
         if topic_assigned:
-            log.info("Topic→Projekt: %d Sessions zugeordnet", topic_assigned)
+            log.info("Topic to project: assigned %d sessions", topic_assigned)
             progress.update("topics", f"{set_count} set, {topic_assigned} via topic")
     except Exception as e:
-        log.warning("Topic-Extraktion fehlgeschlagen: %s", e, exc_info=True)
+        log.warning("Topic extraction failed: %s", e, exc_info=True)
 
-    # Motivations-Extraktion via Vision-LLM (best-effort, silent on failure)
+    # Motivation extraction via vision LLM (best effort, silent on failure)
     try:
         def _motiv_progress(done: int, total: int, set_n: int) -> None:
             progress.update("motivation", f"{done}/{total}  {set_n} set")
@@ -2314,10 +2312,10 @@ def run_daily(date: datetime, progress: "Progress | None" = None) -> None:
         progress.update("motivation", "starting")
         m_count = extract_motivations(sessions, cfg, progress=_motiv_progress)
         if m_count:
-            log.info("Motivation-LLM: %d Sessions mit Motivation angereichert", m_count)
+            log.info("Motivation LLM: enriched %d sessions", m_count)
         progress.update("motivation", f"{m_count} set")
     except Exception as e:
-        log.warning("Motivation-Extraktion fehlgeschlagen: %s", e, exc_info=True)
+        log.warning("Motivation extraction failed: %s", e, exc_info=True)
 
     # Sanitize before anything reads the sessions — removes clipboard samples
     # and raw ambient titles from every downstream consumer (reports, stats).
@@ -2329,7 +2327,7 @@ def run_daily(date: datetime, progress: "Progress | None" = None) -> None:
     sessions_path = SESSIONS_DIR / f"{date.strftime('%Y-%m-%d')}.json"
     with open(sessions_path, "w") as f:
         json.dump(sessions, f, indent=2, ensure_ascii=False)
-    log.info("Sessions gespeichert: %s", sessions_path)
+    log.info("Sessions saved: %s", sessions_path)
 
     # Calculate stats
     progress.update("computing stats")
@@ -2362,7 +2360,7 @@ def run_daily(date: datetime, progress: "Progress | None" = None) -> None:
     try:
         suggest_patterns(sessions, date)
     except Exception as e:
-        log.warning("Pattern-Suggestion fehlgeschlagen: %s", e, exc_info=True)
+        log.warning("Pattern suggestion failed: %s", e, exc_info=True)
 
     # Final summary — live progress gets replaced, [SUMMARY] goes to stdout for parsing
     elapsed = int(round(progress.elapsed()))
@@ -2635,7 +2633,7 @@ def run_monthly(date: datetime) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="WorkTracker Aggregator")
     parser.add_argument("--mode", choices=["daily", "weekly", "monthly"], required=True)
-    parser.add_argument("--date", help="Datum im Format YYYY-MM-DD (Default: heute)", default=None)
+    parser.add_argument("--date", help="Date in YYYY-MM-DD format (default: today)", default=None)
     parser.add_argument("--progress", action="store_true",
                         help="Emit live phase-based progress on stderr.")
     parser.add_argument("--tag", default="",

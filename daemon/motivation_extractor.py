@@ -1,15 +1,16 @@
-"""Motivations-Extraktion fuer WorkTracker-Sessions via VISION-LLM (lokal).
+"""Extract motivation messages for WorkTracker sessions with a local vision LLM.
 
-Sendet pro Session bis zu N Screenshots an einen lokalen, OpenAI-kompatiblen
-chat/completions-Endpoint (LM Studio mit Vision-Modell, Ollama-LLaVA, etc.)
-und schreibt einen kurzen deutschen Motivationssatz in ``session["motivation_message"]``.
+Sends up to N screenshots per session to a local, OpenAI-compatible
+chat/completions endpoint (LM Studio with a vision model, Ollama-LLaVA, etc.)
+and writes a short English motivation message to ``session["motivation_message"]``.
 
-Weil Screenshots BELIEBIGE Bildschirminhalte enthalten koennen (Passwoerter,
-Mails, Privates), MUSS der konfigurierte Endpoint lokal sein. Auf keinen Fall
-auf einen Remote-Endpoint zeigen.
+Screenshots may contain ANY screen content, including passwords, email, and
+private data, so the configured endpoint MUST be local. Never point it at a
+remote endpoint.
 
-Failure-Modi (Timeout, schlechtes JSON, Endpoint down, Bild zu gross) sind
-still — der Aggregator laeuft mit leerem ``motivation_message`` weiter.
+Failure modes such as timeouts, invalid JSON, an unavailable endpoint, or an
+oversized image are silent; the aggregator continues with an empty
+``motivation_message``.
 """
 from __future__ import annotations
 
@@ -27,21 +28,17 @@ log = logging.getLogger("aggregator.motivation_extractor")
 
 _SYSTEM_PROMPT = (
     "/no_think\n"
-    "Du bekommst EIN Screenshot einer Arbeits-Session und minimale Metadaten "
-    "(App, Projekt, Dauer). Analysiere das Bild GENAU: Welche App ist offen, "
-    "welche Datei, welcher Code, welcher Text, welcher Tab, welches "
-    "UI-Element, welche Zahlen oder Diagramme sind zu sehen? Gehe im Text "
-    "konkret auf mindestens ein sichtbares Detail ein (Dateiname, "
-    "Funktionsname, Variablenname, Klassenname, Fenstertitel, Terminal-Befehl, "
-    "Icon, Fehlermeldung, Zeile im Editor, URL, Button, etc.) — nicht nur auf "
-    "die Metadaten.\n\n"
-    "Schreibe 2 bis 4 deutsche Saetze (max. 100 Woerter), die den Nutzer "
-    "anerkennend zum Weitermachen einladen. Der Ton ist warm, konkret, "
-    "spezifisch — keine generischen Floskeln wie 'konzentriere dich weiter' "
-    "oder 'mach weiter so'. Wenn nichts Konkretes im Bild erkennbar ist, "
-    "benenne genau DAS ehrlich.\n\n"
-    "Keine Anrede, keine Emojis, keine Code-Fences, kein Label davor — nur "
-    "den Fliesstext."
+    "You receive ONE screenshot from a work session plus minimal metadata "
+    "(app, project, duration). Analyze the image carefully: which app, file, "
+    "code, text, tab, UI element, numbers, or charts are visible? Mention at "
+    "least one specific visible detail such as a filename, function, variable, "
+    "class, window title, terminal command, icon, error, editor line, URL, or "
+    "button. Do not rely only on the metadata.\n\n"
+    "Write 2 to 4 English sentences (maximum 100 words) that acknowledge the "
+    "work and encourage the user to continue. Keep the tone warm, concrete, "
+    "and specific. Avoid generic phrases such as 'stay focused' or 'keep it "
+    "up'. If no concrete detail is visible, say so honestly.\n\n"
+    "No greeting, emojis, code fences, or leading label. Return prose only."
 )
 
 
@@ -100,7 +97,7 @@ def _clean_motivation(text: str) -> str:
     s = s.strip()
     if s.startswith("```"):
         s = s.strip("`")
-        # entferne moegliches "json\n" oder Sprach-Tag
+        # Remove a possible "json\n" prefix or language tag.
         if "\n" in s:
             s = s.split("\n", 1)[1]
     s = s.strip().strip('"').strip("'").strip()
@@ -167,12 +164,12 @@ def extract_motivations(sessions: list[dict], cfg: dict,
         dur_min = round(int(sess.get("duration_seconds", 0) or 0) / 60)
         meta = (
             f"App: {sess.get('app_name','')} \u00b7 "
-            f"Projekt: {sess.get('project','')} \u00b7 "
-            f"Dauer: {dur_min} min"
+            f"Project: {sess.get('project','')} \u00b7 "
+            f"Duration: {dur_min} min"
         )
         topic = str(sess.get("topic") or "").strip()
         if topic:
-            meta += f" \u00b7 Thema: {topic}"
+            meta += f" \u00b7 Topic: {topic}"
 
         content_parts: list[dict] = [{"type": "text", "text": meta}]
         for data_uri in encoded:

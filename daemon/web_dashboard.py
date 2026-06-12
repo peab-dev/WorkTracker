@@ -144,8 +144,8 @@ def load_sessions(date_str):
             sessions = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return []
-    # Kategorie-Pool: Legacy-Namen beim Lesen kanonisieren; ältere Sessions
-    # ohne activity_category bekommen sie abgeleitet (Projekt → Web → Tool).
+    # Canonicalize legacy category names when reading the category pool. Derive
+    # activity_category for older sessions that do not have one (project → web → tool).
     for s in sessions:
         if s.get("category"):
             s["category"] = catpool.canonical(s["category"])
@@ -169,9 +169,9 @@ def _dates_in_range(start_str, end_str):
         d += one
 
 
-_NO_TOPIC = "(ohne Topic)"
-_NO_PROJECT = "(ohne Projekt)"
-_NO_APP = "(unbekannte App)"
+_NO_TOPIC = "(no topic)"
+_NO_PROJECT = "(no project)"
+_NO_APP = "(unknown app)"
 
 
 def aggregate_triples(sessions):
@@ -181,7 +181,7 @@ def aggregate_triples(sessions):
     visualizations. Returns list sorted by duration desc.
     """
     buckets = {}
-    proj_cat = {}  # project -> Kategorie (letzter nicht-leerer Wert gewinnt)
+    proj_cat = {}  # project -> category (last non-empty value wins)
     for s in sessions:
         topic = (s.get("topic") or "").strip() or _NO_TOPIC
         project = (s.get("project") or "").strip() or _NO_PROJECT
@@ -674,7 +674,7 @@ def api_live():
             "keys_ph": int(keys / hrs),
             "clicks_ph": int(clicks / hrs),
             "scrolls_ph": int(scrolls / hrs),
-            # ~100 px pro Scroll-Event bei 96 dpi → Meter
+            # ~100 px per scroll event at 96 dpi → meters
             "scroll_m": round(scrolls * 100 * 0.0254 / 96, 1),
             "clipboard_ph": round(clip / hrs, 1),
             "sessions_ph": round(len(active_sessions) / hrs, 1),
@@ -765,8 +765,8 @@ def api_rhythm(weeks=2):
     days = weeks * 7
 
     DAY_START = 6   # 06:00 → 06:00 day definition (first column = 06:00–07:00)
-    DAY_HR_START = 6   # Tagesarbeitszeit: 06:00 … 20:00
-    DAY_HR_END = 20    # Nachtarbeitszeit: 20:00 … 06:00
+    DAY_HR_START = 6   # Daytime work: 06:00–20:00
+    DAY_HR_END = 20    # Nighttime work: 20:00–06:00
 
     def _hours_for_rhythm_day(start_date):
         """Return set of wall-clock hours active during start_date 06:00 → next 06:00."""
@@ -1177,7 +1177,7 @@ def docs_file(filename):
 # ── HTML ─────────────────────────────────────────────────────
 
 HTML = r"""<!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1614,7 +1614,7 @@ h2::before {
 
 <div class="grid">
 
-  <!-- Daily Overview — Hero-Karte zuerst: wichtigste Zusammenfassung oben -->
+  <!-- Daily Overview — hero card first: most important summary on top -->
   <div class="card wide">
     <h2 id="day-title">Today</h2>
     <div class="gauges-row" id="gauges-row" style="display:none"></div>
@@ -1767,19 +1767,19 @@ function fmtUptime(sec) {
   return s + 's';
 }
 
-// Scroll distance in meters → "3.8 km (≈ 36× Fußballfeld)"
+// Scroll distance in meters → "3.8 km (≈ 36× soccer field)"
 function scrollDist(m) {
   if (!m) return '–';
   const units = [
     [42195, 'Marathons'],
     [8849, '× Mount Everest'],
-    [3798, '× Großglockner'],
-    [400, 'Stadionrunden'],
-    [105, '× Fußballfeld'],
-    [50, '× Schwimmbecken'],
-    [137, '× Stephansdom'],
-    [1.8, '× Körpergröße'],
-    [1, '× Meterstab'],
+    [3798, '× Grossglockner'],
+    [400, 'stadium laps'],
+    [105, '× soccer field'],
+    [50, '× swimming pool'],
+    [137, '× St. Stephen’s Cathedral'],
+    [1.8, '× body height'],
+    [1, '× meter stick'],
   ].sort((a, b) => b[0] - a[0]);
   const val = m >= 1000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m) + ' m';
   const u = units.find(u => m / u[0] >= 1);
@@ -1885,11 +1885,11 @@ function comboGaugeHtml(workSec, pauseSec, focusSec) {
     +   '<span class="cc-sub" style="color:' + PAUSE + '">' + pausePct + '%</span>'
     + '</div>'
     + '</div>'
-    + '<div class="gauge-label">Arbeit &amp; Pause</div>'
+    + '<div class="gauge-label">Work &amp; Breaks</div>'
     + '<div class="gauge-combo-legend">'
-    +   '<span><i style="background:' + WORK + '"></i>Arbeit ' + esc(fmt(workSec)) + '</span>'
-    +   '<span><i style="background:' + FOCUS + '"></i>Fokus ' + esc(fmt(focusSec || 0)) + '</span>'
-    +   '<span><i style="background:' + PAUSE + '"></i>Pause ' + esc(fmt(pauseSec || 0)) + '</span>'
+    +   '<span><i style="background:' + WORK + '"></i>Work ' + esc(fmt(workSec)) + '</span>'
+    +   '<span><i style="background:' + FOCUS + '"></i>Focus ' + esc(fmt(focusSec || 0)) + '</span>'
+    +   '<span><i style="background:' + PAUSE + '"></i>Breaks ' + esc(fmt(pauseSec || 0)) + '</span>'
     + '</div>'
     + '</div>';
 }
@@ -1908,7 +1908,7 @@ function $(id) { return document.getElementById(id); }
 async function openReport(type, name) {
   const modal = $('report-modal');
   $('modal-title').textContent = type + ' / ' + name;
-  $('modal-body').innerHTML = '<div class="wt-loading"><div class="wt-spinner"></div><span class="wt-load-label">Report laden…</span></div>';
+  $('modal-body').innerHTML = '<div class="wt-loading"><div class="wt-spinner"></div><span class="wt-load-label">Loading report…</span></div>';
   modal.classList.add('show');
   try {
     const r = await fetch('/api/report/' + type + '/' + encodeURIComponent(name));
@@ -1934,13 +1934,13 @@ async function openFile(type, name) {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 $('report-modal').addEventListener('click', e => { if (e.target === $('report-modal')) closeModal(); });
 
-// Countdown-Balken über der Uhr: läuft in REFRESH ms linear von voll auf leer.
+// Countdown bar above the clock: drains linearly over REFRESH milliseconds.
 function runCountdown() {
   const bar = $('rf-bar');
   if (!bar) return;
   bar.style.transition = 'none';
   bar.style.transform = 'scaleX(1)';
-  void bar.offsetWidth;                // Reflow, damit der Reset sofort greift
+  void bar.offsetWidth;                // Reflow so the reset applies immediately.
   bar.style.transition = 'transform ' + REFRESH + 'ms linear';
   bar.style.transform = 'scaleX(0)';
 }
@@ -1950,14 +1950,14 @@ function update(d) {
   $('clock').textContent = new Date(d.ts).toLocaleTimeString('en');
   $('snap-count').textContent = d.snap_total.toLocaleString('en');
 
-  // Pulse: kurze Impulsanimation am grünen Kreis bei jeder Aktualisierung
+  // Brief pulse animation on the green circle after each refresh.
   const pulse = $('pulse');
   if (pulse) {
     pulse.classList.remove('pulsing');
-    void pulse.offsetWidth;            // Reflow erzwingen, damit die Animation neu startet
+    void pulse.offsetWidth;            // Force reflow so the animation restarts.
     pulse.classList.add('pulsing');
   }
-  // Countdown-Balken bis zur nächsten Aktualisierung neu starten
+  // Restart the countdown bar until the next refresh.
   runCountdown();
 
   // Live
@@ -1990,7 +1990,7 @@ function update(d) {
     const idle = Math.max(lv.idle_kb || 0, lv.idle_ms || 0);
     const ib = $('idle-banner');
     if (idle > 60) {
-      ib.textContent = '⏸ Idle seit ' + Math.round(idle) + 's';
+      ib.textContent = '⏸ Idle for ' + Math.round(idle) + 's';
       ib.classList.add('show');
     } else {
       ib.classList.remove('show');
@@ -2000,12 +2000,12 @@ function update(d) {
     let sys = [];
     if (lv.system) {
       if (lv.system.battery_pct != null) {
-        let bt = 'Akku: ' + lv.system.battery_pct + '%';
+        let bt = 'Battery: ' + lv.system.battery_pct + '%';
         if (lv.system.battery_charging) bt += ' ⚡';
         sys.push(bt);
       }
       if (lv.system.brightness != null)
-        sys.push('Helligkeit: ' + Math.round(lv.system.brightness * 100) + '%');
+        sys.push('Brightness: ' + Math.round(lv.system.brightness * 100) + '%');
       if (lv.system.active_space != null)
         sys.push('Space: ' + lv.system.active_space);
     }
@@ -2014,7 +2014,7 @@ function update(d) {
     $('sys-info').textContent = sys.join('  ·  ');
   }
 
-  // Services — show uptime ("läuft · 27m 03s") when collector is running
+  // Services — show uptime ("running · 27m 03s") when collector is running.
   const svcs = d.services;
   let sh = '';
   const svcList = [
@@ -2034,11 +2034,11 @@ function update(d) {
         dot = 'on';
         const uptime = s.uptime_sec;
         if (uptime && uptime > 0) {
-          info = 'läuft · ' + fmtUptime(uptime);
+          info = 'running · ' + fmtUptime(uptime);
         } else if (s.pid) {
-          info = 'läuft · PID ' + s.pid;
+          info = 'running · PID ' + s.pid;
         } else {
-          info = 'läuft';
+          info = 'running';
         }
       } else if (s.loaded) {
         state = 'loaded';
@@ -2088,12 +2088,12 @@ function update(d) {
     const gauges = [
       {combo: true},
       {label: 'Sessions', value: dy.sessions, pct: pctSessions, color: 'var(--cyan)'},
-      {label: 'Intensität', value: dy.avg_intensity != null ? dy.avg_intensity : '–', pct: pctInt,
+      {label: 'Intensity', value: dy.avg_intensity != null ? dy.avg_intensity : '–', pct: pctInt,
        color: pctInt >= 0.6 ? 'var(--green)' : pctInt >= 0.3 ? 'var(--cyan)' : 'var(--yellow)',
-       sub: 'von 10'},
+       sub: 'out of 10'},
       {label: 'Switches', value: swPh + '/h', pct: Math.min(1, swPh / 20),
        color: swPh <= 8 ? 'var(--green)' : swPh <= 14 ? 'var(--yellow)' : 'var(--red)',
-       sub: dy.switches + ' gesamt'},
+       sub: dy.switches + ' total'},
     ];
     $('gauges-row').innerHTML = gauges.map(g =>
       g.combo ? comboGaugeHtml(dy.total_sec || 0, dy.pause_sec || 0, dy.focus_sec || 0)
@@ -2103,24 +2103,24 @@ function update(d) {
     const HS = dy.hourly_series || {};
     $('day-stats').innerHTML = [
       ['Active', fmt(dy.total_sec), 'active'],
-      ['Sessions', (dy.sessions_ph || 0) + '/h (' + dy.sessions + ' gesamt)', 'sessions'],
+      ['Sessions', (dy.sessions_ph || 0) + '/h (' + dy.sessions + ' total)', 'sessions'],
       ['Focus', dy.focus_count + ' (' + fmt(dy.focus_sec) + ')', 'focus'],
-      ['Switches', (dy.switches_ph || 0) + '/h (' + dy.switches + ' gesamt)', 'switches'],
-      ['Keys', (dy.keys_ph || 0).toLocaleString('en') + '/h (' + dy.keys.toLocaleString('en') + ' gesamt)', 'keys'],
-      ['Clicks', (dy.clicks_ph || 0).toLocaleString('en') + '/h (' + dy.clicks.toLocaleString('en') + ' gesamt)', 'clicks'],
-      ['Scroll', (dy.scrolls_ph || 0).toLocaleString('en') + '/h (' + dy.scrolls.toLocaleString('en') + ' gesamt)', 'scrolls'],
-      ['Scroll-Distanz', scrollDist(dy.scroll_m || 0), 'scrolls'],
-      ['Clipboard', (dy.clipboard_ph || 0) + '/h (' + dy.clipboard + 'x gesamt)', 'clipboard'],
+      ['Switches', (dy.switches_ph || 0) + '/h (' + dy.switches + ' total)', 'switches'],
+      ['Keys', (dy.keys_ph || 0).toLocaleString('en') + '/h (' + dy.keys.toLocaleString('en') + ' total)', 'keys'],
+      ['Clicks', (dy.clicks_ph || 0).toLocaleString('en') + '/h (' + dy.clicks.toLocaleString('en') + ' total)', 'clicks'],
+      ['Scroll', (dy.scrolls_ph || 0).toLocaleString('en') + '/h (' + dy.scrolls.toLocaleString('en') + ' total)', 'scrolls'],
+      ['Scroll Distance', scrollDist(dy.scroll_m || 0), 'scrolls'],
+      ['Clipboard', (dy.clipboard_ph || 0) + '/h (' + dy.clipboard + 'x total)', 'clipboard'],
       ['Topics', topicsCount, 'topics'],
-      ['Start', (dy.first_start || '–') + ' (bis ' + (dy.last_end || '–') + ')', 'active'],
-      ['Pause', fmt(dy.pause_sec || 0), null],
-      ['Ø Session', fmt(dy.avg_session_sec || 0), 'avg_session'],
-      ['Längste', fmt(dy.longest_session_sec || 0), 'longest'],
-      ['Intensität', dy.avg_intensity != null ? dy.avg_intensity : '–', 'intensity'],
+      ['Start', (dy.first_start || '–') + ' (until ' + (dy.last_end || '–') + ')', 'active'],
+      ['Breaks', fmt(dy.pause_sec || 0), null],
+      ['Avg Session', fmt(dy.avg_session_sec || 0), 'avg_session'],
+      ['Longest', fmt(dy.longest_session_sec || 0), 'longest'],
+      ['Intensity', dy.avg_intensity != null ? dy.avg_intensity : '–', 'intensity'],
       ['Peak', dy.peak_hour != null ? dy.peak_hour + '–' + ((dy.peak_hour + 1) % 24) + 'h' : '–', 'active', dy.peak_hour],
       ['Apps', dy.app_count || 0, 'apps'],
-      ['Projekte', dy.project_count || 0, 'projects'],
-      ['Screenshots', (dy.screenshots_ph || 0) + '/h (' + (dy.screenshots || 0) + ' gesamt)', 'screenshots'],
+      ['Projects', dy.project_count || 0, 'projects'],
+      ['Screenshots', (dy.screenshots_ph || 0) + '/h (' + (dy.screenshots || 0) + ' total)', 'screenshots'],
     ].map(([l, v, sk, hi]) => {
       const val = String(v).replace(/\s*(\([^)]*\))\s*$/, '<span class="stat-sub">$1</span>');
       const sp = sk ? spark(HS[sk], hi) : '<div class="stat-spark-empty"></div>';
@@ -2205,7 +2205,7 @@ function update(d) {
         wcHtml += '</div>';
       }
     });
-    $('web-categories').innerHTML = wcHtml || '<div style="color:var(--fg2)">Keine Browser-Daten</div>';
+    $('web-categories').innerHTML = wcHtml || '<div style="color:var(--fg2)">No browser data</div>';
 
     // Projects
     $('projects').innerHTML = paginated('dash-proj', dy.projects || [], (p, i) => {
@@ -2242,7 +2242,7 @@ function update(d) {
       }, 10);
     } else {
       $('topics-meta').textContent = '';
-      $('topics').innerHTML = '<div style="color:var(--fg3);font-size:12px;padding:8px 0">Noch keine Themen erkannt. Topics werden vom lokalen LLM beim Aggregieren erzeugt.</div>';
+      $('topics').innerHTML = '<div style="color:var(--fg3);font-size:12px;padding:8px 0">No topics detected yet. Topics are generated by the local LLM during aggregation.</div>';
     }
 
     // Apps
@@ -2276,7 +2276,7 @@ function update(d) {
     $('hourly-chart').innerHTML = ch;
   } else {
     $('gauges-row').style.display = 'none';
-    $('day-stats').innerHTML = '<div style="color:var(--fg2)">Noch keine Daten</div>';
+    $('day-stats').innerHTML = '<div style="color:var(--fg2)">No data yet</div>';
   }
 
   // Recent sessions
@@ -2370,7 +2370,7 @@ function _toggleList(id, showN) {
   var open = _expandedLists.has(id);
   if (m) m.style.display = open ? 'block' : 'none';
   if (pg) pg.style.display = open ? 'block' : 'none';
-  if (btn) btn.textContent = open ? 'Weniger anzeigen' : 'Alle '+showN+' anzeigen';
+  if (btn) btn.textContent = open ? 'Show less' : 'Show all '+showN;
 }
 
 function paginated(id, items, rowFn, initCount) {
@@ -2385,7 +2385,7 @@ function paginated(id, items, rowFn, initCount) {
     const showN = Math.min(items.length, PAGE);
     h += '<a href="#" class="dist-toggle" id="'+id+'-btn" onclick="'
       + 'event.preventDefault();_toggleList(\''+id+'\','+showN+');'
-      + '">'+(open?'Weniger anzeigen':'Alle '+showN+' anzeigen')+'</a>';
+      + '">'+(open?'Show less':'Show all '+showN)+'</a>';
   }
   if (items.length > PAGE) {
     h += '<div id="'+id+'-pages" style="display:'+(open?'block':'none')+'">';
@@ -2495,7 +2495,7 @@ function renderHeatmap(data) {
       const hr = displayHours[idx];
       const nh = (hr + 1) % 24;
       const range = String(hr).padStart(2,'0') + ':00 - ' + String(nh).padStart(2,'0') + ':00';
-      const kind = c === 'healthy' ? 'Tag' : c === 'unhealthy' ? 'Nacht' : 'inaktiv';
+      const kind = c === 'healthy' ? 'Day' : c === 'unhealthy' ? 'Night' : 'inactive';
       html += '<div class="heatmap-cell ' + c + '" title="' + d.date + ' ' + range + ' — ' + kind + '"></div>';
     });
     html += '<div class="heatmap-day-total">' + (d.active > 0 ? d.active + 'h' : '') + '</div>';
@@ -2504,19 +2504,19 @@ function renderHeatmap(data) {
 
   // Legend
   html += '<div class="heatmap-legend">';
-  html += '<span><span class="heatmap-legend-dot" style="background:#6cb6ff"></span>Tag (06–20)</span>';
-  html += '<span><span class="heatmap-legend-dot" style="background:#1f3a8a"></span>Nacht (20–06)</span>';
-  html += '<span><span class="heatmap-legend-dot" style="background:var(--bg3)"></span>Inaktiv</span>';
+  html += '<span><span class="heatmap-legend-dot" style="background:#6cb6ff"></span>Day (06–20)</span>';
+  html += '<span><span class="heatmap-legend-dot" style="background:#1f3a8a"></span>Night (20–06)</span>';
+  html += '<span><span class="heatmap-legend-dot" style="background:var(--bg3)"></span>Inactive</span>';
   html += '</div>';
 
   // Stats
   const s = data.stats;
   html += '<div class="heatmap-stats">';
   html += '<div class="stat"><div class="stat-val">' + s.avg_active + 'h</div><div class="stat-label">Avg/Day</div></div>';
-  html += '<div class="stat"><div class="stat-val" style="color:#6cb6ff">' + s.day_hours + 'h</div><div class="stat-label">Tagesarbeitszeit</div></div>';
-  html += '<div class="stat"><div class="stat-val" style="color:#1f6feb">' + s.night_hours + 'h</div><div class="stat-label">Nachtarbeitszeit</div></div>';
+  html += '<div class="stat"><div class="stat-val" style="color:#6cb6ff">' + s.day_hours + 'h</div><div class="stat-label">Daytime Work</div></div>';
+  html += '<div class="stat"><div class="stat-val" style="color:#1f6feb">' + s.night_hours + 'h</div><div class="stat-label">Nighttime Work</div></div>';
 
-  // Tag/Nacht ratio donut
+  // Day/night ratio donut.
   const tot = (s.day_hours || 0) + (s.night_hours || 0);
   const dayPct = tot ? Math.round(s.day_hours / tot * 100) : 0;
   const nightPct = tot ? 100 - dayPct : 0;
@@ -2533,9 +2533,9 @@ function renderHeatmap(data) {
         + '</svg>'
         + '<div class="heatmap-donut-legend">'
         + '<div><span class="dn-dot" style="background:#6cb6ff"></span>'
-        + '<span class="dn-pct">' + dayPct + '%</span> <span class="dn-name">Tag</span></div>'
+        + '<span class="dn-pct">' + dayPct + '%</span> <span class="dn-name">Day</span></div>'
         + '<div><span class="dn-dot" style="background:#1f3a8a"></span>'
-        + '<span class="dn-pct">' + nightPct + '%</span> <span class="dn-name">Nacht</span></div>'
+        + '<span class="dn-pct">' + nightPct + '%</span> <span class="dn-name">Night</span></div>'
         + '</div>'
         + '</div>';
 
@@ -2555,7 +2555,7 @@ setInterval(loadRhythm, 60000);
 
 
 EXPLORE_HTML = r"""<!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -2620,7 +2620,7 @@ h2::before {
 }
 .date-nav button:hover { background: var(--bg2); border-color: var(--cyan); }
 .date-nav button:disabled { opacity: 0.3; cursor: not-allowed; }
-/* Datepicker — identisch zur Screenshots-Seite (nur Tage mit Daten klickbar) */
+/* Date picker matching the Screenshots page; only days with data are clickable. */
 .dp { position: relative; }
 .dp-trigger {
   display: flex; align-items: center; gap: 8px;
@@ -2671,7 +2671,7 @@ h2::before {
 .stat-val { font-size: 22px; font-weight: 700; color: var(--fg); }
 .stat-label { font-size: 10px; color: var(--fg2); text-transform: uppercase; }
 
-/* Distribution grid — auto-fit: nutzt auf breiten Screens 3 Spalten */
+/* Distribution grid uses three columns on wide screens. */
 .dist-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); gap: 12px; margin-top: 12px; }
 .dist-card { background: var(--bg); border: 1px solid var(--bg3); border-radius: 6px; padding: 12px; }
 .dist-search { width: 100%; padding: 5px 8px; margin-bottom: 8px; background: var(--bg2); border: 1px solid var(--bg3); border-radius: 4px; color: var(--fg); font-size: 12px; outline: none; box-sizing: border-box; }
@@ -2763,7 +2763,7 @@ h2::before {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-style: italic;
 }
 .sess-topic:empty { display: none; }
-/* Topics mit topic_long: gepunktete Unterstreichung als Tooltip-Hinweis */
+/* Topics with topic_long: dotted underline hints at the tooltip */
 .sess-topic.has-long { cursor: help;
   text-decoration: underline dotted var(--fg3); text-underline-offset: 3px; }
 .sess-tool {
@@ -2796,7 +2796,7 @@ h2::before {
 .detail-field { font-size: 12px; }
 .detail-label { color: var(--fg3); font-size: 10px; text-transform: uppercase; margin-bottom: 2px; }
 .detail-val { color: var(--fg); word-break: break-all; }
-/* topic_long ist Fließtext — normale Umbrüche statt break-all */
+/* topic_long is prose, so use normal wrapping instead of break-all. */
 .detail-val.topic-long-val { word-break: normal; overflow-wrap: break-word;
   color: var(--fg2); font-style: italic; line-height: 1.55; }
 
@@ -2908,25 +2908,25 @@ h2::before {
         <span class="dp-title" id="dp-title"></span>
         <button class="dp-nav" id="dp-next" type="button">&rsaquo;</button>
       </div>
-      <div class="dp-weekdays"><span>Mo</span><span>Di</span><span>Mi</span>
-      <span>Do</span><span>Fr</span><span>Sa</span><span>So</span></div>
+      <div class="dp-weekdays"><span>Mon</span><span>Tue</span><span>Wed</span>
+      <span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
       <div class="dp-grid" id="dp-grid"></div>
     </div>
   </div>
   <button onclick="nextDay()" id="btn-next">&rarr;</button>
-  <button onclick="goToday()">Heute</button>
+  <button onclick="goToday()">Today</button>
 </div>
 
 <!-- Day Overview -->
 <div class="card" id="overview-card">
-  <h2>Tagesübersicht</h2>
+  <h2>Day Overview</h2>
   <div class="stats" id="day-stats"></div>
   <div class="dist-grid" id="distributions"></div>
 </div>
 
 <!-- Timeline -->
 <div class="card" id="timeline-card">
-  <h2>Aktivitäts-Timeline</h2>
+  <h2>Activity Timeline</h2>
   <div class="timeline-wrap" id="timeline-wrap">
     <div class="timeline-hours" id="timeline-hours"></div>
     <svg class="timeline-svg" id="timeline-svg" height="70"></svg>
@@ -2937,12 +2937,12 @@ h2::before {
 <div class="card" id="sessions-card">
   <h2>Sessions</h2>
   <div class="filter-bar" id="filter-bar">
-    <input type="text" id="f-text" placeholder="Suche in Titel/Topic/App..." oninput="applyFilters()">
-    <select id="f-app" onchange="applyFilters()"><option value="">Alle Apps</option></select>
-    <select id="f-proj" onchange="applyFilters()"><option value="">Alle Projekte</option></select>
-    <select id="f-topic" onchange="applyFilters()"><option value="">Alle Themen</option></select>
-    <button class="sort-btn active" id="sort-time" onclick="sortBy('time')">Zeit</button>
-    <button class="sort-btn" id="sort-dur" onclick="sortBy('duration')">Dauer</button>
+    <input type="text" id="f-text" placeholder="Search title/topic/app..." oninput="applyFilters()">
+    <select id="f-app" onchange="applyFilters()"><option value="">All Apps</option></select>
+    <select id="f-proj" onchange="applyFilters()"><option value="">All Projects</option></select>
+    <select id="f-topic" onchange="applyFilters()"><option value="">All Topics</option></select>
+    <button class="sort-btn active" id="sort-time" onclick="sortBy('time')">Time</button>
+    <button class="sort-btn" id="sort-dur" onclick="sortBy('duration')">Duration</button>
     <span class="filter-count" id="filter-count"></span>
   </div>
   <div id="sessions-list"></div>
@@ -3006,14 +3006,14 @@ async function init() {
   if (currentDate) {
     loadDate(currentDate);
   } else {
-    document.getElementById('sessions-list').innerHTML = '<div class="empty">Keine Daten vorhanden</div>';
+    document.getElementById('sessions-list').innerHTML = '<div class="empty">No data available</div>';
   }
 }
 
 function updateDateUI() {
   const d = new Date(currentDate + 'T00:00:00');
-  const days = ['So','Mo','Di','Mi','Do','Fr','Sa'];
-  const months = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   document.getElementById('date-label').textContent =
     days[d.getDay()] + ', ' + d.getDate() + '. ' + months[d.getMonth()] + ' ' + d.getFullYear();
   const idx = availableDates.indexOf(currentDate);
@@ -3035,16 +3035,16 @@ function goToday() {
   if (availableDates.includes(today)) loadDate(today);
   else if (availableDates.length) loadDate(availableDates[availableDates.length - 1]);
 }
-// ── Datepicker (wie Screenshots-Seite — nur Tage mit Daten sind klickbar) ──
-const DP_MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli',
-                   'August','September','Oktober','November','Dezember'];
-let dpY, dpM;   // im Popover angezeigter Monat
+// ── Date picker (as on Screenshots; only days with data are clickable) ──
+const DP_MONTHS = ['January','February','March','April','May','June','July',
+                   'August','September','October','November','December'];
+let dpY, dpM;   // Month currently shown in the popover.
 
 function dpRender() {
   const avail = new Set(availableDates);
   document.getElementById('dp-title').textContent = DP_MONTHS[dpM] + ' ' + dpY;
   const first = new Date(dpY, dpM, 1);
-  const offset = (first.getDay() + 6) % 7;      // Montag zuerst
+  const offset = (first.getDay() + 6) % 7;      // Monday first.
   const daysInMonth = new Date(dpY, dpM + 1, 0).getDate();
   let cells = '';
   for (let i = 0; i < offset; i++) cells += '<div class="dp-day dp-empty"></div>';
@@ -3066,7 +3066,7 @@ function dpRender() {
       loadDate(el.dataset.d);
     })
   );
-  // Navigation außerhalb des verfügbaren Bereichs sperren
+  // Disable navigation outside the available range.
   const minIso = availableDates.length ? availableDates[0] : null;
   const maxIso = availableDates.length ? availableDates[availableDates.length - 1] : null;
   document.getElementById('dp-prev').disabled = minIso ? (dpY*12+dpM) <= (+minIso.slice(0,4)*12 + (+minIso.slice(5,7)-1)) : true;
@@ -3103,9 +3103,9 @@ async function loadDate(date) {
 
   updateDateUI();
   document.getElementById('sessions-list').innerHTML =
-    '<div class="wt-loading"><div class="wt-spinner"></div><span class="wt-load-label">Sessions laden…</span></div>';
+    '<div class="wt-loading"><div class="wt-spinner"></div><span class="wt-load-label">Loading sessions…</span></div>';
   document.getElementById('day-stats').innerHTML =
-    '<div class="wt-loading inline"><div class="wt-spinner sm"></div><span class="wt-load-label">Laden…</span></div>';
+    '<div class="wt-loading inline"><div class="wt-spinner sm"></div><span class="wt-load-label">Loading…</span></div>';
   document.getElementById('distributions').innerHTML = '';
 
   const [sessR, tlR] = await Promise.all([
@@ -3134,7 +3134,7 @@ async function loadDate(date) {
 // --- Overview ---
 function renderOverview() {
   if (!sessions.length) {
-    document.getElementById('day-stats').innerHTML = '<div class="empty">Keine Sessions</div>';
+    document.getElementById('day-stats').innerHTML = '<div class="empty">No sessions</div>';
     document.getElementById('distributions').innerHTML = '';
     return;
   }
@@ -3164,7 +3164,7 @@ function renderOverview() {
   const distinctTopics = Object.keys(topicSecs).length;
 
   document.getElementById('day-stats').innerHTML = [
-    ['Aktiv', fmt(totalSec)],
+    ['Active', fmt(totalSec)],
     ['Sessions', sessions.length],
     ['Focus', focus.length + ' (' + fmt(focusSec) + ')'],
     ['Switches', switches],
@@ -3172,7 +3172,7 @@ function renderOverview() {
     ['Clicks', clicks.toLocaleString()],
     ['Scroll', scrolls.toLocaleString()],
     ['Clipboard', clip + 'x'],
-    ['Themen', distinctTopics + ' (' + sessionsWithTopic + ')'],
+    ['Topics', distinctTopics + ' (' + sessionsWithTopic + ')'],
   ].map(([l,v]) => '<div class="stat"><div class="stat-val">'+v+'</div><div class="stat-label">'+l+'</div></div>').join('');
 
   // Distributions
@@ -3186,7 +3186,7 @@ function renderOverview() {
   });
 
   // Store dist data globally for search (Topics reuses the proj-coloured dot)
-  window._distData = { Apps: appDist, Projekte: projDist, Themen: topicSecs };
+  window._distData = { Apps: appDist, Projects: projDist, Topics: topicSecs };
   window._topicProject = topicProject;
   window._topicCount = topicCount;
 
@@ -3194,16 +3194,16 @@ function renderOverview() {
     const pct = Math.round(sec / totalSec * 100);
     let c;
     if (title === 'Apps') c = appColor(name);
-    else if (title === 'Themen') c = 'var(--cyan)';
+    else if (title === 'Topics') c = 'var(--cyan)';
     else c = 'var(--blue)';
 
     // Optional extra suffix (project for topics, count)
     let suffix = '';
-    if (title === 'Themen') {
+    if (title === 'Topics') {
       const proj = window._topicProject ? window._topicProject[name] : '';
       const cnt = window._topicCount ? window._topicCount[name] : 0;
       if (proj) {
-        suffix += '<span class="topic-dist-proj" title="Projekt">' + esc(proj) + '</span>';
+        suffix += '<span class="topic-dist-proj" title="Project">' + esc(proj) + '</span>';
       }
       if (cnt) {
         suffix += '<span class="topic-dist-count">×' + cnt + '</span>';
@@ -3232,7 +3232,7 @@ function renderOverview() {
 
     const max = sorted[0] ? sorted[0][1] : 1;
     let h = '<h2 style="margin-top:0">' + title + ' <span style="font-size:12px;color:var(--fg3);font-weight:400">(' + sorted.length + ')</span></h2>';
-    h += '<input type="text" class="dist-search" id="'+id+'-search" placeholder="Suche..." oninput="filterDist(\''+title+'\')" value="'+(query||'')+'">';
+    h += '<input type="text" class="dist-search" id="'+id+'-search" placeholder="Search..." oninput="filterDist(\''+title+'\')" value="'+(query||'')+'">';
     h += '<div id="'+id+'-rows">';
 
     // first 15
@@ -3254,8 +3254,8 @@ function renderOverview() {
         + 'var ls=JSON.parse(localStorage.getItem(\'wt_expanded_lists\')||\'[]\');'
         + 'if(show){if(!ls.includes(\''+id+'\'))ls.push(\''+id+'\')}else{ls=ls.filter(function(x){return x!==\''+id+'\'})};'
         + 'localStorage.setItem(\'wt_expanded_lists\',JSON.stringify(ls));'
-        + 'this.textContent=show?\'Weniger anzeigen\':\'Alle '+showN+' anzeigen\';'
-        + '">'+(distOpen?'Weniger anzeigen':'Alle '+showN+' anzeigen')+'</a>';
+        + 'this.textContent=show?\'Show less\':\'Show all '+showN+'\';'
+        + '">'+(distOpen?'Show less':'Show all '+showN)+'</a>';
     }
 
     if (sorted.length > PAGE) {
@@ -3301,9 +3301,9 @@ function renderOverview() {
 
   let distHtml =
     '<div class="dist-card">' + renderDist('Apps', appDist, '') + '</div>'
-    + '<div class="dist-card">' + renderDist('Projekte', projDist, '') + '</div>';
+    + '<div class="dist-card">' + renderDist('Projects', projDist, '') + '</div>';
   if (distinctTopics > 0) {
-    distHtml += '<div class="dist-card">' + renderDist('Themen', topicSecs, '') + '</div>';
+    distHtml += '<div class="dist-card">' + renderDist('Topics', topicSecs, '') + '</div>';
   }
   document.getElementById('distributions').innerHTML = distHtml;
 }
@@ -3420,13 +3420,13 @@ function populateFilters() {
   const apps = [...new Set(sessions.map(s => s.app_name))].sort();
   const projs = [...new Set(sessions.map(s => s.project || 'Other'))].sort();
   const topics = [...new Set(sessions.map(s => (s.topic || '').trim()).filter(Boolean))].sort();
-  let ao = '<option value="">Alle Apps</option>';
+  let ao = '<option value="">All Apps</option>';
   apps.forEach(a => ao += '<option>' + esc(a) + '</option>');
   document.getElementById('f-app').innerHTML = ao;
-  let po = '<option value="">Alle Projekte</option>';
+  let po = '<option value="">All Projects</option>';
   projs.forEach(p => po += '<option>' + esc(p) + '</option>');
   document.getElementById('f-proj').innerHTML = po;
-  let to = '<option value="">Alle Themen (' + topics.length + ')</option>';
+  let to = '<option value="">All Topics (' + topics.length + ')</option>';
   topics.forEach(t => to += '<option>' + esc(t) + '</option>');
   document.getElementById('f-topic').innerHTML = to;
 }
@@ -3531,7 +3531,7 @@ function sessRowHtml(s) {
 
 function renderSessions() {
   if (!filteredSessions.length) {
-    document.getElementById('sessions-list').innerHTML = '<div class="empty">Keine Sessions gefunden</div>';
+    document.getElementById('sessions-list').innerHTML = '<div class="empty">No sessions found</div>';
     return;
   }
 
@@ -3582,8 +3582,8 @@ function renderSessions() {
       + 'var pg=document.getElementById(\'sess-pages\');'
       + 'if(m)m.style.display=sessShowAll?\'block\':\'none\';'
       + 'if(pg)pg.style.display=sessShowAll?\'block\':\'none\';'
-      + 'this.textContent=sessShowAll?\'Weniger anzeigen\':\'Alle '+showN+' anzeigen\';'
-      + '">' + (sessShowAll ? 'Weniger anzeigen' : 'Alle ' + showN + ' anzeigen') + '</a>';
+      + 'this.textContent=sessShowAll?\'Show less\':\'Show all '+showN+'\';'
+      + '">' + (sessShowAll ? 'Show less' : 'Show all ' + showN) + '</a>';
   }
 
   document.getElementById('sessions-list').innerHTML = h;
@@ -3594,15 +3594,15 @@ function renderDetail(s, idx) {
 
   // Left column
   h += '<div>';
-  if (s.window_title) h += '<div class="detail-field"><div class="detail-label">Fenstertitel</div><div class="detail-val">' + esc(s.window_title) + '</div></div>';
-  if (s.topic) h += '<div class="detail-field"><div class="detail-label">Thema</div><div class="detail-val" style="color:var(--cyan)">' + esc(s.topic) + '</div></div>';
-  if (s.topic_long) h += '<div class="detail-field"><div class="detail-label">Beschreibung</div><div class="detail-val topic-long-val">' + esc(s.topic_long) + '</div></div>';
-  if (s.project) h += '<div class="detail-field"><div class="detail-label">Projekt</div><div class="detail-val" style="color:var(--blue)">' + esc(s.project) + (s.category ? ' <span style="color:var(--fg3);font-size:11px">· ' + esc(s.category) + '</span>' : '') + '</div></div>';
-  if (s.match_reason) h += '<div class="detail-field"><div class="detail-label">Match-Grund</div><div class="detail-val" style="font-family:monospace;font-size:11px;color:var(--fg2)">' + esc(s.match_reason) + '</div></div>';
+  if (s.window_title) h += '<div class="detail-field"><div class="detail-label">Window Title</div><div class="detail-val">' + esc(s.window_title) + '</div></div>';
+  if (s.topic) h += '<div class="detail-field"><div class="detail-label">Topic</div><div class="detail-val" style="color:var(--cyan)">' + esc(s.topic) + '</div></div>';
+  if (s.topic_long) h += '<div class="detail-field"><div class="detail-label">Description</div><div class="detail-val topic-long-val">' + esc(s.topic_long) + '</div></div>';
+  if (s.project) h += '<div class="detail-field"><div class="detail-label">Project</div><div class="detail-val" style="color:var(--blue)">' + esc(s.project) + (s.category ? ' <span style="color:var(--fg3);font-size:11px">· ' + esc(s.category) + '</span>' : '') + '</div></div>';
+  if (s.match_reason) h += '<div class="detail-field"><div class="detail-label">Match Reason</div><div class="detail-val" style="font-family:monospace;font-size:11px;color:var(--fg2)">' + esc(s.match_reason) + '</div></div>';
   if (s.url) h += '<div class="detail-field"><div class="detail-label">URL</div><div class="detail-val">' + esc(s.url) + '</div></div>';
   if (s.git_repo) h += '<div class="detail-field"><div class="detail-label">Git</div><div class="detail-val">' + esc(s.git_repo) + ' / ' + esc(s.git_branch || '\u2014') + '</div></div>';
-  if (s.calendar_event) h += '<div class="detail-field"><div class="detail-label">Kalender</div><div class="detail-val">' + esc(s.calendar_event) + '</div></div>';
-  if (s.app_category) h += '<div class="detail-field"><div class="detail-label">Kategorie</div><div class="detail-val">' + esc(s.app_category) + '</div></div>';
+  if (s.calendar_event) h += '<div class="detail-field"><div class="detail-label">Calendar</div><div class="detail-val">' + esc(s.calendar_event) + '</div></div>';
+  if (s.app_category) h += '<div class="detail-field"><div class="detail-label">Category</div><div class="detail-val">' + esc(s.app_category) + '</div></div>';
   if (s.parallel_media) h += '<div class="detail-field"><div class="detail-label">Media</div><div class="detail-val">\u266B ' + esc(typeof s.parallel_media === 'string' ? s.parallel_media : JSON.stringify(s.parallel_media)) + '</div></div>';
 
   // Clipboard
@@ -3619,21 +3619,21 @@ function renderDetail(s, idx) {
   // Right column — input bars
   h += '<div>';
   const maxInput = Math.max(s.keystrokes_total || 0, s.mouse_clicks_total || 0, s.scroll_events_total || 0, 1);
-  h += '<div class="detail-field"><div class="detail-label">Dauer</div><div class="detail-val">' + fmt(s.duration_seconds)
+  h += '<div class="detail-field"><div class="detail-label">Duration</div><div class="detail-val">' + fmt(s.duration_seconds)
     + ' (' + (s.snapshot_count || 0) + ' Snapshots)</div></div>';
   h += '<div class="input-bars">';
   h += inputBar('Keys', s.keystrokes_total || 0, maxInput, 'var(--green)');
   h += inputBar('Clicks', s.mouse_clicks_total || 0, maxInput, 'var(--cyan)');
   h += inputBar('Scroll', s.scroll_events_total || 0, maxInput, 'var(--purple)');
   h += '</div>';
-  h += '<div class="detail-field" style="margin-top:8px"><div class="detail-label">Intensität</div><div class="detail-val" style="color:var(--yellow)">' + (s.intensity_score || 0) + ' / 10</div></div>';
+  h += '<div class="detail-field" style="margin-top:8px"><div class="detail-label">Intensity</div><div class="detail-val" style="color:var(--yellow)">' + (s.intensity_score || 0) + ' / 10</div></div>';
   h += '</div>';
 
   h += '</div>'; // detail-grid
 
   // Snapshot button
   h += '<button class="snap-btn" onclick="event.stopPropagation(); loadSnapshots(' + idx + ')" id="snap-btn-' + idx + '">'
-    + '\u25BC Snapshots anzeigen (' + (s.snapshot_count || 0) + ')</button>';
+    + '\u25BC Show Snapshots (' + (s.snapshot_count || 0) + ')</button>';
   h += '<div class="snap-panel" id="snap-panel-' + idx + '"></div>';
 
   return h;
@@ -3685,15 +3685,15 @@ async function loadSnapshots(idx) {
     // Toggle visibility
     if (panel.style.display === 'none') {
       panel.style.display = '';
-      btn.textContent = '\u25B2 Snapshots verbergen';
+      btn.textContent = '\u25B2 Hide Snapshots';
     } else {
       panel.style.display = 'none';
-      btn.textContent = '\u25BC Snapshots anzeigen (' + (s.snapshot_count || 0) + ')';
+      btn.textContent = '\u25BC Show Snapshots (' + (s.snapshot_count || 0) + ')';
     }
     return;
   }
 
-  btn.innerHTML = '<span class="wt-spinner sm"></span>Laden…';
+  btn.innerHTML = '<span class="wt-spinner sm"></span>Loading…';
   btn.disabled = true;
 
   try {
@@ -3701,11 +3701,11 @@ async function loadSnapshots(idx) {
     const snaps = await r.json();
     loadedSnapshots[idx] = snaps;
 
-    btn.textContent = '\u25B2 Snapshots verbergen';
+    btn.textContent = '\u25B2 Hide Snapshots';
     btn.disabled = false;
     renderSnapshotPanel(idx, snaps, 0);
   } catch(e) {
-    btn.textContent = 'Fehler beim Laden';
+    btn.textContent = 'Error loading';
     btn.disabled = false;
   }
 }
@@ -3713,7 +3713,7 @@ async function loadSnapshots(idx) {
 function renderSnapshotPanel(idx, snaps, activeIdx) {
   const panel = document.getElementById('snap-panel-' + idx);
   if (!snaps.length) {
-    panel.innerHTML = '<div class="empty">Keine Snapshots in diesem Zeitraum</div>';
+    panel.innerHTML = '<div class="empty">No snapshots in this period</div>';
     return;
   }
 
@@ -3756,37 +3756,37 @@ function renderSnapshotDetail(snap) {
 
   // Input
   h += '<div class="snap-section"><h3>Input</h3>';
-  h += metric('Tastenanschläge', inp.keystrokes || 0);
-  h += metric('Mausklicks (L/R)', (inp.mouse_clicks_left || 0) + ' / ' + (inp.mouse_clicks_right || 0));
-  h += metric('Scroll-Events', inp.scroll_events || 0);
-  h += metric('Mausdistanz', Math.round(inp.mouse_distance_px || 0) + ' px');
-  h += metric('Idle Tastatur', Math.round(inp.idle_seconds_keyboard || 0) + 's');
-  h += metric('Idle Maus', Math.round(inp.idle_seconds_mouse || 0) + 's');
-  if (inp.mouse_position) h += metric('Mausposition', inp.mouse_position.x + ', ' + inp.mouse_position.y);
+  h += metric('Keystrokes', inp.keystrokes || 0);
+  h += metric('Mouse Clicks (L/R)', (inp.mouse_clicks_left || 0) + ' / ' + (inp.mouse_clicks_right || 0));
+  h += metric('Scroll Events', inp.scroll_events || 0);
+  h += metric('Mouse Distance', Math.round(inp.mouse_distance_px || 0) + ' px');
+  h += metric('Keyboard Idle', Math.round(inp.idle_seconds_keyboard || 0) + 's');
+  h += metric('Mouse Idle', Math.round(inp.idle_seconds_mouse || 0) + 's');
+  if (inp.mouse_position) h += metric('Mouse Position', inp.mouse_position.x + ', ' + inp.mouse_position.y);
   h += '</div>';
 
   // System
   h += '<div class="snap-section" style="margin-top:10px"><h3>System</h3>';
   if (sys.active_space != null) h += metric('Space', sys.active_space);
-  if (sys.battery_pct != null) h += metric('Akku', sys.battery_pct + '%' + (sys.battery_charging ? ' \u26A1' : ''));
-  if (sys.brightness != null) h += metric('Helligkeit', Math.round(sys.brightness * 100) + '%');
+  if (sys.battery_pct != null) h += metric('Battery', sys.battery_pct + '%' + (sys.battery_charging ? ' \u26A1' : ''));
+  if (sys.brightness != null) h += metric('Brightness', Math.round(sys.brightness * 100) + '%');
   h += '</div>';
 
   // Clipboard
   const clip = snap.clipboard || {};
   if (clip.changed) {
     h += '<div class="snap-section" style="margin-top:10px"><h3>Clipboard</h3>';
-    h += metric('Quelle', clip.source_app || '\u2014');
-    h += metric('Typ', clip.type || '\u2014');
-    h += metric('Länge', clip.length || 0);
+    h += metric('Source', clip.source_app || '\u2014');
+    h += metric('Type', clip.type || '\u2014');
+    h += metric('Length', clip.length || 0);
     h += '</div>';
   }
 
   // Media
   if (snap.media && snap.media.title) {
     h += '<div class="snap-section" style="margin-top:10px"><h3>Media</h3>';
-    h += metric('Titel', snap.media.title);
-    if (snap.media.artist) h += metric('Künstler', snap.media.artist);
+    h += metric('Title', snap.media.title);
+    if (snap.media.artist) h += metric('Artist', snap.media.artist);
     if (snap.media.service) h += metric('Service', snap.media.service);
     h += '</div>';
   }
@@ -3802,10 +3802,10 @@ function renderSnapshotDetail(snap) {
 
   // Calendar
   if (snap.calendar && snap.calendar.in_meeting) {
-    h += '<div class="snap-section" style="margin-top:10px"><h3>Kalender</h3>';
+    h += '<div class="snap-section" style="margin-top:10px"><h3>Calendar</h3>';
     h += metric('Event', snap.calendar.event_title || '\u2014');
-    h += metric('Kalender', snap.calendar.event_calendar || '\u2014');
-    if (snap.calendar.attendee_count) h += metric('Teilnehmer', snap.calendar.attendee_count);
+    h += metric('Calendar', snap.calendar.event_calendar || '\u2014');
+    if (snap.calendar.attendee_count) h += metric('Attendees', snap.calendar.attendee_count);
     h += '</div>';
   }
 
@@ -3816,7 +3816,7 @@ function renderSnapshotDetail(snap) {
 
   // Window title
   if (aa.window_title) {
-    h += '<div class="snap-section"><h3>Fenstertitel</h3>';
+    h += '<div class="snap-section"><h3>Window Title</h3>';
     h += '<div style="font-size:12px;color:var(--fg);word-break:break-all">' + esc(aa.window_title) + '</div></div>';
   }
 
@@ -3890,7 +3890,7 @@ init();
 
 
 STATS_HTML = r"""<!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -4036,7 +4036,7 @@ a:hover { text-decoration: underline; }
 }
 .cf-empty { color: var(--fg3); padding: 10px 0; font-style: italic; text-align: center; }
 
-/* Kategorie-Pools */
+/* Category pools */
 .cat-pools { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
 .cat-pool {
   background: var(--bg2); border: 1px solid var(--bg3); border-radius: 10px;
@@ -4073,7 +4073,7 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
 }
 .chart-box { height: min(1100px, calc(100vh - 180px)); min-height: 760px; width: 100%; }
-/* Sankey-Höhe wird per JS an die Knotenanzahl angepasst (sizeSankeyContainer) */
+/* Sankey height is adjusted in JavaScript based on node count. */
 #sankey-chart { height: 960px; min-height: 600px; }
 .color-controls {
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
@@ -4081,7 +4081,7 @@ a:hover { text-decoration: underline; }
   position: relative;
 }
 .cc-label { color: var(--fg3); font-size: 12px; margin-right: 2px; }
-/* Moderne Farbwahl: Swatch-Chip öffnet ein Colorwheel-Popover */
+/* Color swatches open a color-wheel popover. */
 .cw-swatch {
   display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--fg2);
   background: var(--bg2); border: 1px solid var(--border); border-radius: 999px;
@@ -4148,38 +4148,38 @@ a:hover { text-decoration: underline; }
 <div class="card">
   <div class="controls">
     <div class="group">
-      <button class="btn preset-btn" data-preset="today">Heute</button>
-      <button class="btn preset-btn" data-preset="7d">7 Tage</button>
-      <button class="btn preset-btn" data-preset="30d">30 Tage</button>
+      <button class="btn preset-btn" data-preset="today">Today</button>
+      <button class="btn preset-btn" data-preset="7d">7 Days</button>
+      <button class="btn preset-btn" data-preset="30d">30 Days</button>
     </div>
     <div class="group">
-      <label>Von <input type="date" id="date-start"></label>
-      <label>Bis <input type="date" id="date-end"></label>
-      <button class="btn primary" id="refresh-btn">Aktualisieren</button>
+      <label>From <input type="date" id="date-start"></label>
+      <label>To <input type="date" id="date-end"></label>
+      <button class="btn primary" id="refresh-btn">Refresh</button>
     </div>
     <div class="group">
-      <label><input type="checkbox" id="hide-empty" checked> Ohne Topic/Projekt ausblenden</label>
+      <label><input type="checkbox" id="hide-empty" checked> Hide entries without topic/project</label>
     </div>
     <div class="group">
-      <label>Top (pro Ebene)
+      <label>Top (per level)
         <select id="top-n">
           <option value="5">5</option>
           <option value="10">10</option>
           <option value="25">25</option>
           <option value="50" selected>50</option>
           <option value="100">100</option>
-          <option value="all">Alle</option>
+          <option value="all">All</option>
         </select>
       </label>
     </div>
   </div>
-  <div class="summary" id="summary"><div class="wt-loading inline"><div class="wt-spinner sm"></div><span class="wt-load-label">Lade Statistik…</span></div></div>
+  <div class="summary" id="summary"><div class="wt-loading inline"><div class="wt-spinner sm"></div><span class="wt-load-label">Loading statistics…</span></div></div>
 </div>
 
 <div class="card">
   <div class="tab-switcher">
-    <button class="tab-btn active" data-tab="crossfilter">Zusammenhänge</button>
-    <button class="tab-btn" data-tab="categories">Kategorien</button>
+    <button class="tab-btn active" data-tab="crossfilter">Relationships</button>
+    <button class="tab-btn" data-tab="categories">Categories</button>
     <button class="tab-btn" data-tab="sankey">Sankey</button>
     <button class="tab-btn" data-tab="matrix">Matrix</button>
   </div>
@@ -4187,7 +4187,7 @@ a:hover { text-decoration: underline; }
   <!-- Tab 1: Crossfilter -->
   <div class="tab-panel active" id="panel-crossfilter" data-tab="crossfilter">
     <div class="selection-bar">
-      <span id="selection-info">Keine Auswahl — klicke Zeilen zum Filtern</span>
+      <span id="selection-info">No selection — click rows to filter</span>
       <div class="spacer"></div>
       <button class="btn" id="reset-btn">Reset</button>
     </div>
@@ -4207,25 +4207,25 @@ a:hover { text-decoration: underline; }
     </div>
   </div>
 
-  <!-- Tab: Kategorien (Kategorie-Pools der Projekte) -->
+  <!-- Tab: categories (project category pools) -->
   <div class="tab-panel" id="panel-categories" data-tab="categories">
     <div class="selection-bar">
-      <span id="cat-selection-info">Kategorie-Pools — klicke eine Kategorie, um alle ihre Projekte zu filtern</span>
+      <span id="cat-selection-info">Category pools — click a category to filter all its projects</span>
       <div class="spacer"></div>
       <button class="btn" id="cat-reset-btn">Reset</button>
     </div>
-    <div class="chart-hint">Zeit gruppiert nach Projekt-Kategorie. Jeder Pool listet seine Projekte. Filter aus dem Zusammenhänge-Tab gilt hier ebenfalls.</div>
+    <div class="chart-hint">Time grouped by project category. Each pool lists its projects. Filters from the Relationships tab also apply here.</div>
     <div id="categories-list"></div>
   </div>
 
   <!-- Tab 2: Sankey -->
   <div class="tab-panel" id="panel-sankey" data-tab="sankey">
     <div class="color-controls">
-      <span class="cc-label">Sankey-Farben:</span>
+      <span class="cc-label">Sankey Colors:</span>
       <button type="button" class="cw-swatch" data-field="topic"><span class="cw-dot"></span>Topics</button>
       <button type="button" class="cw-swatch" data-field="project"><span class="cw-dot"></span>Projects</button>
       <button type="button" class="cw-swatch" data-field="app"><span class="cw-dot"></span>Apps</button>
-      <button class="btn" id="color-reset">Farben zurücksetzen</button>
+      <button class="btn" id="color-reset">Reset Colors</button>
       <div class="cw-pop" id="cw-pop" hidden>
         <div class="cw-pop-title"><span id="cw-pop-label">Topics</span><span class="cw-live">live</span></div>
         <div class="cw-wheel-wrap">
@@ -4240,21 +4240,21 @@ a:hover { text-decoration: underline; }
         <div class="cw-presets" id="cw-presets"></div>
       </div>
     </div>
-    <div class="chart-hint">Fluss Topic → Project → App. Linkbreite = summierte Dauer. Zeigt <span class="top-n-label">Top 50</span> pro Ebene. Filter aus dem Zusammenhänge-Tab gilt hier ebenfalls.</div>
+    <div class="chart-hint">Flow: Topic → Project → App. Link width represents total duration. Shows <span class="top-n-label">Top 50</span> per level. Filters from the Relationships tab also apply here.</div>
     <div class="chart-box" id="sankey-chart"></div>
   </div>
 
   <!-- Tab 3: Matrix -->
   <div class="tab-panel" id="panel-matrix" data-tab="matrix">
     <div class="matrix-controls">
-      <label>Zeilen:
+      <label>Rows:
         <select id="matrix-row">
           <option value="topic" selected>Topic</option>
           <option value="project">Project</option>
           <option value="app">App</option>
         </select>
       </label>
-      <label>Spalten:
+      <label>Columns:
         <select id="matrix-col">
           <option value="topic">Topic</option>
           <option value="project" selected>Project</option>
@@ -4262,17 +4262,16 @@ a:hover { text-decoration: underline; }
         </select>
       </label>
     </div>
-    <div class="chart-hint">Farbintensität = summierte Dauer. Tooltip zeigt die Top 3 der jeweils dritten Dimension. Zeigt <span class="top-n-label">Top 50</span> pro Achse.</div>
+    <div class="chart-hint">Color intensity represents total duration. Tooltips show the top 3 values from the third dimension. Shows <span class="top-n-label">Top 50</span> per axis.</div>
     <div class="chart-box" id="matrix-chart"></div>
   </div>
 </div>
 
 <script>
 const API = '/api/statistics';
-// DEFAULT_COLORS muss VOR `state` stehen: der state-Initializer ruft
-// loadColors() auf, das DEFAULT_COLORS liest. Stünde es danach, läge
-// DEFAULT_COLORS in der Temporal Dead Zone und der ganze Script-Block
-// bräche ab (→ Statistics-Seite hängt im „Lade…“-Spinner).
+// DEFAULT_COLORS must be defined before `state`: the state initializer calls
+// loadColors(), which reads DEFAULT_COLORS. Defining it later would put it in
+// the temporal dead zone and break the script block.
 const DEFAULT_COLORS = { topic: '#58a6ff', project: '#bc8cff', app: '#3fb950' };
 
 const state = {
@@ -4286,7 +4285,7 @@ const state = {
   matrixRow: 'topic',
   matrixCol: 'project',
   charts: { sankey: null, matrix: null },
-  colors: loadColors(),           // Spaltenfarben (Topic/Project/App), persistiert.
+  colors: loadColors(),           // Persisted column colors (Topic/Project/App).
 };
 
 function loadColors() {
@@ -4342,8 +4341,7 @@ function hexToRgb(hex) {
 function rgbToHex(r,g,b){ return '#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join(''); }
 function hsvToHex(h,s,v){ const c=hsvToRgb(h,s,v); return rgbToHex(c.r,c.g,c.b); }
 
-// Zeichnet das HSV-Rad (Winkel = Farbton, Radius = Sättigung) beim aktuellen
-// Helligkeitswert CW.v auf das Canvas.
+// Draw the HSV wheel (angle = hue, radius = saturation) at brightness CW.v.
 function cwDrawWheel() {
   const cv = $('cw-wheel'); if (!cv) return;
   const ctx = cv.getContext('2d');
@@ -4365,8 +4363,7 @@ function cwPositionThumb() {
   th.style.top =(CW.cy + r*Math.sin(ang))+'px';
   th.style.background=hsvToHex(CW.h, CW.s, CW.v);
 }
-// Spiegelt CW → UI; mit writeState=true zusätzlich nach state.colors +
-// Sankey/Crossfilter live.
+// Sync CW to the UI and, with writeState=true, to state.colors and live charts.
 function cwSync(writeState) {
   const hex = hsvToHex(CW.h, CW.s, CW.v);
   cwPositionThumb();
@@ -4422,12 +4419,12 @@ function applyTopN(items) {
 
 // Helper: format the current Top-N for hint labels.
 function topNLabel() {
-  return Number.isFinite(state.topN) ? ('Top ' + state.topN) : 'Alle';
+  return Number.isFinite(state.topN) ? ('Top ' + state.topN) : 'All';
 }
 
 const $ = id => document.getElementById(id);
 
-// Aktuelle CSS-Variable auslesen — damit die ECharts dem Light/Dark-Theme folgen.
+// Read the current CSS variable so ECharts follows the light/dark theme.
 function themeCol(name, fallback) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return v || fallback;
@@ -4480,12 +4477,12 @@ async function loadStats() {
   const start = $('date-start').value;
   const end = $('date-end').value;
   if (!start || !end) return;
-  $('summary').innerHTML = '<div class="wt-loading inline"><div class="wt-spinner sm"></div><span class="wt-load-label">Lade Statistik…</span></div>';
+  $('summary').innerHTML = '<div class="wt-loading inline"><div class="wt-spinner sm"></div><span class="wt-load-label">Loading statistics…</span></div>';
   try {
     const r = await fetch(API + '?start=' + start + '&end=' + end);
     const data = await r.json();
     if (data.error) {
-      $('summary').textContent = 'Fehler: ' + data.error;
+      $('summary').textContent = 'Error: ' + data.error;
       return;
     }
     state.triples = data.triples || [];
@@ -4493,14 +4490,14 @@ async function loadStats() {
     state.selection = { topic: new Set(), project: new Set(), app: new Set() };
     renderAll();
   } catch (e) {
-    $('summary').textContent = 'Fehler beim Laden: ' + e.message;
+    $('summary').textContent = 'Error loading: ' + e.message;
   }
 }
 
 function filteredTriples(exceptField) {
   const sel = state.selection;
   return state.triples.filter(t => {
-    if (state.hideEmpty && (t.topic === '(ohne Topic)' || t.project === '(ohne Projekt)')) return false;
+    if (state.hideEmpty && (t.topic === '(no topic)' || t.project === '(no project)')) return false;
     if (exceptField !== 'topic' && sel.topic.size && !sel.topic.has(t.topic)) return false;
     if (exceptField !== 'project' && sel.project.size && !sel.project.has(t.project)) return false;
     if (exceptField !== 'app' && sel.app.size && !sel.app.has(t.app)) return false;
@@ -4530,22 +4527,22 @@ function updateSummary() {
   const rangeStr = (m.start === m.end) ? (m.start || '') : ((m.start || '') + ' → ' + (m.end || ''));
   const comboTxt = (combos === total) ? combos : (combos + ' / ' + total);
   $('summary').innerHTML =
-    'Zeitraum: <strong>' + escapeHtml(rangeStr) + '</strong>' +
-    ' · Tage mit Daten: <strong>' + (m.days_with_data || 0) + '</strong>' +
-    ' · Gesamtzeit: <strong>' + fmtTime(secSum) + '</strong>' +
+    'Period: <strong>' + escapeHtml(rangeStr) + '</strong>' +
+    ' · Days with data: <strong>' + (m.days_with_data || 0) + '</strong>' +
+    ' · Total time: <strong>' + fmtTime(secSum) + '</strong>' +
     ' · Sessions: <strong>' + cntSum + '</strong>' +
-    ' · Kombinationen: <strong>' + comboTxt + '</strong>';
+    ' · Combinations: <strong>' + comboTxt + '</strong>';
 }
 
 function renderCrossfilter() {
   const sel = state.selection;
   const selTexts = [];
   if (sel.topic.size) selTexts.push(sel.topic.size + ' Topic(s)');
-  if (sel.project.size) selTexts.push(sel.project.size + ' Projekt(e)');
+  if (sel.project.size) selTexts.push(sel.project.size + ' project(s)');
   if (sel.app.size) selTexts.push(sel.app.size + ' App(s)');
   $('selection-info').textContent = selTexts.length
-    ? 'Auswahl: ' + selTexts.join(' · ') + ' (AND zwischen Spalten, OR innerhalb)'
-    : 'Keine Auswahl — klicke Zeilen zum Filtern';
+    ? 'Selection: ' + selTexts.join(' · ') + ' (AND between columns, OR within)'
+    : 'No selection — click rows to filter';
 
   const cols = [
     { field: 'topic', el: 'col-topics' },
@@ -4567,7 +4564,7 @@ function renderCrossfilter() {
         : items.length;
     }
     if (!items.length) {
-      container.innerHTML = '<div class="cf-empty">Keine Daten</div>';
+      container.innerHTML = '<div class="cf-empty">No data</div>';
       return;
     }
     const selectedSet = sel[c.field];
@@ -4591,8 +4588,8 @@ function toggleSelect(field, name) {
   renderAll();
 }
 
-// Kategorie-Farben aus dem zentralen Pool (/api/categories); die Konstanten
-// hier sind nur Fallback, bis der Pool geladen ist.
+// Category colors from the central pool (/api/categories); these constants
+// are fallbacks until the pool has loaded.
 let CAT_COLORS = {
   "Development": "#6fe28a", "Business": "#ffb347", "Creative": "#ff79c6",
   "Music": "#c792ea", "Crypto": "#f5d400", "Finance": "#4fc3d8",
@@ -4612,30 +4609,30 @@ async function loadCatPool() {
     for (const [n, i] of Object.entries(d.activity || {})) if (i && i.color) m[n] = i.color;
     CAT_COLORS = m;
     CAT_ALIAS = d.alias_map || {};
-  } catch (e) { /* Fallback-Farben bleiben */ }
+  } catch (e) { /* Keep fallback colors. */ }
 }
 function catColor(cat) {
   cat = canonCat(cat);
-  if (!cat || cat === 'Ohne Kategorie') return '#8a95a3';
+  if (!cat || cat === 'No Category') return '#8a95a3';
   if (CAT_COLORS[cat]) return CAT_COLORS[cat];
   let h = 0;
   for (const ch of cat) h = (h * 31 + ch.charCodeAt(0)) % 360;
   return 'hsl(' + h + ', 65%, 62%)';
 }
 
-const CAT_NONE = 'Ohne Kategorie';
+const CAT_NONE = 'No Category';
 
 function renderCategories() {
   const container = $('categories-list');
-  // 'project' ausnehmen, damit Projekt-Auswahlen die Pool-Liste nicht kollabieren.
+  // Exclude project filters so project selections do not collapse the pool list.
   const triples = filteredTriples('project');
 
   const sel = state.selection.project;
   $('cat-selection-info').textContent = sel.size
-    ? 'Auswahl: ' + sel.size + ' Projekt(e) — wirkt auch in den anderen Tabs'
-    : 'Kategorie-Pools — klicke eine Kategorie, um alle ihre Projekte zu filtern';
+    ? 'Selection: ' + sel.size + ' project(s) — also applies to other tabs'
+    : 'Category pools — click a category to filter all its projects';
 
-  // Gruppieren: Kategorie → {sec,count, projs: Map}
+  // Group category → {sec,count, projs: Map}.
   const cats = new Map();
   for (const t of triples) {
     const cat = (t.category && t.category.trim()) ? t.category.trim() : CAT_NONE;
@@ -4650,7 +4647,7 @@ function renderCategories() {
   let pools = [...cats.values()].sort((a, b) => b.sec - a.sec);
   pools = applyTopN(pools);
   if (!pools.length) {
-    container.innerHTML = '<div class="cf-empty">Keine Daten im Zeitraum</div>';
+    container.innerHTML = '<div class="cf-empty">No data in this period</div>';
     return;
   }
   const max = pools[0].sec || 1;
@@ -4659,7 +4656,7 @@ function renderCategories() {
     const col = catColor(c.name);
     const projs = [...c.projs.values()].sort((a, b) => b.sec - a.sec);
     const pmax = projs[0] ? projs[0].sec : 1;
-    // ausgewählt, wenn ALLE Projekte des Pools selektiert sind
+    // Selected when all projects in the pool are selected.
     const allSel = projs.length && projs.every(p => sel.has(p.name));
     const pct = Math.round((c.sec / max) * 100);
     const rows = projs.map(p => {
@@ -4685,7 +4682,7 @@ function renderCategories() {
   }).join('') + '</div>';
 }
 
-// Klick auf eine Kategorie selektiert/deselektiert alle ihre Projekte.
+// Clicking a category selects or clears all its projects.
 function toggleCategory(catName) {
   const triples = filteredTriples('project');
   const projs = new Set();
@@ -4718,7 +4715,7 @@ function showEmptyChart(chart, msg) {
 
 function renderSankey() {
   if (typeof echarts === 'undefined') {
-    $('sankey-chart').innerHTML = '<div class="cf-empty" style="padding:24px">Diagramm-Bibliothek (echarts) konnte nicht geladen werden — bitte Internetverbindung prüfen.</div>';
+    $('sankey-chart').innerHTML = '<div class="cf-empty" style="padding:24px">The chart library (ECharts) could not be loaded. Check your internet connection.</div>';
     return;
   }
   if (!state.charts.sankey) {
@@ -4727,7 +4724,7 @@ function renderSankey() {
   const chart = state.charts.sankey;
   const triples = filteredTriples();
   if (!triples.length) {
-    showEmptyChart(chart, 'Keine Daten im Zeitraum');
+    showEmptyChart(chart, 'No data in this period');
     return;
   }
   // Limit each axis to top N by total duration, otherwise labels overlap.
@@ -4743,7 +4740,7 @@ function renderSankey() {
   const appKeep  = new Set(applyTopN([...appTotals.entries() ].sort((a,b)=>b[1]-a[1])).map(x=>x[0]));
   const keptTriples = triples.filter(t => topKeep.has(t.topic) && projKeep.has(t.project) && appKeep.has(t.app));
   if (!keptTriples.length) {
-    showEmptyChart(chart, 'Keine überschneidenden Top-Einträge');
+    showEmptyChart(chart, 'No overlapping top entries');
     return;
   }
   const nodes = new Map();
@@ -4770,8 +4767,8 @@ function renderSankey() {
     const [s, d] = k.split('\u0001');
     links.push({ source: s, target: d, value: v });
   }
-  // Höhe an die größte Spalte anpassen, damit alle Knoten + Labels Platz haben:
-  // mind. 18px pro Knoten (Node + Gap) plus Rand, nie unter 600px.
+  // Size to the largest column so every node and label fits. Allow at least
+  // 18px per node plus padding, and never use less than 600px.
   const depthCounts = [0, 0, 0];
   for (const n of nodes.values()) depthCounts[n.depth]++;
   const maxNodes = Math.max(...depthCounts);
@@ -4814,7 +4811,7 @@ function renderSankey() {
 
 function renderMatrix() {
   if (typeof echarts === 'undefined') {
-    $('matrix-chart').innerHTML = '<div class="cf-empty" style="padding:24px">Diagramm-Bibliothek (echarts) konnte nicht geladen werden — bitte Internetverbindung prüfen.</div>';
+    $('matrix-chart').innerHTML = '<div class="cf-empty" style="padding:24px">The chart library (ECharts) could not be loaded. Check your internet connection.</div>';
     return;
   }
   if (!state.charts.matrix) {
@@ -4823,7 +4820,7 @@ function renderMatrix() {
   const chart = state.charts.matrix;
   const triples = filteredTriples();
   if (!triples.length) {
-    showEmptyChart(chart, 'Keine Daten im Zeitraum');
+    showEmptyChart(chart, 'No data in this period');
     return;
   }
   const row = state.matrixRow;
@@ -4920,7 +4917,7 @@ function renderMatrix() {
       formatter: v => fmtTime(v),
     },
     series: [{
-      name: 'Dauer', type: 'heatmap', data: data,
+      name: 'Duration', type: 'heatmap', data: data,
       encode: { x: 0, y: 1, value: 2 },
       emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(88, 166, 255, 0.5)' } },
     }],
@@ -4956,7 +4953,7 @@ function renderAll() {
 
 function tickClock() {
   const d = new Date();
-  $('clock').textContent = d.toLocaleTimeString('de-DE');
+  $('clock').textContent = d.toLocaleTimeString('en-US');
 }
 
 function init() {
@@ -5002,7 +4999,7 @@ function init() {
     const p = e.target.closest('.cw-preset'); if (!p) return;
     cwSetHsvFromHex(p.dataset.hex);
   });
-  // Klick außerhalb von Popover/Swatch schließt das Wheel
+  // Clicking outside the popover or swatch closes the wheel.
   document.addEventListener('click', (e) => {
     if (!CW.field) return;
     if (e.target.closest('.cw-pop') || e.target.closest('.cw-swatch')) return;
@@ -5049,7 +5046,7 @@ function init() {
     if (state.charts.matrix) state.charts.matrix.resize();
   });
 
-  // Light/Dark-Wechsel: Charts mit den neuen Theme-Farben neu aufbauen
+  // Rebuild charts with the new theme colors after a light/dark switch.
   window.addEventListener('wt-theme', () => {
     if (state.activeTab === 'sankey') renderSankey();
     if (state.activeTab === 'matrix') renderMatrix();
@@ -5058,7 +5055,7 @@ function init() {
   tickClock();
   setInterval(tickClock, 1000);
 
-  // Pool-Farben/-Aliase zuerst laden, damit der erste Render sie nutzt
+  // Load pool colors and aliases before the first render.
   loadCatPool().finally(() => setPreset('7d'));
 }
 
@@ -5069,7 +5066,7 @@ init();
 
 
 SCREENSHOTS_HTML = r"""<!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -5221,7 +5218,7 @@ h1 a:hover { color: var(--cyan); }
 .dp-day.today:not(.sel) { box-shadow: inset 0 0 0 1px var(--cyan); }
 .dp-day.muted { color: var(--bg3); }
 
-/* Skip-Regeln-Modal (Glas-Backdrop) */
+/* Skip-rules modal with glass backdrop */
 .skip-backdrop {
   position: fixed; inset: 0; z-index: 95;
   background: rgba(12,17,22,0.45);
@@ -5300,7 +5297,7 @@ h1 a:hover { color: var(--cyan); }
 @@NAV:screenshots@@
 
 <div id="grid" class="grid"></div>
-<div id="empty" class="empty" style="display:none">Keine Screenshots fuer dieses Datum.</div>
+<div id="empty" class="empty" style="display:none">No screenshots for this date.</div>
 
 <div id="lightbox" class="lightbox">
   <img id="lightbox-img" alt="">
@@ -5310,13 +5307,13 @@ h1 a:hover { color: var(--cyan); }
 <div id="skip-modal" class="skip-backdrop">
   <div class="skip-modal" role="dialog" aria-modal="true" aria-labelledby="skip-title">
     <div class="skip-head">
-      <h2 id="skip-title">Screenshot-Skip-Regeln</h2>
-      <button class="skip-close" id="skip-close" type="button" title="Schließen">&times;</button>
+      <h2 id="skip-title">Screenshot Skip Rules</h2>
+      <button class="skip-close" id="skip-close" type="button" title="Close">&times;</button>
     </div>
     <div class="skip-hint">
-      Solange eine Regel zutrifft, entsteht kein Screenshot — Blockierungen werden in
-      <code>logs/screenshot-skips.log</code> vermerkt. Ein Eintrag pro Zeile, gespeichert
-      wird beim Verlassen des Feldes. Änderungen werden erst nach „Restart Collector“ aktiv.
+      While a rule matches, no screenshot is captured. Blocks are recorded in
+      <code>logs/screenshot-skips.log</code>. Enter one item per line; changes are saved
+      when the field loses focus and become active after “Restart Collector”.
     </div>
     <div class="skip-body" id="skip-body"></div>
     <div class="skip-foot">
@@ -5342,7 +5339,7 @@ function fmtTime(iso) {
   if (!iso) return '';
   try {
     const d = new Date(iso);
-    return d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   } catch (e) { return iso; }
 }
 
@@ -5374,8 +5371,8 @@ function renderItems(items) {
     const motivationHtml = hasSession
       ? (motivation
           ? `<div class="motivation">${escapeHtml(motivation)}</div>`
-          : `<div class="motivation empty-msg">(noch keine Beschreibung)</div>`)
-      : `<div class="no-session">(nicht in Session aggregiert)</div>`;
+          : `<div class="motivation empty-msg">(no description yet)</div>`)
+      : `<div class="no-session">(not aggregated into a session)</div>`;
 
     card.innerHTML = `
       <img class="thumb" loading="lazy" src="${it.url}" alt="${escapeHtml(it.filename)}">
@@ -5416,19 +5413,19 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ── Skip-Regeln-Modal — editiert die screenshot.skip_*-Listen via /api/config ──
+// ── Skip-rules modal: edits screenshot.skip_* lists through /api/config ──
 const SKIP_FIELDS = [
   { path: 'collector.screenshot.skip_bundle_ids', label: 'skip_bundle_ids',
-    sub: 'Bundle IDs — kein Screenshot, solange diese App im Vordergrund ist',
+    sub: 'Bundle IDs — no screenshot while this app is in the foreground',
     ph: 'com.1password.1password' },
   { path: 'collector.skip_urls', label: 'skip_urls',
-    sub: 'Glob-Muster gegen die aktive Browser-URL (Wildcards nötig, z.B. *youtube.com*)',
+    sub: 'Glob patterns matched against the active browser URL (wildcards required, e.g. *youtube.com*)',
     ph: '*youtube.com*' },
   { path: 'collector.skip_projects', label: 'skip_projects',
-    sub: 'Projektnamen aus project_patterns.yaml (exakter Name)',
-    ph: 'Privat' },
+    sub: 'Project names from project_patterns.yaml (exact match)',
+    ph: 'Private' },
   { path: 'collector.skip_categories', label: 'skip_categories',
-    sub: 'Kategorienamen (exakter Name, z.B. Social Media)',
+    sub: 'Category names (exact match, e.g. Social Media)',
     ph: 'Social Media' },
 ];
 
@@ -5473,13 +5470,13 @@ function setSkipStatus(msg, kind) {
 }
 
 async function loadSkipFields() {
-  skipBody.innerHTML = '<div class="wt-loading"><div class="wt-spinner"></div><span class="wt-load-label">Lade Konfiguration…</span></div>';
+  skipBody.innerHTML = '<div class="wt-loading"><div class="wt-spinner"></div><span class="wt-load-label">Loading configuration…</span></div>';
   let data;
   try {
     const r = await fetch('/api/config');
     data = await r.json();
   } catch (e) {
-    skipBody.innerHTML = '<div class="skip-sub" style="color:var(--red);padding:12px 0">Fehler beim Laden: ' + escapeHtml(e.message) + '</div>';
+    skipBody.innerHTML = '<div class="skip-sub" style="color:var(--red);padding:12px 0">Error loading: ' + escapeHtml(e.message) + '</div>';
     return;
   }
   skipBody.innerHTML = '';
@@ -5500,15 +5497,15 @@ async function loadSkipFields() {
     ta.addEventListener('blur', async () => {
       if (ta.value === lastSaved) return;
       const arr = ta.value.split('\n').map(s => s.trim()).filter(s => s);
-      setSkipStatus('speichern…', '');
+      setSkipStatus('saving…', '');
       try {
         await postJSON('/api/config', { path: f.path, value: arr });
         lastSaved = ta.value;
-        setSkipStatus('gespeichert · ' + f.label + ' — aktiv nach Restart Collector', 'ok');
-        toast('gespeichert · ' + f.path, 'ok');
+        setSkipStatus('saved · ' + f.label + ' — active after Restart Collector', 'ok');
+        toast('saved · ' + f.path, 'ok');
       } catch (e) {
-        setSkipStatus('Fehler: ' + e.message, 'err');
-        toast('Fehler: ' + e.message, 'err');
+        setSkipStatus('Error: ' + e.message, 'err');
+        toast('Error: ' + e.message, 'err');
       }
     });
     field.appendChild(ta);
@@ -5524,7 +5521,7 @@ function openSkipModal() {
 }
 
 function closeSkipModal() {
-  // Blur eines fokussierten Textfelds löst noch den Save-Handler aus
+  // Blurring a focused text field still triggers its save handler.
   if (document.activeElement && skipModal.contains(document.activeElement)) {
     document.activeElement.blur();
   }
@@ -5538,14 +5535,14 @@ skipModal.addEventListener('click', e => { if (e.target === skipModal) closeSkip
 $('#skip-restart').addEventListener('click', async e => {
   const btn = e.currentTarget;
   btn.disabled = true;
-  setSkipStatus('Collector wird neu gestartet…', '');
+  setSkipStatus('Restarting collector…', '');
   try {
     await postJSON('/api/config/restart/collector', {});
-    setSkipStatus('Collector neu gestartet — Regeln sind aktiv', 'ok');
-    toast('Collector neu gestartet', 'ok');
+    setSkipStatus('Collector restarted — rules are active', 'ok');
+    toast('Collector restarted', 'ok');
   } catch (err) {
-    setSkipStatus('Restart fehlgeschlagen: ' + err.message, 'err');
-    toast('Restart fehlgeschlagen: ' + err.message, 'err');
+    setSkipStatus('Restart failed: ' + err.message, 'err');
+    toast('Restart failed: ' + err.message, 'err');
   } finally {
     btn.disabled = false;
   }
@@ -5555,7 +5552,7 @@ async function loadDate(date) {
   selected = date;
   $('#dp-label').textContent = fmtDateLabel(date);
   renderCalendar();
-  grid.innerHTML = '<div class="wt-loading" style="grid-column:1/-1"><div class="wt-spinner"></div><span class="wt-load-label">Screenshots laden…</span></div>';
+  grid.innerHTML = '<div class="wt-loading" style="grid-column:1/-1"><div class="wt-spinner"></div><span class="wt-load-label">Loading screenshots…</span></div>';
   empty.style.display = 'none';
   try {
     const res = await fetch(`/api/screenshots/${date}`);
@@ -5564,14 +5561,14 @@ async function loadDate(date) {
     summary.textContent = `${(data.items || []).length} Screenshots`;
   } catch (e) {
     grid.innerHTML = '';
-    empty.textContent = 'Fehler beim Laden: ' + e.message;
+    empty.textContent = 'Error loading: ' + e.message;
     empty.style.display = 'block';
   }
 }
 
 // ── Datepicker (only days with screenshots are clickable) ──
-const MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli',
-                'August','September','Oktober','November','Dezember'];
+const MONTHS = ['January','February','March','April','May','June','July',
+                'August','September','October','November','December'];
 let available = new Set();   // 'YYYY-MM-DD'
 let selected = null;
 let viewY, viewM;            // month currently shown in the popover
@@ -5639,7 +5636,7 @@ async function init() {
     const res = await fetch('/api/screenshots/dates');
     const dates = await res.json();
     if (!dates.length) {
-      summary.textContent = 'Noch keine Screenshots aufgenommen.';
+      summary.textContent = 'No screenshots captured yet.';
       empty.style.display = 'block';
       $('#dp-trigger').disabled = true;
       return;
@@ -5649,7 +5646,7 @@ async function init() {
     viewY = +latest.slice(0,4); viewM = +latest.slice(5,7) - 1;
     loadDate(latest);
   } catch (e) {
-    summary.textContent = 'Fehler: ' + e.message;
+    summary.textContent = 'Error: ' + e.message;
   }
 }
 
@@ -5660,7 +5657,7 @@ init();
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Config-Editor — `wt config` öffnet /config (Label/Value-Editor)
+# Config editor — `wt config` opens /config (label/value editor)
 # ═══════════════════════════════════════════════════════════════════════════
 
 AGG_LABELS = (
@@ -5827,7 +5824,7 @@ def api_config_set():
 @app.route("/api/config/pick-path", methods=["POST"])
 def api_config_pick_path():
     body = request.get_json(silent=True) or {}
-    title = str(body.get("title") or "Verzeichnis wählen")
+    title = str(body.get("title") or "Choose Directory")
     start_path = body.get("start_path")
     # Escape for AppleScript double-quoted strings
     title_esc = title.replace("\\", "\\\\").replace('"', '\\"')
@@ -5977,7 +5974,7 @@ def api_service_action(key, action):
 
 
 # ---------------------------------------------------------------------------
-# Projekt-Editor — /projects (liest/schreibt daemon/project_patterns.yaml)
+# Project editor — /projects (reads/writes daemon/project_patterns.yaml)
 # ---------------------------------------------------------------------------
 
 PROJECT_RULE_KEYS = ("patterns", "url_patterns", "directories", "git_repos", "commands", "topics")
@@ -5991,10 +5988,10 @@ def _patterns_load_user() -> dict:
 
 
 _PATTERNS_HEADER = (
-    "# WorkTracker — Benutzer-Projektpatterns.\n"
-    "# Wird vom Web-Dashboard (/projects) verwaltet; handgeschriebene\n"
-    "# Kommentare überleben ein Speichern dort nicht. Die letzte Version\n"
-    "# liegt als project_patterns.yaml.bak daneben.\n"
+    "# WorkTracker — User project patterns.\n"
+    "# Managed by the web dashboard (/projects). Handwritten comments are\n"
+    "# not preserved when saving. The previous version is stored alongside\n"
+    "# this file as project_patterns.yaml.bak.\n"
 )
 
 
@@ -6008,7 +6005,7 @@ def _patterns_write_atomic(data: dict) -> None:
         default_flow_style=None, width=4096,
     ))
     os.replace(tmp, PATTERNS_FILE)
-    # Zuordnungen im URL-Panel hängen an den url_patterns → Cache verwerfen
+    # URL panel assignments depend on url_patterns, so invalidate the cache.
     _VISITED_URLS_CACHE.clear()
 
 
@@ -6025,7 +6022,7 @@ def _clean_rule_list(value) -> list:
 
 @app.route("/api/categories")
 def api_categories():
-    """Zentraler Kategorie-Pool (categories.default.yaml + categories.yaml)."""
+    """Return the central category pool (categories.default.yaml + categories.yaml)."""
     pool = catpool.load_pool()
     return jsonify({
         "activity": pool["activity"],
@@ -6041,7 +6038,7 @@ def api_projects_get():
     projects = data.get("projects") or {}
     if not isinstance(projects, dict):
         projects = {}
-    # Pool-Kategorien + tatsächlich verwendete (kanonisiert) als Vorschläge
+    # Suggest pool categories plus categories currently in use, canonicalized.
     in_use = {catpool.canonical(str(p.get("category"))) for p in projects.values()
               if isinstance(p, dict) and p.get("category")}
     categories = sorted(in_use | set(catpool.activity_names()), key=str.lower)
@@ -6058,19 +6055,19 @@ def api_projects_save():
     name = _clean_name(str(body.get("name") or "")).strip()
     original = str(body.get("original_name") or "")
     if not name:
-        return jsonify({"ok": False, "error": "Name darf nicht leer sein"}), 400
+        return jsonify({"ok": False, "error": "Name must not be empty"}), 400
 
     data = _patterns_load_user()
     projects = data.setdefault("projects", {})
     if not isinstance(projects, dict):
-        return jsonify({"ok": False, "error": "projects-Sektion ist kein Mapping"}), 500
+        return jsonify({"ok": False, "error": "projects section is not a mapping"}), 500
 
     is_rename = bool(original) and original != name
     if name in projects and (is_rename or not original):
-        return jsonify({"ok": False, "error": f"Projekt „{name}“ existiert bereits"}), 409
+        return jsonify({"ok": False, "error": f'Project "{name}" already exists'}), 409
 
-    # Bestehenden Eintrag übernehmen, damit unbekannte Keys (z. B.
-    # clipboard_keywords) einen Rename/Edit überleben.
+    # Preserve the existing entry so unknown keys such as clipboard_keywords
+    # survive rename and edit operations.
     entry = {}
     if original and isinstance(projects.get(original), dict):
         entry = projects.pop(original)
@@ -6090,7 +6087,7 @@ def api_projects_save():
         entry.pop("category", None)
 
     if not any(entry.get(k) for k in PROJECT_RULE_KEYS):
-        return jsonify({"ok": False, "error": "Mindestens eine Regel angeben"}), 400
+        return jsonify({"ok": False, "error": "Specify at least one rule"}), 400
 
     projects[name] = entry
     _patterns_write_atomic(data)
@@ -6104,7 +6101,7 @@ def api_projects_delete():
     data = _patterns_load_user()
     projects = data.get("projects") or {}
     if name not in projects:
-        return jsonify({"ok": False, "error": f"unbekanntes Projekt: {name}"}), 404
+        return jsonify({"ok": False, "error": f"Unknown project: {name}"}), 404
     del projects[name]
     _patterns_write_atomic(data)
     return jsonify({"ok": True})
@@ -6112,11 +6109,10 @@ def api_projects_delete():
 
 @app.route("/api/projects/match", methods=["POST"])
 def api_projects_match():
-    """Live-Tester: welche Projekte matchen einen Fenstertitel / eine URL?
+    """Return projects matching a window title or URL for the live tester.
 
-    Spiegelt die Aggregator-Reihenfolge: erst alle Titel-Patterns (Tier 7),
-    dann alle URL-Patterns (Tier 8) — der erste Treffer in der Liste ist
-    der Gewinner.
+    Mirrors aggregator order: all title patterns first (tier 7), followed by
+    all URL patterns (tier 8). The first match wins.
     """
     body = request.get_json(silent=True) or {}
     text = _clean_name(str(body.get("text") or "")).strip().lower()
@@ -6138,7 +6134,7 @@ def api_projects_match():
 
 
 def _tool_url_hosts() -> set:
-    """Union der tool_app_url_hosts aus Default- und User-Patterns."""
+    """Return the union of tool_app_url_hosts from default and user patterns."""
     hosts = set()
     for path in (PATTERNS_DEFAULT_FILE, PATTERNS_FILE):
         try:
@@ -6150,7 +6146,7 @@ def _tool_url_hosts() -> set:
 
 
 def _ignored_sets() -> tuple[set, set]:
-    """(ignored_topics, ignored_url_hosts) aus den User-Patterns, lowercased."""
+    """Return lowercased ignored_topics and ignored_url_hosts from user patterns."""
     data = _patterns_load_user()
     topics = {str(t).strip().lower() for t in data.get("ignored_topics") or [] if str(t).strip()}
     hosts = {str(h).strip().lower() for h in data.get("ignored_url_hosts") or [] if str(h).strip()}
@@ -6159,22 +6155,22 @@ def _ignored_sets() -> tuple[set, set]:
 
 @app.route("/api/projects/ignore", methods=["POST"])
 def api_projects_ignore():
-    """Topic oder URL-Host dauerhaft aus den Vorschlagslisten ausblenden.
+    """Permanently hide a topic or URL host from suggestion lists.
 
-    Schreibt nach project_patterns.yaml unter `ignored_topics` bzw.
-    `ignored_url_hosts`. Wirkt serverseitig in den /visited-urls- und
-    /recognized-topics-Endpoints."""
+    Writes to `ignored_topics` or `ignored_url_hosts` in project_patterns.yaml
+    and applies server-side to the visited-urls and recognized-topics endpoints.
+    """
     body = request.get_json(silent=True) or {}
     kind = str(body.get("type") or "").strip().lower()
     value = str(body.get("value") or "").strip()
     if not value:
-        return jsonify({"ok": False, "error": "value fehlt"}), 400
+        return jsonify({"ok": False, "error": "value is missing"}), 400
     if kind == "url":
         key, norm = "ignored_url_hosts", value.lower()
     elif kind == "topic":
         key, norm = "ignored_topics", value
     else:
-        return jsonify({"ok": False, "error": "type muss 'url' oder 'topic' sein"}), 400
+        return jsonify({"ok": False, "error": "type must be 'url' or 'topic'"}), 400
 
     data = _patterns_load_user()
     lst = data.setdefault(key, [])
@@ -6188,15 +6184,15 @@ def api_projects_ignore():
     return jsonify({"ok": True, "type": kind, "value": norm})
 
 
-# (days → (timestamp, payload)) — der Scan liest mehrere Tages-JSONLs vom
-# (externen) Datenvolume, daher kurz gecacht.
+# (days → (timestamp, payload)); scanning multiple daily JSONL files from a
+# potentially external data volume is briefly cached.
 _VISITED_URLS_CACHE: dict = {}
 _VISITED_URLS_TTL = 60
 
 
 @app.route("/api/projects/visited-urls")
 def api_projects_visited_urls():
-    """Besuchte Browser-Hosts der letzten N Tage, mit Projekt-Zuordnung."""
+    """Return visited browser hosts from the last N days with project assignments."""
     try:
         days = max(1, min(60, int(request.args.get("days", 7))))
     except ValueError:
@@ -6232,7 +6228,7 @@ def api_projects_visited_urls():
                     host = urlparse(url).netloc.lower()
                     if host.startswith("www."):
                         host = host[4:]
-                    # Eigene Dashboards/Dev-Server sind kein Browsing-Signal
+                    # Our own dashboards/dev servers are not a browsing signal
                     if not host or host.startswith(("127.0.0.1", "localhost")):
                         continue
                     counts[host] += 1
@@ -6300,11 +6296,10 @@ _RECOGNIZED_TOPICS_TTL = 60
 
 @app.route("/api/projects/recognized-topics")
 def api_projects_recognized_topics():
-    """Vom LLM erkannte Topics der letzten N Tage, mit Projekt-Zuordnung.
+    """Return LLM-recognized topics from the last N days with project assignments.
 
-    Spiegelt das „Besuchte URLs“-Panel: jeder Eintrag zeigt, wie viel Zeit
-    auf das Topic entfiel, welches Projekt aktuell dominiert und ob das Topic
-    bereits per `topics`-Regel einem Projekt fest zugeordnet ist.
+    Mirrors the Visited URLs panel. Each entry shows time spent, the currently
+    dominant project, and whether a topics rule already assigns the topic.
     """
     try:
         days = max(1, min(60, int(request.args.get("days", 7))))
@@ -6319,10 +6314,10 @@ def api_projects_recognized_topics():
     from collections import Counter
 
     secs: Counter = Counter()
-    proj_secs: dict = {}   # topic -> Counter(project -> sec) (beobachtete Zuordnung)
+    proj_secs: dict = {}   # topic -> Counter(project -> sec) (observed assignment)
     app_cat_secs: dict = {}  # topic -> Counter(app_category -> sec)
-    act_secs: dict = {}    # topic -> Counter(activity_category -> sec) (Pool)
-    longs: dict = {}       # topic -> topic_long (Beispiel)
+    act_secs: dict = {}    # topic -> Counter(activity_category -> sec) (pool)
+    longs: dict = {}       # topic -> example topic_long
     for i in range(days):
         date_str = f"{(datetime.now() - timedelta(days=i)):%Y-%m-%d}"
         for s in load_sessions(date_str):
@@ -6343,7 +6338,7 @@ def api_projects_recognized_topics():
             if topic not in longs and s.get("topic_long"):
                 longs[topic] = str(s.get("topic_long"))[:240]
 
-    # Feste Zuordnung aus project_patterns.yaml (topics-Regel je Projekt)
+    # Fixed assignment from project_patterns.yaml (topics rule per project).
     projects = _patterns_load_user().get("projects") or {}
     ignored_topics, _ = _ignored_sets()
     assigned: dict = {}   # topic-glob/lower -> project (assignment rules)
@@ -6381,13 +6376,13 @@ def api_projects_recognized_topics():
             "topic": topic,
             "minutes": round(sec / 60),
             "topic_long": longs.get(topic, ""),
-            "project": rule_proj,                 # feste Regel-Zuordnung
-            "observed_project": dominant,         # aktuell dominierendes Projekt
-            # Projekt-Kategorie: aus Regel-Zuordnung, sonst aus beobachtetem Projekt
+            "project": rule_proj,                 # Fixed rule assignment.
+            "observed_project": dominant,         # Currently dominant project.
+            # Project category from rule assignment, otherwise observed project.
             "project_category": proj_cat,
-            "app_category": app_cat,              # dominante App-Kategorie (Web/App)
-            # Pool-Kategorie: Projekt-Kategorie, sonst dominante abgeleitete
-            # Aktivitäts-Kategorie der Sessions (Web → Tool-Brücke)
+            "app_category": app_cat,              # Dominant app category (web/app).
+            # Pool category: project category or dominant derived activity
+            # category from the sessions (web → tool bridge).
             "category": proj_cat or (acts.most_common(1)[0][0] if acts else None),
         })
 
@@ -6407,7 +6402,7 @@ def config_editor():
 
 
 CONFIG_HTML = r"""<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <title>WorkTracker — Config</title>
@@ -6458,8 +6453,8 @@ CONFIG_HTML = r"""<!doctype html>
   button.danger:hover { background: rgba(255,77,79,.12); border-color: var(--err); color: var(--err); }
   button:disabled { opacity: .5; cursor: not-allowed; }
   main { max-width: 1760px; margin: 0 auto; padding: 18px clamp(16px, 2.5vw, 36px) 80px; }
-  /* Navbar auf dieselbe Breite wie der Inhalt begrenzen (nicht volle Bildschirmbreite),
-     analog zu Explore/Statistics, wo sie im 1760px-Body steckt. */
+  /* Cap the navbar at the content width (not full screen width),
+     matching Explore/Statistics where it sits in the 1760px body. */
   body > .wt-nav { max-width: 1760px; margin-left: auto; margin-right: auto; }
   section { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 18px; overflow: hidden; }
   section > h2 {
@@ -6598,7 +6593,7 @@ CONFIG_HTML = r"""<!doctype html>
 @@NAV:config@@
 @@CFG_TOOLBAR@@
 <main id="main">
-  <div class="wt-loading" id="loadingMsg"><div class="wt-spinner"></div><span class="wt-load-label">Lade Konfiguration…</span></div>
+  <div class="wt-loading" id="loadingMsg"><div class="wt-spinner"></div><span class="wt-load-label">Loading configuration…</span></div>
 </main>
 <div id="toast" class="toast"></div>
 
@@ -6667,9 +6662,9 @@ async function postJSON(url, body) {
 async function saveField(path, value) {
   try {
     await postJSON("/api/config", {path, value});
-    toast("gespeichert · " + path, "ok");
+    toast("saved · " + path, "ok");
   } catch (e) {
-    toast("Fehler: " + e.message, "err");
+    toast("Error: " + e.message, "err");
     throw e;
   }
 }
@@ -6751,22 +6746,22 @@ function renderScalar(path, defaultValue, userValue) {
     browse.textContent = "Browse…";
     browse.addEventListener("click", async () => {
       try {
-        const r = await postJSON("/api/config/pick-path", {title: "Wähle: " + path, start_path: inp.value});
+        const r = await postJSON("/api/config/pick-path", {title: "Choose: " + path, start_path: inp.value});
         if (r.cancelled) return;
         inp.value = r.path;
         lastSaved = r.path;
         await saveField(path, r.path);
-      } catch (e) { toast("Fehler: " + e.message, "err"); }
+      } catch (e) { toast("Error: " + e.message, "err"); }
     });
     control.appendChild(browse);
 
     const open = document.createElement("button");
     open.textContent = "Open";
-    open.title = "Im Finder öffnen";
+    open.title = "Open in Finder";
     open.addEventListener("click", async () => {
       try {
         await postJSON("/api/config/reveal", {path: inp.value});
-      } catch (e) { toast("Fehler: " + e.message, "err"); }
+      } catch (e) { toast("Error: " + e.message, "err"); }
     });
     control.appendChild(open);
   }
@@ -6778,7 +6773,7 @@ function renderList(path, defaultValue, userValue) {
   control.className = "control";
   const current = Array.isArray(userValue) ? userValue : (Array.isArray(defaultValue) ? defaultValue : []);
   const ta = document.createElement("textarea");
-  ta.placeholder = "Ein Eintrag pro Zeile";
+  ta.placeholder = "One item per line";
   ta.value = current.join("\n");
   let lastSaved = ta.value;
   ta.addEventListener("blur", () => {
@@ -6802,7 +6797,7 @@ function renderRow(path, defaultValue, userValue) {
     lab.href = "/docs/index.html#cfg-" + path;
     lab.target = "_blank";
     lab.rel = "noopener";
-    lab.title = "Doku \u00F6ffnen: " + path;
+    lab.title = "Open documentation: " + path;
   } else {
     lab.title = path;
   }
@@ -6852,13 +6847,13 @@ function walk(defaultObj, userObj, prefix, rows) {
 
 async function load() {
   const main = document.getElementById("main");
-  main.innerHTML = '<div class="wt-loading" id="loadingMsg"><div class="wt-spinner"></div><span class="wt-load-label">Lade Konfiguration…</span></div>';
+  main.innerHTML = '<div class="wt-loading" id="loadingMsg"><div class="wt-spinner"></div><span class="wt-load-label">Loading configuration…</span></div>';
   let data;
   try {
     const r = await fetch("/api/config");
     data = await r.json();
   } catch (e) {
-    main.innerHTML = '<div class="hint" style="color:var(--err)">Fehler beim Laden: ' + e.message + "</div>";
+    main.innerHTML = '<div class="hint" style="color:var(--err)">Error loading: ' + e.message + "</div>";
     return;
   }
   document.getElementById("cfgPath").textContent = data.config_path || "";
@@ -6886,8 +6881,8 @@ async function load() {
     const h = document.createElement("h2"); h.textContent = sk; sec.appendChild(h);
     const hint = document.createElement("div");
     hint.className = "hint";
-    if (sk === "collector") hint.textContent = 'Änderungen werden erst nach "Restart Collector" aktiv.';
-    else if (sk === "aggregator") hint.textContent = 'Änderungen werden beim nächsten Aggregator-Lauf wirksam (oder sofort via "Restart Aggregator").';
+    if (sk === "collector") hint.textContent = 'Changes become active after "Restart Collector".';
+    else if (sk === "aggregator") hint.textContent = 'Changes apply on the next aggregator run, or immediately via "Restart Aggregator".';
     if (hint.textContent) sec.appendChild(hint);
     const rows = [];
     walk(data.default[sk], (data.user && data.user[sk]) || {}, sk, rows);
@@ -6905,9 +6900,9 @@ async function doRestart(which, btn) {
   btn.disabled = true; lab.textContent = "…restarting";
   try {
     const r = await postJSON("/api/config/restart/" + which, {});
-    toast(which + " neu gestartet", "ok");
+    toast(which + " restarted", "ok");
   } catch (e) {
-    toast("Restart fehlgeschlagen: " + e.message, "err");
+    toast("Restart failed: " + e.message, "err");
   } finally {
     btn.disabled = false; lab.textContent = orig;
   }
@@ -6920,9 +6915,9 @@ async function openCfgFile(which, btn) {
   btn.disabled = true;
   try {
     const r = await postJSON("/api/config/open-file", {which});
-    toast("geöffnet: " + (r.path || which), "ok");
+    toast("opened: " + (r.path || which), "ok");
   } catch (e) {
-    toast("Fehler: " + e.message, "err");
+    toast("Error: " + e.message, "err");
   } finally {
     btn.disabled = false;
   }
@@ -6937,7 +6932,7 @@ load();
 
 
 PROJECTS_HTML = r"""<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <title>WorkTracker — Projects/Topics</title>
@@ -6970,8 +6965,8 @@ PROJECTS_HTML = r"""<!doctype html>
   button.danger:hover { background: rgba(255,77,79,.12); border-color: var(--err); color: var(--err); }
   button:disabled { opacity: .5; cursor: not-allowed; }
   main { max-width: 1760px; margin: 0 auto; padding: 18px clamp(16px, 2.5vw, 36px) 80px; }
-  /* Navbar auf dieselbe Breite wie der Inhalt begrenzen (nicht volle Bildschirmbreite),
-     analog zu Explore/Statistics, wo sie im 1760px-Body steckt. */
+  /* Cap the navbar at the content width (not full screen width),
+     matching Explore/Statistics where it sits in the 1760px body. */
   body > .wt-nav { max-width: 1760px; margin-left: auto; margin-right: auto; }
   .toolbar {
     max-width: 1760px; margin: 0 auto; padding: 14px clamp(16px, 2.5vw, 36px) 0;
@@ -6984,7 +6979,7 @@ PROJECTS_HTML = r"""<!doctype html>
   .toolbar-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
   .hint { color: var(--muted); font-size: 11.5px; margin: 0 0 16px; }
 
-  /* --- Regel-Tester ------------------------------------------------------ */
+  /* --- Rule tester ------------------------------------------------------- */
   .tester {
     background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
     padding: 14px 18px; margin-bottom: 16px;
@@ -7002,7 +6997,7 @@ PROJECTS_HTML = r"""<!doctype html>
   .test-also { border: 1px solid var(--border); color: var(--muted); padding: 2px 10px; border-radius: 999px; font-size: 12px; }
   .test-none { color: var(--muted); font-size: 12.5px; }
 
-  /* --- Besuchte URLs (Drag-Quelle) ---------------------------------------- */
+  /* --- Visited URLs (drag source) ----------------------------------------- */
   .urls-panel {
     background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
     padding: 14px 18px; margin-bottom: 16px;
@@ -7047,7 +7042,7 @@ PROJECTS_HTML = r"""<!doctype html>
     font-family: -apple-system, system-ui, sans-serif;
   }
   .url-chip .u-del:hover { color: #0c1116; background: var(--err, #ff5555); border-color: var(--err, #ff5555); }
-  /* Kategorie-Badges: Projekt-Kategorie (lila) vs. Web/App-Kategorie (grau-blau) */
+  /* Category badges: project category versus web/app category. */
   .cat-badge {
     font: 10px ui-monospace, Menlo, monospace; padding: 1px 6px;
     border-radius: 999px; flex: 0 0 auto; white-space: nowrap;
@@ -7057,7 +7052,7 @@ PROJECTS_HTML = r"""<!doctype html>
   .url-chip.assigned { border-color: var(--border); color: var(--muted); background: transparent; opacity: .75; }
   .url-chip.assigned .u-proj { font-size: 10.5px; color: var(--ok); }
   .url-chip.dragging { opacity: .4; }
-  /* Topic-Chips: gleiche Mechanik wie URL-Chips, aber pinker Akzent */
+  /* Topic chips: same mechanics as URL chips, but with a pink accent */
   .topic-chip { border-color: rgba(255,121,198,.45); color: #ff79c6; background: rgba(255,121,198,.06); }
   .topic-chip .u-obs { color: var(--muted); font-size: 10.5px; }
   .url-chip .u-proj.clickable, .url-chip .u-obs.clickable {
@@ -7066,7 +7061,7 @@ PROJECTS_HTML = r"""<!doctype html>
   .url-chip .u-proj.clickable:hover, .url-chip .u-obs.clickable:hover {
     background: var(--accent); color: #0c1116;
   }
-  /* Drop-Targets während eines URL-Drags */
+  /* Drop targets while dragging a URL. */
   body.dragging-url .card,
   body.dragging-topic .card { outline: 1px dashed rgba(79,195,216,.45); outline-offset: 2px; }
   body.dragging-url .card.editor,
@@ -7074,13 +7069,13 @@ PROJECTS_HTML = r"""<!doctype html>
   .card.drop-hover { border-color: var(--accent) !important; box-shadow: 0 0 0 2px var(--accent); }
   body.dragging-url #btnNew { outline: 2px dashed var(--accent); outline-offset: 3px; }
   #btnNew.drop-hover { filter: brightness(1.2); box-shadow: 0 0 0 2px var(--accent); }
-  /* Kategorie-Überschrift als Drop-Ziel */
+  /* Category heading as a drop target. */
   body.dragging-url .cat-head {
     border-radius: 6px; padding: 2px 6px; margin-left: -6px;
     outline: 1px dashed rgba(79,195,216,.45);
   }
   .cat-head.cat-drop-hover { outline: 1px solid var(--accent); color: var(--accent); }
-  /* „Neue Kategorie“-Drop-Zone — nur während eines URL-Drags sichtbar */
+  /* New-category drop zone, visible only while dragging a URL. */
   .newcat-drop {
     display: none; margin-top: 8px; padding: 14px; border-radius: 10px;
     border: 1px dashed var(--border); color: var(--muted);
@@ -7098,7 +7093,7 @@ PROJECTS_HTML = r"""<!doctype html>
   }
   .controls input[type=search]:focus { border-color: var(--accent2); }
 
-  /* --- Kategorie-Gruppen + Karten ---------------------------------------- */
+  /* --- Category groups and cards ------------------------------------------ */
   .cat-group { margin-bottom: 24px; }
   .cat-head {
     display: flex; align-items: center; gap: 8px; margin: 0 0 10px;
@@ -7129,7 +7124,7 @@ PROJECTS_HTML = r"""<!doctype html>
   .chip.t-git_repos    { border-color: rgba(255,90,31,.45);  color: #ff8a5c; }
   .chip.t-commands     { border-color: rgba(199,146,234,.45); color: var(--violet); }
   .chip.t-topics       { border-color: rgba(255,121,198,.45); color: #ff79c6; }
-  /* Light Mode: kräftigere Chip-Farben, sonst auf Weiß kaum lesbar */
+  /* Light mode uses stronger chip colors for contrast on white. */
   html[data-theme="light"] .chip.t-patterns  { border-color: rgba(132,163,0,.55); color: #6b8400; }
   html[data-theme="light"] .chip.t-git_repos { border-color: rgba(192,106,16,.5); color: #c06a10; }
 
@@ -7207,71 +7202,71 @@ PROJECTS_HTML = r"""<!doctype html>
 <div class="toolbar">
   <span class="path" id="patPath"></span>
   <div class="toolbar-actions">
-    <button id="btnRestartAgg" class="primary" title="Aggregator-Jobs neu laden">
+    <button id="btnRestartAgg" class="primary" title="Reload aggregator jobs">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
       <span class="btn-label">Restart Aggregator</span></button>
   </div>
 </div>
 <main>
   <div class="tester">
-    <div class="ed-label">Regel-Tester</div>
+    <div class="ed-label">Rule Tester</div>
     <input type="text" id="testInput" autocomplete="off" spellcheck="false"
-           placeholder="Fenstertitel oder URL eintippen — zeigt sofort, welches Projekt gewinnen würde…">
+           placeholder="Enter a window title or URL to see which project would win…">
     <div class="test-result" id="testResult"></div>
   </div>
   <div class="urls-panel">
     <div class="urls-head">
-      <div class="ed-label">Besuchte URLs</div>
+      <div class="ed-label">Visited URLs</div>
       <div class="urls-days" id="urlsDays">
-        <span class="day-pill" data-days="1">Heute</span>
-        <span class="day-pill active" data-days="7">7 Tage</span>
-        <span class="day-pill" data-days="30">30 Tage</span>
+        <span class="day-pill" data-days="1">Today</span>
+        <span class="day-pill active" data-days="7">7 Days</span>
+        <span class="day-pill" data-days="30">30 Days</span>
       </div>
-      <label class="urls-toggle"><input type="checkbox" id="showAssigned"> bereits zugeordnete anzeigen</label>
+      <label class="urls-toggle"><input type="checkbox" id="showAssigned"> show assigned</label>
     </div>
-    <div class="urls-list" id="urlsList"><span class="hint" style="margin:0">Lade besuchte URLs…</span></div>
-    <div class="rule-hint">Ziehe eine URL auf ein Projekt, um sie dort als URL-Regel zu speichern — oder ziehe sie auf eine Kategorie bzw. auf „＋ Neue Kategorie“, um daraus ein neues Projekt zu machen.</div>
+    <div class="urls-list" id="urlsList"><span class="hint" style="margin:0">Loading visited URLs…</span></div>
+    <div class="rule-hint">Drag a URL onto a project to save it as a URL rule, or onto a category or “＋ New Category” to create a new project.</div>
   </div>
   <div class="urls-panel">
     <div class="urls-head">
-      <div class="ed-label">Erkannte Topics</div>
+      <div class="ed-label">Recognized Topics</div>
       <div class="urls-days" id="topicsDays">
-        <span class="day-pill" data-days="1">Heute</span>
-        <span class="day-pill active" data-days="7">7 Tage</span>
-        <span class="day-pill" data-days="30">30 Tage</span>
+        <span class="day-pill" data-days="1">Today</span>
+        <span class="day-pill active" data-days="7">7 Days</span>
+        <span class="day-pill" data-days="30">30 Days</span>
       </div>
-      <label class="urls-toggle"><input type="checkbox" id="showAssignedTopics"> bereits zugeordnete anzeigen</label>
+      <label class="urls-toggle"><input type="checkbox" id="showAssignedTopics"> show assigned</label>
     </div>
-    <div class="urls-list" id="topicsList"><span class="hint" style="margin:0">Lade Topics…</span></div>
-    <div class="rule-hint">Ziehe ein Topic auf ein Projekt, um es dort als Topic-Regel zu speichern. Sessions mit diesem Topic, die sonst unter „Other“ landen, werden dann diesem Projekt zugeordnet.</div>
+    <div class="urls-list" id="topicsList"><span class="hint" style="margin:0">Loading topics…</span></div>
+    <div class="rule-hint">Drag a topic onto a project to save it as a topic rule. Sessions with that topic that would otherwise use “Other” will be assigned to the project.</div>
   </div>
   <div class="controls">
-    <input type="search" id="searchInput" placeholder="Projekte filtern…">
-    <button id="btnNew" class="primary">+ Neues Projekt</button>
+    <input type="search" id="searchInput" placeholder="Filter projects…">
+    <button id="btnNew" class="primary">+ New Project</button>
   </div>
-  <div class="hint">Klicke ein Projekt, um Name, Kategorie und Regeln zu bearbeiten. Änderungen landen in project_patterns.yaml und wirken ab dem nächsten Aggregator-Lauf.</div>
-  <div id="groups"><div class="wt-loading"><div class="wt-spinner"></div><span class="wt-load-label">Lade Projekte…</span></div></div>
+  <div class="hint">Click a project to edit its name, category, and rules. Changes are saved to project_patterns.yaml and apply on the next aggregator run.</div>
+  <div id="groups"><div class="wt-loading"><div class="wt-spinner"></div><span class="wt-load-label">Loading projects…</span></div></div>
 </main>
 <div id="toast" class="toast"></div>
 
 <script>
 const RULE_TYPES = [
-  {key: "patterns",     label: "Fenstertitel",     ph: "z. B. worktracker",  cls: "t-patterns",
-   hint: "Matcht den Fenstertitel. * steht für beliebigen Text — Eingaben ohne * werden automatisch zu *eingabe*."},
-  {key: "url_patterns", label: "URLs",             ph: "z. B. github.com",   cls: "t-url_patterns",
-   hint: "Matcht die Browser-URL."},
-  {key: "directories",  label: "Verzeichnisse",    ph: "z. B. worktracker",  cls: "t-directories",
-   hint: "Ordnernamen — erkannt im Terminal-Arbeitsverzeichnis, in der IDE und im Finder."},
-  {key: "git_repos",    label: "Git-Repos",        ph: "z. B. WorkTracker",  cls: "t-git_repos",
-   hint: "Repository-Namen aus dem Git-Signal des Collectors."},
-  {key: "commands",     label: "Terminal-Befehle", ph: "z. B. wt *",         cls: "t-commands",
-   hint: "Befehle aus dem Terminal-Titel."},
-  {key: "topics",       label: "Topics",           ph: "z. B. Steuererklärung", cls: "t-topics",
-   hint: "Vom LLM erkanntes Topic. Greift nachrangig: ordnet sonst „Other“-Sessions diesem Projekt zu, wenn ihr Topic passt. * als Platzhalter erlaubt."},
+  {key: "patterns",     label: "Window Titles",    ph: "e.g. worktracker",  cls: "t-patterns",
+   hint: "Matches the window title. * represents any text; entries without * are automatically wrapped as *entry*."},
+  {key: "url_patterns", label: "URLs",             ph: "e.g. github.com",   cls: "t-url_patterns",
+   hint: "Matches the browser URL."},
+  {key: "directories",  label: "Directories",     ph: "e.g. worktracker",  cls: "t-directories",
+   hint: "Folder names detected in the terminal working directory, IDE, and Finder."},
+  {key: "git_repos",    label: "Git Repositories", ph: "e.g. WorkTracker", cls: "t-git_repos",
+   hint: "Repository names from the collector's Git signal."},
+  {key: "commands",     label: "Terminal Commands", ph: "e.g. wt *",       cls: "t-commands",
+   hint: "Commands extracted from the terminal title."},
+  {key: "topics",       label: "Topics",           ph: "e.g. tax return",  cls: "t-topics",
+   hint: "Topics recognized by the LLM. As a fallback, matching sessions that would otherwise use “Other” are assigned to this project. * is allowed as a wildcard."},
 ];
 
-// Kategorie-Farben aus dem zentralen Pool (/api/categories); die Konstanten
-// hier sind nur Fallback, bis der Pool geladen ist.
+// Category colors from the central pool (/api/categories); these constants
+// are fallbacks until the pool has loaded.
 let CAT_COLORS = {
   "Development": "#6fe28a", "Business": "#ffb347", "Creative": "#ff79c6",
   "Music": "#c792ea", "Crypto": "#f5d400", "Finance": "#4fc3d8",
@@ -7291,7 +7286,7 @@ async function loadCatPool() {
     for (const [n, i] of Object.entries(d.activity || {})) if (i && i.color) m[n] = i.color;
     CAT_COLORS = m;
     CAT_ALIAS = d.alias_map || {};
-  } catch (e) { /* Fallback-Farben bleiben */ }
+  } catch (e) { /* Keep fallback colors. */ }
 }
 function catColor(cat) {
   cat = canonCat(cat);
@@ -7303,7 +7298,7 @@ function catColor(cat) {
 }
 
 let DB = {projects: {}, categories: []};
-let openName = null;   // null = kein Editor offen, "" = neues Projekt, sonst Projektname
+let openName = null;   // null = no editor, "" = new project, otherwise project name
 let draft = null;
 let dirty = false;
 let filter = "";
@@ -7349,7 +7344,7 @@ function newDraft(name, info) {
 }
 
 function openEditor(name, preset) {
-  if (openName !== null && dirty && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+  if (openName !== null && dirty && !confirm("Discard unsaved changes?")) return;
   openName = name;
   draft = newDraft(name, name ? DB.projects[name] : null);
   dirty = false;
@@ -7367,7 +7362,7 @@ function openEditor(name, preset) {
 }
 
 function closeEditor(force) {
-  if (dirty && !force && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+  if (dirty && !force && !confirm("Discard unsaved changes?")) return;
   openName = null; draft = null; dirty = false;
   render();
 }
@@ -7381,21 +7376,21 @@ async function saveDraft() {
   };
   try {
     await postJSON("/api/projects", body);
-    toast("gespeichert · " + body.name, "ok");
+    toast("saved · " + body.name, "ok");
     openName = null; draft = null; dirty = false;
     await load();
-  } catch (e) { toast("Fehler: " + e.message, "err"); }
+  } catch (e) { toast("Error: " + e.message, "err"); }
 }
 
 async function deleteProject() {
   if (!draft.original) { closeEditor(true); return; }
-  if (!confirm("Projekt „" + draft.original + "“ wirklich löschen?")) return;
+  if (!confirm('Delete project "' + draft.original + '"?')) return;
   try {
     await postJSON("/api/projects/delete", {name: draft.original});
-    toast("gelöscht · " + draft.original, "ok");
+    toast("deleted · " + draft.original, "ok");
     openName = null; draft = null; dirty = false;
     await load();
-  } catch (e) { toast("Fehler: " + e.message, "err"); }
+  } catch (e) { toast("Error: " + e.message, "err"); }
 }
 
 function buildChipsEdit(rt) {
@@ -7418,10 +7413,10 @@ function buildChipsEdit(rt) {
       const ed = document.createElement("span");
       ed.className = "edit";
       ed.textContent = "✎";
-      ed.title = "bearbeiten";
+      ed.title = "edit";
       ed.addEventListener("click", (e) => {
         e.stopPropagation();
-        // Eintrag aus der Liste nehmen und zum Bearbeiten ins Eingabefeld holen.
+        // Move the item from the list into the input for editing.
         draft.rules[rt.key].splice(i, 1);
         dirty = true;
         inp.value = val;
@@ -7433,7 +7428,7 @@ function buildChipsEdit(rt) {
       const x = document.createElement("span");
       x.className = "x";
       x.textContent = "×";
-      x.title = "entfernen";
+      x.title = "remove";
       x.addEventListener("click", (e) => {
         e.stopPropagation();
         draft.rules[rt.key].splice(i, 1);
@@ -7448,7 +7443,7 @@ function buildChipsEdit(rt) {
   const add = () => {
     let v = inp.value.trim();
     if (!v) return;
-    // Glob-Komfort: Titel/URL-Muster ohne Wildcard automatisch einrahmen
+    // Automatically wrap title and URL patterns that do not contain a wildcard.
     if ((rt.key === "patterns" || rt.key === "url_patterns") && !/[*?\[]/.test(v)) {
       v = "*" + v + "*";
     }
@@ -7479,24 +7474,24 @@ function buildEditor() {
 
   const nameLab = document.createElement("div");
   nameLab.className = "ed-label";
-  nameLab.textContent = draft.original ? "Projekt bearbeiten" : "Neues Projekt";
+  nameLab.textContent = draft.original ? "Edit Project" : "New Project";
   card.appendChild(nameLab);
   const name = document.createElement("input");
   name.id = "edName";
   name.className = "ed-name";
-  name.placeholder = "Projektname";
+  name.placeholder = "Project name";
   name.value = draft.name;
   name.autocomplete = "off";
   name.spellcheck = false;
   name.addEventListener("input", () => { draft.name = name.value; dirty = true; });
   card.appendChild(name);
 
-  // Kategorie als klickbare Pills + Freitext für neue Kategorien
+  // Category pills plus free text for new categories.
   const catSec = document.createElement("div");
   catSec.className = "ed-section";
   const catLab = document.createElement("div");
   catLab.className = "ed-label";
-  catLab.textContent = "Kategorie";
+  catLab.textContent = "Category";
   catSec.appendChild(catLab);
   const pills = document.createElement("div");
   pills.className = "cat-pills";
@@ -7526,7 +7521,7 @@ function buildEditor() {
   }
   catInput.type = "text";
   catInput.className = "cat-new";
-  catInput.placeholder = "Neue Kategorie…";
+  catInput.placeholder = "New category…";
   catInput.autocomplete = "off";
   if (draft.category && !cats.includes(draft.category)) catInput.value = draft.category;
   catInput.addEventListener("input", () => {
@@ -7562,7 +7557,7 @@ function buildEditor() {
   if (draft.original) {
     const del = document.createElement("button");
     del.className = "danger";
-    del.textContent = "Löschen";
+    del.textContent = "Delete";
     del.addEventListener("click", deleteProject);
     foot.appendChild(del);
   }
@@ -7570,17 +7565,17 @@ function buildEditor() {
   sp.className = "spacer";
   foot.appendChild(sp);
   const cancel = document.createElement("button");
-  cancel.textContent = "Abbrechen";
+  cancel.textContent = "Cancel";
   cancel.addEventListener("click", () => closeEditor(false));
   foot.appendChild(cancel);
   const save = document.createElement("button");
   save.className = "primary";
-  save.textContent = "Speichern";
+  save.textContent = "Save";
   save.addEventListener("click", saveDraft);
   foot.appendChild(save);
   card.appendChild(foot);
 
-  // Drop auf den offenen Editor: URL/Topic als Entwurfs-Regel übernehmen (ohne Save)
+  // Drop onto the open editor to add a draft URL/topic rule without saving.
   card.addEventListener("dragover", (e) => {
     if (!draggingHost && !draggingTopic) return;
     e.preventDefault();
@@ -7594,7 +7589,7 @@ function buildEditor() {
         draft.rules.topics.push(draggingTopic);
         dirty = true;
         render();
-        toast("übernommen (noch nicht gespeichert) · " + draggingTopic, "ok");
+        toast("added (not saved yet) · " + draggingTopic, "ok");
       }
       return;
     }
@@ -7603,7 +7598,7 @@ function buildEditor() {
       draft.rules.url_patterns.push(pat);
       dirty = true;
       render();
-      toast("übernommen (noch nicht gespeichert) · " + pat, "ok");
+      toast("added (not saved yet) · " + pat, "ok");
     }
   });
   return card;
@@ -7641,7 +7636,7 @@ function buildCard(name, info) {
   if (!all.length) {
     const m = document.createElement("span");
     m.className = "chip";
-    m.textContent = "keine Regeln";
+    m.textContent = "no rules";
     chips.appendChild(m);
   }
   card.appendChild(chips);
@@ -7653,7 +7648,7 @@ function buildCard(name, info) {
 
   card.addEventListener("click", () => openEditor(name));
 
-  // Drop-Target für URL- und Topic-Chips aus den Panels
+  // Drop target for URL and topic chips from the panels.
   card.addEventListener("dragover", (e) => {
     if (!draggingHost && !draggingTopic) return;
     e.preventDefault();
@@ -7674,7 +7669,7 @@ function buildCard(name, info) {
 function groupProjects() {
   const groups = new Map();
   for (const [name, info] of Object.entries(DB.projects)) {
-    // Pool-kanonisiert gruppieren; Other/leer landet im Sammelbecken
+    // Group by canonical pool category; Other/empty goes into Uncategorized.
     let cat = canonCat((info && info.category) || "");
     if (!cat || cat === "Other") cat = "Uncategorized";
     if (!groups.has(cat)) groups.set(cat, []);
@@ -7683,9 +7678,9 @@ function groupProjects() {
   const keys = [...groups.keys()].sort((a, b) => {
     const ua = a === "Uncategorized", ub = b === "Uncategorized";
     if (ua !== ub) return ua ? 1 : -1;
-    return a.localeCompare(b, "de", {sensitivity: "base"});
+    return a.localeCompare(b, "en", {sensitivity: "base"});
   });
-  return keys.map(k => [k, groups.get(k).sort((a, b) => a.localeCompare(b, "de", {sensitivity: "base"}))]);
+  return keys.map(k => [k, groups.get(k).sort((a, b) => a.localeCompare(b, "en", {sensitivity: "base"}))]);
 }
 
 function passesFilter(name, info) {
@@ -7720,8 +7715,8 @@ function render() {
     dot.className = "cat-dot";
     dot.style.background = catColor(cat);
     h.appendChild(dot);
-    h.appendChild(document.createTextNode((cat === "Uncategorized" ? "Ohne Kategorie" : cat) + " · " + vis.length));
-    // Drop-Ziel: URL auf eine Kategorie ziehen → neues Projekt in dieser Kategorie
+    h.appendChild(document.createTextNode((cat === "Uncategorized" ? "No Category" : cat) + " · " + vis.length));
+    // Dropping a URL on a category creates a new project in that category.
     h.addEventListener("dragover", (e) => {
       if (!draggingHost) return;
       e.preventDefault();
@@ -7749,14 +7744,14 @@ function render() {
     const e = document.createElement("div");
     e.className = "hint";
     e.textContent = total
-      ? "Keine Projekte passen zum Filter."
-      : "Noch keine Projekte — lege mit „+ Neues Projekt“ los.";
+      ? "No projects match the filter."
+      : "No projects yet — start with “+ New Project”.";
     root.appendChild(e);
   }
-  // Drop-Zone „Neue Kategorie“ — nur während eines URL-Drags sichtbar (CSS)
+  // New-category drop zone, visible only while dragging a URL.
   const ncz = document.createElement("div");
   ncz.className = "newcat-drop";
-  ncz.textContent = "＋ Neue Kategorie aus URL";
+  ncz.textContent = "＋ New Category from URL";
   ncz.addEventListener("dragover", (e) => {
     if (!draggingHost) return;
     e.preventDefault();
@@ -7768,7 +7763,7 @@ function render() {
     if (!draggingHost) return;
     e.preventDefault();
     ncz.classList.remove("drop-hover");
-    newProjectFromHost(draggingHost, "");   // leere Kategorie → Freitextfeld bekommt Fokus
+    newProjectFromHost(draggingHost, "");   // Empty category focuses the free-text field.
   });
   root.appendChild(ncz);
   const pc = document.getElementById("proj-count");
@@ -7795,7 +7790,7 @@ async function runTest() {
   if (!testMatches.length) {
     const s = document.createElement("span");
     s.className = "test-none";
-    s.textContent = "kein Treffer — würde unter „Other“ landen";
+    s.textContent = "no match — would use “Other”";
     res.appendChild(s);
   } else {
     const w = testMatches[0];
@@ -7805,7 +7800,7 @@ async function runTest() {
     res.appendChild(s);
     const d = document.createElement("span");
     d.className = "test-detail";
-    d.textContent = (w.field === "patterns" ? "Titel-Muster " : "URL-Muster ") + w.pattern;
+    d.textContent = (w.field === "patterns" ? "Title pattern " : "URL pattern ") + w.pattern;
     res.appendChild(d);
     for (const m of testMatches.slice(1, 5)) {
       const a = document.createElement("span");
@@ -7832,7 +7827,7 @@ document.getElementById("searchInput").addEventListener("input", (e) => {
   filter = e.target.value.trim();
   render();
 });
-// ---- Besuchte URLs: Laden, Rendern, Drag & Drop ---------------------------
+// ---- Visited URLs: load, render, drag and drop -----------------------------
 
 function suggestName(host) {
   // "business.apple.com" → "Business Apple", "korodrogerie.de" → "Korodrogerie"
@@ -7853,7 +7848,7 @@ async function addUrlToProject(projName, host) {
   }
   const pat = "*" + host + "*";
   if (rules.url_patterns.includes(pat)) {
-    toast(pat + " ist bei „" + projName + "“ schon vorhanden", "err");
+    toast(pat + ' already exists in "' + projName + '"', "err");
     return;
   }
   rules.url_patterns.push(pat);
@@ -7865,7 +7860,7 @@ async function addUrlToProject(projName, host) {
     toast(pat + " → " + projName, "ok");
     await load();
     await loadUrls();
-  } catch (e) { toast("Fehler: " + e.message, "err"); }
+  } catch (e) { toast("Error: " + e.message, "err"); }
 }
 
 async function addTopicToProject(projName, topic) {
@@ -7876,7 +7871,7 @@ async function addTopicToProject(projName, topic) {
     rules[rt.key] = Array.isArray(info[rt.key]) ? info[rt.key].slice() : [];
   }
   if (rules.topics.includes(topic)) {
-    toast("„" + topic + "“ ist bei „" + projName + "“ schon vorhanden", "err");
+    toast('"' + topic + '" already exists in "' + projName + '"', "err");
     return;
   }
   rules.topics.push(topic);
@@ -7888,7 +7883,7 @@ async function addTopicToProject(projName, topic) {
     toast("„" + topic + "“ → " + projName, "ok");
     await load();
     await loadTopics();
-  } catch (e) { toast("Fehler: " + e.message, "err"); }
+  } catch (e) { toast("Error: " + e.message, "err"); }
 }
 
 function newProjectFromHost(host, category) {
@@ -7897,7 +7892,7 @@ function newProjectFromHost(host, category) {
   if (category) preset.category = category;
   openEditor("", preset);
   window.scrollTo({top: 0, behavior: "smooth"});
-  // Ohne vorgegebene Kategorie direkt ins Kategorie-Freitextfeld springen.
+  // Without a preset category, focus the category free-text field.
   if (!category) {
     setTimeout(() => {
       const ci = document.querySelector(".card.editor .cat-new");
@@ -7906,21 +7901,21 @@ function newProjectFromHost(host, category) {
   }
 }
 
-// Kategorie-Badge: kind = 'proj' (Projekt-Kategorie) | 'web' (Web/App-Kategorie)
+// Category badge: kind = project category or web/app category.
 function catBadge(text, kind) {
   const b = document.createElement("span");
   b.className = "cat-badge cat-" + kind;
   b.textContent = text;
-  b.title = kind === "proj" ? "Projekt-Kategorie" : "Web/App-Kategorie";
+  b.title = kind === "proj" ? "Project Category" : "Web/App Category";
   return b;
 }
 
-// „X“-Button: Topic/Host dauerhaft ignorieren (serverseitig persistiert)
+// X button: permanently ignore a topic/host, persisted server-side.
 function makeDeleteBtn(type, value, onDone) {
   const x = document.createElement("span");
   x.className = "u-del";
   x.textContent = "×";
-  x.title = (type === "url" ? "Host" : "Topic") + " dauerhaft ausblenden";
+  x.title = "Permanently hide " + (type === "url" ? "host" : "topic");
   x.addEventListener("click", async (e) => {
     e.stopPropagation();
     try {
@@ -7929,7 +7924,7 @@ function makeDeleteBtn(type, value, onDone) {
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({type, value}),
       });
-    } catch (err) { /* trotzdem clientseitig ausblenden */ }
+    } catch (err) { /* Hide client-side even if persistence fails. */ }
     onDone();
   });
   return x;
@@ -7945,8 +7940,8 @@ function renderUrls() {
     s.className = "hint";
     s.style.margin = "0";
     s.textContent = URLS.length
-      ? "Alle besuchten URLs sind bereits einem Projekt zugeordnet."
-      : "Keine besuchten URLs im Zeitraum gefunden.";
+      ? "All visited URLs are already assigned to a project."
+      : "No visited URLs found in this period.";
     list.appendChild(s);
     return;
   }
@@ -7954,9 +7949,9 @@ function renderUrls() {
     const chip = document.createElement("span");
     chip.className = "url-chip" + (u.project ? " assigned" : "");
     chip.draggable = true;
-    const tparts = ["≈ " + (u.minutes < 1 ? "<1" : u.minutes) + " min im Browser"];
-    if (u.sample_title) tparts.push("zuletzt: " + u.sample_title);
-    if (u.project) tparts.push("zugeordnet: " + u.project);
+    const tparts = ["≈ " + (u.minutes < 1 ? "<1" : u.minutes) + " min in browser"];
+    if (u.sample_title) tparts.push("last: " + u.sample_title);
+    if (u.project) tparts.push("assigned: " + u.project);
     chip.title = tparts.join("\n");
 
     const host = document.createElement("span");
@@ -7978,7 +7973,7 @@ function renderUrls() {
     const add = document.createElement("span");
     add.className = "u-add";
     add.textContent = "+";
-    add.title = "Neues Projekt aus " + u.host;
+    add.title = "New project from " + u.host;
     add.addEventListener("click", (e) => { e.stopPropagation(); newProjectFromHost(u.host); });
     chip.appendChild(add);
     chip.appendChild(makeDeleteBtn("url", u.host, () => {
@@ -8018,12 +8013,12 @@ document.getElementById("urlsDays").addEventListener("click", (e) => {
   if (!pill) return;
   urlDays = parseInt(pill.dataset.days, 10);
   document.querySelectorAll("#urlsDays .day-pill").forEach(p => p.classList.toggle("active", p === pill));
-  document.getElementById("urlsList").innerHTML = '<span class="hint" style="margin:0">Lade…</span>';
+  document.getElementById("urlsList").innerHTML = '<span class="hint" style="margin:0">Loading…</span>';
   loadUrls();
 });
 document.getElementById("showAssigned").addEventListener("change", renderUrls);
 
-// ---- Erkannte Topics: Laden, Rendern, Drag & Drop -------------------------
+// ---- Recognized topics: load, render, drag and drop ------------------------
 function renderTopics() {
   const list = document.getElementById("topicsList");
   const showAssigned = document.getElementById("showAssignedTopics").checked;
@@ -8034,8 +8029,8 @@ function renderTopics() {
     s.className = "hint";
     s.style.margin = "0";
     s.textContent = TOPICS.length
-      ? "Alle erkannten Topics sind bereits einem Projekt zugeordnet."
-      : "Keine Topics im Zeitraum gefunden. Topics werden vom lokalen LLM beim Aggregieren erzeugt.";
+      ? "All recognized topics are already assigned to a project."
+      : "No topics found in this period. Topics are generated by the local LLM during aggregation.";
     list.appendChild(s);
     return;
   }
@@ -8045,8 +8040,8 @@ function renderTopics() {
     chip.draggable = true;
     const tparts = ["≈ " + (t.minutes < 1 ? "<1" : t.minutes) + " min"];
     if (t.topic_long) tparts.push(t.topic_long);
-    if (t.project) tparts.push("zugeordnet: " + t.project);
-    else if (t.observed_project) tparts.push("zuletzt meist: " + t.observed_project);
+    if (t.project) tparts.push("assigned: " + t.project);
+    else if (t.observed_project) tparts.push("most recently: " + t.observed_project);
     chip.title = tparts.join("\n");
 
     const name = document.createElement("span");
@@ -8061,7 +8056,7 @@ function renderTopics() {
       const pr = document.createElement("span");
       pr.className = "u-proj clickable";
       pr.textContent = "→ " + t.project;
-      pr.title = "Topic „" + t.topic + "“ erneut „" + t.project + "“ zuweisen";
+      pr.title = 'Assign topic "' + t.topic + '" to "' + t.project + '" again';
       pr.draggable = false;
       pr.addEventListener("click", (e) => { e.stopPropagation(); addTopicToProject(t.project, t.topic); });
       chip.appendChild(pr);
@@ -8069,13 +8064,13 @@ function renderTopics() {
       const ob = document.createElement("span");
       ob.className = "u-obs clickable";
       ob.textContent = "≈ " + t.observed_project;
-      ob.title = "Topic „" + t.topic + "“ dem Projekt „" + t.observed_project + "“ zuweisen";
+      ob.title = 'Assign topic "' + t.topic + '" to project "' + t.observed_project + '"';
       ob.draggable = false;
       ob.addEventListener("click", (e) => { e.stopPropagation(); addTopicToProject(t.observed_project, t.topic); });
       chip.appendChild(ob);
     }
     if (t.project_category) chip.appendChild(catBadge(t.project_category, "proj"));
-    // Pool-Kategorie (Projekt → Web → Tool-Brücke) statt roher App-Kategorie
+    // Pool category (project → web → tool bridge) instead of raw app category.
     else if (t.category) chip.appendChild(catBadge(t.category, "web"));
     else if (t.app_category) chip.appendChild(catBadge(t.app_category, "web"));
     chip.appendChild(makeDeleteBtn("topic", t.topic, () => {
@@ -8115,14 +8110,14 @@ document.getElementById("topicsDays").addEventListener("click", (e) => {
   if (!pill) return;
   topicDays = parseInt(pill.dataset.days, 10);
   document.querySelectorAll("#topicsDays .day-pill").forEach(p => p.classList.toggle("active", p === pill));
-  document.getElementById("topicsList").innerHTML = '<span class="hint" style="margin:0">Lade…</span>';
+  document.getElementById("topicsList").innerHTML = '<span class="hint" style="margin:0">Loading…</span>';
   loadTopics();
 });
 document.getElementById("showAssignedTopics").addEventListener("change", renderTopics);
 
 const btnNew = document.getElementById("btnNew");
 btnNew.addEventListener("click", () => openEditor(""));
-// „+ Neues Projekt“ ist auch Drop-Ziel für URL-Chips
+// + New Project is also a drop target for URL chips.
 btnNew.addEventListener("dragover", (e) => {
   if (!draggingHost) return;
   e.preventDefault();
@@ -8148,9 +8143,9 @@ document.getElementById("btnRestartAgg").addEventListener("click", async (e) => 
   lab.textContent = "…restarting";
   try {
     await postJSON("/api/config/restart/aggregator", {});
-    toast("Aggregator neu gestartet", "ok");
+    toast("Aggregator restarted", "ok");
   } catch (err) {
-    toast("Restart fehlgeschlagen: " + err.message, "err");
+    toast("Restart failed: " + err.message, "err");
   } finally {
     btn.disabled = false;
     lab.textContent = orig;
@@ -8164,7 +8159,7 @@ async function load() {
     data = await r.json();
   } catch (e) {
     document.getElementById("groups").innerHTML =
-      '<div class="hint" style="color:var(--err)">Fehler beim Laden: ' + e.message + "</div>";
+      '<div class="hint" style="color:var(--err)">Error loading: ' + e.message + "</div>";
     return;
   }
   DB = data;
@@ -8172,7 +8167,7 @@ async function load() {
   render();
 }
 
-// Pool-Farben/-Aliase zuerst laden, damit der erste Render sie nutzt
+// Load pool colors and aliases before the first render.
 loadCatPool().finally(() => {
   load();
   loadUrls();
@@ -8184,7 +8179,7 @@ loadCatPool().finally(() => {
 
 
 # ---------------------------------------------------------------------------
-# Einheitliche Navbar — eine Quelle, in alle Templates injiziert
+# Shared navbar — one source injected into every template
 # ---------------------------------------------------------------------------
 # Read the WorkTracker version once. Single source of truth is the shipped
 # config.default.yaml (bumped per release); the user config.yaml is only a
@@ -8205,9 +8200,7 @@ WT_VERSION = _wt_version()
 # Self-contained colours mirroring docs/index.html (acid-green primary, red
 # colon, slate badges) so the dashboard navbar matches the documentation skin
 # on every page — including the differently-themed config page.
-# Light-Mode: zentrale Variablen-Overrides für ALLE Seiten-Paletten
-# (Dashboard/Explore/Stats/Screenshots nutzen --bg/--fg/…, Config/Projects
-# nutzen --panel/--muted/… — beide Sets werden hier überschrieben).
+# Light mode: centralized variable overrides for every page palette.
 NAV_CSS = """<style>
 :root{color-scheme:dark;}
 html[data-theme="light"]{
@@ -8256,13 +8249,13 @@ html[data-theme="light"] .wt-nav a.wt-link.active{color:#1c2400;background:#cde8
   display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .wt-nav .wt-right .dot{color:#6fe28a;font-size:16px;vertical-align:middle;
   display:inline-block;transition:opacity .3s;}
-/* Impulsanimation des grünen Kreises bei jeder Aktualisierung */
+/* Pulse the green circle after every refresh. */
 @keyframes wtDotPulse{
   0%{transform:scale(1);text-shadow:0 0 0 rgba(111,226,138,0);}
   28%{transform:scale(1.75);text-shadow:0 0 11px rgba(111,226,138,.95);}
   100%{transform:scale(1);text-shadow:0 0 0 rgba(111,226,138,0);}}
 .wt-nav .wt-right .dot.pulsing{animation:wtDotPulse .65s ease-out;}
-/* Countdown-Balken über der Uhr — zeigt Zeit bis zur nächsten Aktualisierung */
+/* Countdown bar above the clock showing time until the next refresh. */
 .wt-nav .wt-right .clock-wrap{display:inline-flex;flex-direction:column;
   align-items:stretch;gap:3px;line-height:1;}
 .wt-nav .wt-right .rf-countdown{height:2px;min-width:56px;width:100%;
@@ -8270,7 +8263,7 @@ html[data-theme="light"] .wt-nav a.wt-link.active{color:#1c2400;background:#cde8
 .wt-nav .wt-right .rf-countdown-bar{display:block;height:100%;width:100%;
   background:#6fe28a;border-radius:2px;transform-origin:left center;transform:scaleX(1);}
 html[data-theme="light"] .wt-nav .wt-right .rf-countdown-bar{background:#3fae5a;}
-/* Theme-Toggle (Sonne/Mond) */
+/* Theme toggle (sun/moon). */
 .wt-theme-btn{display:inline-flex;align-items:center;justify-content:center;
   width:30px;height:30px;flex-shrink:0;cursor:pointer;border-radius:8px;
   background:transparent;border:1px solid #2b3642;color:#8a95a3;padding:0;
@@ -8278,13 +8271,12 @@ html[data-theme="light"] .wt-nav .wt-right .rf-countdown-bar{background:#3fae5a;
 .wt-theme-btn:hover{color:#d4f500;border-color:#d4f500;}
 html[data-theme="light"] .wt-theme-btn{border-color:#d5dde4;color:#5d6b7a;}
 html[data-theme="light"] .wt-theme-btn:hover{color:#9a7b00;border-color:#9a7b00;}
-/* Icon zeigt den Modus, in den gewechselt wird: dunkel → Sonne, hell → Mond */
+/* Icon shows the mode that will be activated: dark → sun, light → moon. */
 .wt-theme-btn .ico-sun{display:block;}
 .wt-theme-btn .ico-moon{display:none;}
 html[data-theme="light"] .wt-theme-btn .ico-sun{display:none;}
 html[data-theme="light"] .wt-theme-btn .ico-moon{display:block;}
-/* Gemeinsame Ladeanimation — auf jeder Seite verfügbar, da mit der Navbar injiziert.
-   Deutlich auffälliger: großer Dual-Ring mit Glow + pulsierendem Label. */
+/* Shared loading animation available on every page through navbar injection. */
 .wt-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:16px;padding:48px 0;color:#8a95a3;font-size:13px;
   font-family:'SF Mono','Fira Code','JetBrains Mono',ui-monospace,monospace;
@@ -8303,14 +8295,13 @@ html[data-theme="light"] .wt-spinner{border-top-color:#84a300;border-right-color
 .wt-load-label{animation:wtpulse 1.2s ease-in-out infinite;letter-spacing:.6px;
   font-size:13px;text-transform:uppercase;}
 @keyframes wtpulse{0%,100%{opacity:.4}50%{opacity:1}}
-/* Inline-Variante (Spinner + Label nebeneinander, z. B. in Toolbars) */
+/* Inline variant with spinner and label side by side. */
 .wt-loading.inline{flex-direction:row;padding:0;gap:10px;animation:none;}
 .wt-loading.inline .wt-load-label{text-transform:none;}
 </style>"""
 
-# Theme-Bootstrap: läuft VOR dem Navbar-Markup, damit der gespeicherte Mode
-# ohne Flackern angewendet wird. Stellt wtToggleTheme() global bereit und
-# feuert 'wt-theme', damit Seiten (z. B. ECharts auf /statistics) neu rendern.
+# Theme bootstrap runs before navbar markup so the saved mode applies without
+# flicker. It exposes wtToggleTheme() and emits wt-theme for page rerenders.
 NAV_JS = """<script>
 (function(){
   var saved = null;
@@ -8335,10 +8326,10 @@ _NAV_ITEMS = [
 ]
 
 
-# Sonne/Mond-Icons für den Theme-Toggle (Feather-Style, currentColor)
+# Sun/moon icons for the theme toggle (Feather style, currentColor)
 _THEME_BTN = (
     '<button class="wt-theme-btn" type="button" onclick="wtToggleTheme()"'
-    ' title="Light/Dark Mode umschalten" aria-label="Theme umschalten">'
+    ' title="Toggle light/dark mode" aria-label="Toggle theme">'
     '<svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
     ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15">'
     '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
@@ -8377,7 +8368,7 @@ def _navbar(active, right=""):
     )
 
 
-# Per-Seiten-Inhalt der rechten Navbar-Seite (vorher in den einzelnen Headern)
+# Per-page content of the right navbar side (previously in the individual headers)
 _NAV_RIGHT = {
     "dashboard": (
         '<span class="dot" id="pulse">●</span>'
@@ -8403,22 +8394,22 @@ _NAV_RIGHT = {
         '<span class="dp-title" id="dp-title"></span>'
         '<button class="dp-nav" id="dp-next" type="button">&rsaquo;</button>'
         '</div>'
-        '<div class="dp-weekdays"><span>Mo</span><span>Di</span><span>Mi</span>'
-        '<span>Do</span><span>Fr</span><span>Sa</span><span>So</span></div>'
+        '<div class="dp-weekdays"><span>Mon</span><span>Tue</span><span>Wed</span>'
+        '<span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>'
         '<div class="dp-grid" id="dp-grid"></div>'
         '</div></div>'
         '<button class="dp-trigger" id="skip-btn" type="button" '
-        'title="Screenshot-Skip-Regeln bearbeiten">'
+        'title="Edit screenshot skip rules">'
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">'
         '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>'
         '<line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>'
         '<line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>'
         '<line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/>'
         '<line x1="17" y1="16" x2="23" y2="16"/></svg>'
-        '<span>Skip-Regeln</span></button>'
+        '<span>Skip Rules</span></button>'
         '<span class="summary" id="summary"></span>'
     ),
-    "projects": '<span><span id="proj-count">—</span> Projekte</span>',
+    "projects": '<span><span id="proj-count">—</span> Projects</span>',
     # The config toolbar (path + open/restart buttons) lives in its own bar
     # BELOW the navbar (see @@CFG_TOOLBAR@@ in CONFIG_HTML), so the navbar
     # stays clean and consistent with the other pages.
@@ -8431,10 +8422,10 @@ CONFIG_TOOLBAR = (
     '<div class="cfg-toolbar">'
     '<span class="path" id="cfgPath"></span>'
     '<div class="cfg-toolbar-actions">'
-    '<button id="btnOpenDefault" title="config.default.yaml im Editor öffnen">'
+    '<button id="btnOpenDefault" title="Open config.default.yaml in editor">'
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
     '<span class="btn-label">Open config.default.yaml</span></button>'
-    '<button id="btnOpenUser" title="config.yaml im Editor öffnen">'
+    '<button id="btnOpenUser" title="Open config.yaml in editor">'
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
     '<span class="btn-label">Open config.yaml</span></button>'
     '<button id="btnRestartCol" class="primary">'

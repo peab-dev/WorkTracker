@@ -35,28 +35,28 @@ collector:
   # Calendar integration — Read meetings from macOS Calendar
   track_calendar: true
 
-  # Screenshots — speichert ein PNG pro interval_seconds, das alle aktiven
-  # Displays als Union-Rect umfasst. Erfordert Screen-Recording-Berechtigung
+  # Screenshots — saves one PNG per interval_seconds containing all active
+  # displays in a single union rectangle. Requires Screen Recording permission
   # (System Settings > Privacy & Security > Screen Recording).
-  # Default disabled — opt-in im user config.yaml.
+  # Disabled by default — opt in through the user config.yaml.
   screenshot:
     enabled: false
     interval_seconds: 60
     dir: ~/WorkTracker/data/screenshots
-    # bundle IDs, in denen NIE ein Screenshot entstehen darf
+    # Bundle IDs for which screenshots must NEVER be captured
     skip_bundle_ids:
       - com.agilebits.onepassword7
       - com.1password.1password
 
-  # Screenshot-Sperren nach Kontext. Greift zur selben Zeit wie der
-  # Screenshot: Ist die aktive App/URL/das Projekt/die Kategorie betroffen,
-  # entsteht KEIN Screenshot. Stattdessen wird ein Vermerk in
-  # logs/screenshot-skips.log geschrieben (mit Grund der Blockierung).
+  # Context-based screenshot blocks. Evaluated when a screenshot is due:
+  # if the active app, URL, project, or category matches, NO screenshot is
+  # captured. Instead, an entry is written to logs/screenshot-skips.log
+  # with the reason for blocking.
   #
-  # skip_urls:        fnmatch-Muster gegen die aktive Browser-URL (Wildcards
-  #                   wie bei skip_bundle_ids nötig, z.B. "*orf.at*").
-  # skip_projects:    Projektnamen aus project_patterns.yaml (exakter Name).
-  # skip_categories:  Kategorien aus project_patterns.yaml (exakter Name).
+  # skip_urls:        fnmatch patterns matched against the active browser URL
+  #                   (wildcards required as with skip_bundle_ids, e.g. "*orf.at*").
+  # skip_projects:    Project names from project_patterns.yaml (exact match).
+  # skip_categories:  Categories from project_patterns.yaml (exact match).
   skip_urls: []
   #  - "*orf.at*"
   #  - "*youtube.com*"
@@ -107,14 +107,14 @@ aggregator:
     max_sessions_per_day: 200
     min_session_seconds: 60
 
-  # Motivations-Extraktion via VISION-LLM (OpenAI-kompatibles
-  # chat/completions mit image_url content parts). Sendet pro Session bis
-  # zu max_images_per_session Screenshots plus minimaler Session-Meta und
-  # erwartet einen kurzen deutschen Motivationssatz zurueck.
-  # Endpoint MUSS LOKAL bleiben — Screenshots zeigen alles vom Bildschirm.
+  # Motivation extraction via a vision LLM (OpenAI-compatible chat/completions
+  # with image_url content parts). Sends up to max_images_per_session
+  # screenshots plus minimal session metadata and expects a short motivational
+  # message in English.
+  # The endpoint MUST remain LOCAL — screenshots may show anything on screen.
   motivation_llm:
     enabled: false
-    endpoint: ""        # z.B. http://localhost:1234/v1/chat/completions
+    endpoint: ""        # e.g. http://localhost:1234/v1/chat/completions
     model: "local-vision-model"
     timeout_seconds: 30
     max_images_per_session: 6

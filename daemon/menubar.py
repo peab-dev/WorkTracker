@@ -820,7 +820,7 @@ class WTRhythmView(NSView):
                     path.fill()
                     continue
 
-                # Active cell — hellblau = Tagesarbeitszeit (06–20), dunkelblau = Nachtarbeitszeit
+                # Active cell: light blue = daytime work, dark blue = nighttime work
                 healthy = 6 <= hr < 20
                 day_blue = NSColor.colorWithCalibratedRed_green_blue_alpha_(
                     0.42, 0.71, 1.0, 1.0
@@ -872,8 +872,8 @@ class WTRhythmView(NSView):
             NSForegroundColorAttributeName: NSColor.tertiaryLabelColor(),
         }
         leg_specs = [
-            (NSColor.colorWithCalibratedRed_green_blue_alpha_(0.42, 0.71, 1.0, 1.0), "Tag (06–20)"),
-            (NSColor.colorWithCalibratedRed_green_blue_alpha_(0.12, 0.23, 0.54, 1.0), "Nacht (20–06)"),
+            (NSColor.colorWithCalibratedRed_green_blue_alpha_(0.42, 0.71, 1.0, 1.0), "Day (06–20)"),
+            (NSColor.colorWithCalibratedRed_green_blue_alpha_(0.12, 0.23, 0.54, 1.0), "Night (20–06)"),
         ]
         lx = leg_pad
         for color, label in leg_specs:
@@ -892,7 +892,7 @@ class WTRhythmView(NSView):
 
 
 class WTRecentRowView(NSView):
-    """A 'Zuletzt' entry: accent dot · topic · project pill."""
+    """A 'Recent' entry: accent dot · topic · project pill."""
 
     _label = ""
     _project = ""
@@ -1207,7 +1207,7 @@ class WorkTrackerMenubar(NSObject):
 
             # ── Hero: 3 ring gauges at the top ──────────────────
             # Left: Sessions count (progress vs. soft target 20)
-            # Center (hero): Arbeitszeit in % of 8h target
+            # Center (hero): work time as a percentage of the 8h target
             # Right: Focus count (progress vs. target 4)
             target_sec = 8 * 3600
             pct_work = min(1.0, total_sec_val / target_sec) if target_sec else 0
@@ -1220,16 +1220,16 @@ class WorkTrackerMenubar(NSObject):
             self._add_gauge_row(
                 [
                     ("Sessions", str(sessions_count), pct_sessions, "cyan"),
-                    ("Arbeitszeit", total, pct_work, work_accent),
+                    ("Work Time", total, pct_work, work_accent),
                     ("Focus", str(focus), pct_focus, focus_accent),
                 ],
                 height=92.0,
             )
 
-            # ── Nutzungsverlauf (Hourly Line Chart) ─────────────
+            # ── Usage history (hourly line chart) ───────────────
             hourly = day.get("hourly", [])
             if hourly and any(h > 0 for h in hourly):
-                self._add_header("Nutzungsverlauf · ab 06:00")
+                self._add_header("Usage History · from 06:00")
                 rotated, display_hours = rotate_hourly_to_day_start(hourly)
                 self._add_line_chart(
                     rotated,
@@ -1238,12 +1238,12 @@ class WorkTrackerMenubar(NSObject):
                     display_hours=display_hours,
                 )
 
-            # ── Heute — detail stat rows ────────────────────────
-            self._add_header("Heute")
+            # ── Today — detail stat rows ────────────────────────
+            self._add_header("Today")
 
             focus_pct = (focus_sec_val / total_sec_val * 100) if total_sec_val else 0
             self._add_stat_row(
-                "Focus-Anteil",
+                "Focus Share",
                 f"{fmt_duration(focus_sec_val)}  ({focus_pct:.0f}%)",
                 dot_color="green" if focus > 0 else "orange",
                 value_color="green" if focus > 0 else "orange",
@@ -1251,7 +1251,7 @@ class WorkTrackerMenubar(NSObject):
 
             sw_color = "green" if sw_ph < 20 else "yellow" if sw_ph < 40 else "orange"
             self._add_stat_row(
-                "App-Wechsel", f"{sw}  ({int(sw_ph)}/h)",
+                "App Switches", f"{sw}  ({int(sw_ph)}/h)",
                 dot_color=sw_color, value_color=sw_color,
             )
             self._add_stat_row("Keystrokes", f"{keys:,}", dot_color="purple")
@@ -1260,7 +1260,7 @@ class WorkTrackerMenubar(NSObject):
             # ── Projects with real NSView bar rows ──────────────
             projects = day.get("projects", [])
             if projects:
-                self._add_header("Projekte")
+                self._add_header("Projects")
                 for p in projects[:6]:
                     name = p.get("name", "?")
                     if len(name) > 18:
@@ -1280,7 +1280,7 @@ class WorkTrackerMenubar(NSObject):
             # ── Topics with real bar rows ───────────────────────
             topics = aggregate_topics(sessions, top_n=6, min_sec=60)
             if topics:
-                self._add_header("Themen")
+                self._add_header("Topics")
                 max_sec = max((t["sec"] for t in topics), default=1)
                 for t in topics:
                     name = t["name"]
@@ -1303,7 +1303,7 @@ class WorkTrackerMenubar(NSObject):
             # Recent topics (last 3 sessions with topics)
             recent = recent_topics(sessions, n=3)
             if recent:
-                self._add_header("Zuletzt")
+                self._add_header("Recent")
                 for r in recent:
                     name = r["name"]
                     if len(name) > 32:
@@ -1317,10 +1317,10 @@ class WorkTrackerMenubar(NSObject):
                         accent_color_name="cyan",
                     )
 
-        # ── Dienste: Collector with running-since ───────────────
+        # ── Services: collector with running-since ──────────────
         services = data.get("services", {})
         if services:
-            self._add_header("Dienste")
+            self._add_header("Services")
             collector = services.get("collector", {}) or {}
             col_running = bool(collector.get("running")) or (
                 collector.get("loaded", False) and collector.get("pid") is not None
@@ -1328,7 +1328,7 @@ class WorkTrackerMenubar(NSObject):
             uptime_sec = collector.get("uptime_sec")
             if col_running:
                 status_text = (
-                    f"läuft · {fmt_uptime(uptime_sec)}" if uptime_sec else "läuft"
+                    f"running · {fmt_uptime(uptime_sec)}" if uptime_sec else "running"
                 )
                 self._add_service_row("Collector", status_text, ok=True)
             else:
@@ -1340,23 +1340,23 @@ class WorkTrackerMenubar(NSObject):
         self._build_rhythm_section()
 
         # Actions
-        self._add_action("Dashboard öffnen", "openDashboard:")
-        self._add_action("Jetzt aktualisieren", "refresh:")
+        self._add_action("Open Dashboard", "openDashboard:")
+        self._add_action("Refresh Now", "refresh:")
         self._add_separator()
-        self._add_action("Beenden", "terminate:")
+        self._add_action("Quit", "terminate:")
 
     def _build_error_menu(self):
         """Build menu when API is unreachable."""
         self.menu.removeAllItems()
         self._add_header("WorkTracker")
         self._add_separator()
-        self._add_item("  ⚠ API nicht erreichbar", enabled=False, color="red")
-        self._add_item("  localhost:7880 antwortet nicht", enabled=False)
-        self._add_item("  → wt web  starten", enabled=False, color="cyan")
+        self._add_item("  ⚠ API unavailable", enabled=False, color="red")
+        self._add_item("  localhost:7880 is not responding", enabled=False)
+        self._add_item("  → start with wt web", enabled=False, color="cyan")
         self._add_separator()
-        self._add_action("Erneut versuchen", "refresh:")
+        self._add_action("Try Again", "refresh:")
         self._add_separator()
-        self._add_action("Beenden", "terminate:")
+        self._add_action("Quit", "terminate:")
 
     def _build_rhythm_section(self):
         """Add a 7-day rhythm heatmap with a 06:00→06:00 day definition.
@@ -1366,7 +1366,7 @@ class WorkTrackerMenubar(NSObject):
           * if now.hour >= 6 → starts at today 06:00
           * if now.hour <  6 → starts at yesterday 06:00
         """
-        self._add_header("Rhythmus · 7 Tage · 06 → 06")
+        self._add_header("Rhythm · 7 Days · 06 → 06")
 
         now = datetime.now()
         # Determine start date of the rhythm day containing 'now'.
@@ -1573,7 +1573,7 @@ class WorkTrackerMenubar(NSObject):
             pass
 
     def _add_recent_row(self, label, project, accent_color_name="cyan"):
-        """Add a 'Zuletzt' entry (dot · topic · project-pill)."""
+        """Add a 'Recent' entry (dot · topic · project pill)."""
         try:
             frame = NSMakeRect(0, 0, self.MENU_WIDTH + 20, 22.0)
             view = WTRecentRowView.alloc().initWithFrame_label_project_accent_(

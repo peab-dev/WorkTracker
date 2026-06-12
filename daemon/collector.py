@@ -1533,11 +1533,11 @@ def collect_snapshot(
                 active, screenshot_cfg, cfg, patterns
             )
             if skip_reason:
-                # Blockiert: kein Screenshot, nur Vermerk im Skip-Log. last_ts
-                # wird trotzdem gesetzt, damit pro Screenshot-Intervall (nicht
-                # pro Collector-Tick) höchstens ein Skip-Eintrag entsteht.
+                # Blocked: no screenshot, only an entry in the skip log. Set
+                # last_ts anyway so each screenshot interval, rather than each
+                # collector tick, creates at most one skip entry.
                 logging.getLogger("worktracker.screenshot_skips").info(
-                    "Screenshot übersprungen — blockiert durch %s", skip_reason
+                    "Screenshot skipped — blocked by %s", skip_reason
                 )
                 if screenshot_state is not None:
                     screenshot_state["last_ts"] = now

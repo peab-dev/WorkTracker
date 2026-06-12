@@ -326,7 +326,7 @@ cmd_status() {
     local scr_dir_today="$SCR_DIR/${today}"
 
     local tstats
-    tstats=$(run_with_spinner "Berechne Daten von heute…" \
+    tstats=$(run_with_spinner "Calculating today's data…" \
         today_stats "$snap_file" "$sess_file" "$scr_dir_today") || tstats=""
 
     local snap_count snap_bytes sess_count sess_bytes scr_count scr_bytes
@@ -363,7 +363,7 @@ cmd_status() {
     # only days whose files changed since the last run are recomputed.
     local cache_file="$LOG_DIR/wt-cache.log"
     local hist
-    hist=$(run_with_spinner "Berechne Full History…" \
+    hist=$(run_with_spinner "Calculating full history…" \
         "$VENV" "$DAEMON/history_stats.py" "$SNAP_DIR" "$SESS_DIR" "$SCR_DIR" "$cache_file") || hist=""
 
     local all_snap_count all_snap_bytes all_sess_count all_sess_bytes all_scr_count all_scr_bytes refreshed
@@ -384,9 +384,9 @@ cmd_status() {
     local all_bytes=$(( all_snap_bytes + all_sess_bytes + all_scr_bytes ))
     printf "  ${GRAY_L}All:${RST}          ${WHITE}%s${RST}  ${GRAY_L}(%s)${RST}    ${GRAY_L}Logs:${RST} ${WHITE}%s${RST}\n" "$all_count" "$(human_size "$all_bytes")" "$log_size"
     if (( refreshed > 0 )); then
-        printf "  ${GRAY}${DIM}cache: %s Tag(e) neu berechnet${RST}\n" "$refreshed"
+        printf "  ${GRAY}${DIM}cache: %s day(s) recalculated${RST}\n" "$refreshed"
     else
-        printf "  ${GRAY}${DIM}cache: alle Tage aus wt-cache.log${RST}\n"
+        printf "  ${GRAY}${DIM}cache: all days loaded from wt-cache.log${RST}\n"
     fi
 
     section "Reports"
@@ -1007,13 +1007,13 @@ cmd_backfill() {
     IFS=$'\n' snap_dates=($(sort <<<"${snap_dates[*]}")); unset IFS
 
     if [[ ${#snap_dates[@]} -eq 0 ]]; then
-        msg_info "Keine vergangenen Snapshots gefunden"
+        msg_info "No historical snapshots found"
         echo ""
         return
     fi
 
     # ── Check missing daily reports ──
-    section "Tagesberichte"
+    section "Daily Reports"
 
     local missing_daily=()
     for d in "${snap_dates[@]}"; do
@@ -1023,9 +1023,9 @@ cmd_backfill() {
     done
 
     if [[ ${#missing_daily[@]} -eq 0 ]]; then
-        msg_ok "Alle ${WHITE}${BOLD}${#snap_dates[@]}${RST} Tagesberichte vorhanden"
+        msg_ok "All ${WHITE}${BOLD}${#snap_dates[@]}${RST} daily reports are available"
     else
-        msg_warn "${WHITE}${BOLD}${#missing_daily[@]}${RST} fehlende Tagesberichte gefunden"
+        msg_warn "Found ${WHITE}${BOLD}${#missing_daily[@]}${RST} missing daily reports"
         echo ""
 
         local ok=0
@@ -1046,22 +1046,22 @@ cmd_backfill() {
                 total_topics=$((total_topics + ${topics:-0}))
                 ((ok++))
             else
-                printf "  ${GRAY_L}%s${RST} ${RED}${SYM_CROSS} fehlgeschlagen${RST}\n" "$d"
+                printf "  ${GRAY_L}%s${RST} ${RED}${SYM_CROSS} failed${RST}\n" "$d"
                 ((fail++))
             fi
         done
 
         echo ""
         if [[ $fail -eq 0 ]]; then
-            msg_ok "Alle ${WHITE}${BOLD}${ok}${RST} fehlenden Tagesberichte nachgeholt"
+            msg_ok "Generated all ${WHITE}${BOLD}${ok}${RST} missing daily reports"
         else
-            msg_warn "${WHITE}${BOLD}${ok}${RST} OK, ${RED}${fail}${RST} fehlgeschlagen"
+            msg_warn "${WHITE}${BOLD}${ok}${RST} succeeded, ${RED}${fail}${RST} failed"
         fi
         msg_info "Total: ${WHITE}${BOLD}${total_sessions}${RST} sessions, ${WHITE}${BOLD}${total_inherited}${RST} inherited, ${WHITE}${BOLD}${total_topics}${RST} topics"
     fi
 
     # ── Check missing weekly reports ──
-    section "Wochenberichte"
+    section "Weekly Reports"
 
     # Collect unique ISO weeks from snapshot dates (exclude current incomplete week)
     local current_week
@@ -1081,9 +1081,9 @@ cmd_backfill() {
     done
 
     if [[ ${#missing_weekly[@]} -eq 0 ]]; then
-        msg_ok "Alle ${WHITE}${BOLD}${total_weeks}${RST} Wochenberichte vorhanden"
+        msg_ok "All ${WHITE}${BOLD}${total_weeks}${RST} weekly reports are available"
     else
-        msg_warn "${WHITE}${BOLD}${#missing_weekly[@]}${RST} fehlende Wochenberichte gefunden"
+        msg_warn "Found ${WHITE}${BOLD}${#missing_weekly[@]}${RST} missing weekly reports"
         echo ""
 
         local ok=0
@@ -1098,19 +1098,19 @@ cmd_backfill() {
 
             printf "  ${GRAY_L}%s${RST} ${GRAY}(%s)${RST} " "$wk" "$monday"
             if "$VENV" "$DAEMON/aggregator.py" --mode weekly --date "$monday" >/dev/null 2>&1; then
-                printf "${GREEN}${SYM_CHECK} generiert${RST}\n"
+                printf "${GREEN}${SYM_CHECK} generated${RST}\n"
                 ((ok++))
             else
-                printf "${RED}${SYM_CROSS} fehlgeschlagen${RST}\n"
+                printf "${RED}${SYM_CROSS} failed${RST}\n"
                 ((fail++))
             fi
         done
 
         echo ""
         if [[ $fail -eq 0 ]]; then
-            msg_ok "Alle ${WHITE}${BOLD}${ok}${RST} fehlenden Wochenberichte nachgeholt"
+            msg_ok "Generated all ${WHITE}${BOLD}${ok}${RST} missing weekly reports"
         else
-            msg_warn "${WHITE}${BOLD}${ok}${RST} OK, ${RED}${fail}${RST} fehlgeschlagen"
+            msg_warn "${WHITE}${BOLD}${ok}${RST} succeeded, ${RED}${fail}${RST} failed"
         fi
     fi
 
@@ -1122,7 +1122,7 @@ cmd_compress() {
 
     local script="$DAEMON/compress_screenshots.sh"
     if [[ ! -x "$script" ]]; then
-        msg_err "Skript fehlt oder nicht ausführbar: ${DIM}$script${RST}"
+        msg_err "Script is missing or not executable: ${DIM}$script${RST}"
         exit 1
     fi
 
@@ -1145,9 +1145,9 @@ cmd_compress() {
 
     echo ""
     if [[ "$exit_code" -eq 0 ]]; then
-        msg_ok "Kompression fertig $(badge_ok "${elapsed_ms}ms")"
+        msg_ok "Compression complete $(badge_ok "${elapsed_ms}ms")"
     else
-        msg_err "Kompression mit Fehlern beendet (exit $exit_code)"
+        msg_err "Compression finished with errors (exit $exit_code)"
         exit "$exit_code"
     fi
     echo ""

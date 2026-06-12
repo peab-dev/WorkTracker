@@ -25,16 +25,15 @@ from urllib.parse import urlparse
 log = logging.getLogger("aggregator.topic_extractor")
 
 _SYSTEM_PROMPT = (
-    "Du bekommst ein JSON-Array von Arbeits-Sessions, jede mit einem 'idx'-Feld. "
-    "Für JEDE Session extrahierst du ein Thema (Deutsch), das beschreibt WAS "
-    "inhaltlich gemacht wird (nicht den App-Namen), und zusätzlich eine etwas "
-    "ausführlichere Beschreibung in ca. 2–3 Sätzen. "
-    "Du gibst NUR ein JSON-Array zurück, je Eintrag ein Objekt der Form "
-    '{"idx": <zahl>, "topic": "<thema>", "topic_long": "<2-3 sätze>"} '
-    "— ein Objekt pro Input-Session, in beliebiger Reihenfolge. "
-    "Keine Prosa, keine Code-Fences, keine Kommentare. "
-    "Wenn du aus den Infos kein sinnvolles Thema ableiten kannst, lasse "
-    "'topic' und 'topic_long' leer ('')."
+    "You receive a JSON array of work sessions, each with an 'idx' field. "
+    "For EVERY session, extract an English topic that describes WHAT work is "
+    "being done rather than the app name, plus a more detailed description "
+    "of about 2 to 3 sentences. Return ONLY a JSON array with one object per "
+    "input session, in any order, using this shape: "
+    '{"idx": <number>, "topic": "<topic>", "topic_long": "<2-3 sentences>"}. '
+    "Do not return prose, code fences, or comments. If the available "
+    "information does not support a meaningful topic, leave 'topic' and "
+    "'topic_long' empty ('')."
 )
 
 
@@ -242,8 +241,8 @@ def extract_topics(sessions: list[dict], cfg: dict,
         user_msg = (
             "Input:\n"
             + json.dumps(briefs_with_idx, ensure_ascii=False)
-            + f'\n\nOutput (JSON-Array, {len(batch)} Objekte, jeweils '
-            '{"idx": <zahl>, "topic": "<thema>", "topic_long": "<2-3 sätze>"}):'
+            + f'\n\nOutput (JSON array, {len(batch)} objects, each shaped as '
+            '{"idx": <number>, "topic": "<topic>", "topic_long": "<2-3 sentences>"}):'
         )
         payload = {
             "model": model,

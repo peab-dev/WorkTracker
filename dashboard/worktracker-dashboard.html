@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WorkTracker Dashboard — April & Mai 2026</title>
+<title>WorkTracker Dashboard — April & May 2026</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root {
@@ -185,7 +185,7 @@
   }
   .delta-pos { background: rgba(52,211,153,0.15); color: var(--green); }
   .delta-neg { background: rgba(248,113,113,0.15); color: var(--red); }
-  .delta-neu { background: rgba(136,146,164,0.15); color: var(--muted); }
+  .delta-neutral { background: rgba(136,146,164,0.15); color: var(--muted); }
 
   .score-bar {
     height: 6px;
@@ -500,49 +500,49 @@
       <div class="header-icon">📊</div>
       <div>
         <h1>WorkTracker Dashboard</h1>
-        <div class="header-sub">April & Mai 2026 — Wochen- & Monatsanalyse</div>
+        <div class="header-sub">April & May 2026 — Weekly & Monthly Analysis</div>
       </div>
     </div>
     <div class="header-nav">
-      <button class="nav-btn active" onclick="showSection('overview')">Übersicht</button>
-      <button class="nav-btn" onclick="showSection('weekly')">Wochen</button>
-      <button class="nav-btn" onclick="showSection('projects')">Projekte</button>
-      <button class="nav-btn" onclick="showSection('media')">Medien & Muster</button>
-      <button class="nav-btn" onclick="showSection('insights')">Erkenntnisse</button>
+      <button class="nav-btn active" onclick="showSection('overview')">Overview</button>
+      <button class="nav-btn" onclick="showSection('weekly')">Weeks</button>
+      <button class="nav-btn" onclick="showSection('projects')">Projects</button>
+      <button class="nav-btn" onclick="showSection('media')">Media & Patterns</button>
+      <button class="nav-btn" onclick="showSection('insights')">Insights</button>
     </div>
-    <div class="header-badge">Stand: <span>22.05.2026</span></div>
+    <div class="header-badge">As of: <span>May 22, 2026</span></div>
   </div>
 </div>
 
 <div class="main">
   <!-- MOBILE NAV -->
   <div class="mobile-nav">
-    <button class="nav-btn active" onclick="showSection('overview')">Übersicht</button>
-    <button class="nav-btn" onclick="showSection('weekly')">Wochen</button>
-    <button class="nav-btn" onclick="showSection('projects')">Projekte</button>
-    <button class="nav-btn" onclick="showSection('media')">Medien & Muster</button>
-    <button class="nav-btn" onclick="showSection('insights')">Erkenntnisse</button>
+    <button class="nav-btn active" onclick="showSection('overview')">Overview</button>
+    <button class="nav-btn" onclick="showSection('weekly')">Weeks</button>
+    <button class="nav-btn" onclick="showSection('projects')">Projects</button>
+    <button class="nav-btn" onclick="showSection('media')">Media & Patterns</button>
+    <button class="nav-btn" onclick="showSection('insights')">Insights</button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════ -->
-  <!-- SECTION: ÜBERSICHT -->
+  <!-- SECTION: OVERVIEW -->
   <!-- ═══════════════════════════════════════════════════════ -->
   <div id="section-overview" class="section active">
 
     <!-- KPI ROW -->
-    <div class="section-label">Monatsvergleich auf einen Blick</div>
+    <div class="section-label">Monthly Comparison at a Glance</div>
     <div class="grid-4">
-      <!-- Gesamt-Score -->
+      <!-- Overall Score -->
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Monats-Score</span>
-          <span class="card-badge badge-purple">Ø/10</span>
+          <span class="card-title">Monthly Score</span>
+          <span class="card-badge badge-purple">Avg/10</span>
         </div>
         <div class="kpi-value" style="color:var(--accent2)">3.3</div>
-        <div class="kpi-label">Ø über beide Monate</div>
+        <div class="kpi-label">Average across both months</div>
         <div class="kpi-compare">
           <div style="flex:1">
-            <div style="font-size:11px; color:var(--muted); margin-bottom:3px">April 3.4 / Mai 3.2</div>
+            <div style="font-size:11px; color:var(--muted); margin-bottom:3px">April 3.4 / May 3.2</div>
             <div class="score-bar"><div class="score-fill" style="width:33%; background:linear-gradient(90deg,var(--accent),var(--purple))"></div></div>
           </div>
         </div>
@@ -554,11 +554,11 @@
           <span class="card-badge badge-green">+62%</span>
         </div>
         <div class="kpi-value" style="color:var(--green)">125</div>
-        <div class="kpi-label">Mai vs. 77 im April</div>
+        <div class="kpi-label">May vs. 77 in April</div>
         <div class="kpi-compare">
           <div class="kpi-april">Apr: 77</div>
           <div style="width: 1px; height: 12px; background: var(--border); margin: 0 4px;"></div>
-          <div class="kpi-may" style="color:var(--green)">Mai: 125</div>
+          <div class="kpi-may" style="color:var(--green)">May: 125</div>
           <div class="kpi-delta delta-pos">↑ +62%</div>
         </div>
       </div>
@@ -569,11 +569,11 @@
           <span class="card-badge badge-green">−47%</span>
         </div>
         <div class="kpi-value" style="color:var(--yellow)">~21h</div>
-        <div class="kpi-label">Mai vs. ~40h im April</div>
+        <div class="kpi-label">May vs. ~40h in April</div>
         <div class="kpi-compare">
           <div class="kpi-april">Apr: ~40h</div>
           <div style="width: 1px; height: 12px; background: var(--border); margin: 0 4px;"></div>
-          <div class="kpi-may" style="color:var(--yellow)">Mai: ~21h</div>
+          <div class="kpi-may" style="color:var(--yellow)">May: ~21h</div>
           <div class="kpi-delta delta-pos">↓ −47%</div>
         </div>
       </div>
@@ -584,11 +584,11 @@
           <span class="card-badge badge-red">−79%</span>
         </div>
         <div class="kpi-value" style="color:var(--red)">~6h</div>
-        <div class="kpi-label">Mai vs. 30h im April</div>
+        <div class="kpi-label">May vs. 30h in April</div>
         <div class="kpi-compare">
           <div class="kpi-april">Apr: 30h</div>
           <div style="width: 1px; height: 12px; background: var(--border); margin: 0 4px;"></div>
-          <div class="kpi-may" style="color:var(--red)">Mai: ~6h</div>
+          <div class="kpi-may" style="color:var(--red)">May: ~6h</div>
           <div class="kpi-delta delta-neg">↓ −79%</div>
         </div>
       </div>
@@ -597,7 +597,7 @@
     <!-- SECOND ROW KPI -->
     <div class="grid-4">
       <div class="card">
-        <div class="card-header"><span class="card-title">Erfasste Zeit</span></div>
+        <div class="card-header"><span class="card-title">Tracked Time</span></div>
         <div style="display:flex; gap:16px; align-items:center; margin-bottom:10px">
           <div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:2px">April</div>
@@ -605,14 +605,14 @@
           </div>
           <div style="font-size:20px;color:var(--border)">→</div>
           <div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Mai</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">May</div>
             <div style="font-size:22px;font-weight:800;color:var(--may)">~385h</div>
           </div>
         </div>
-        <div class="kpi-delta delta-neu" style="display:inline-block">−3% ≈ stabil</div>
+        <div class="kpi-delta delta-neutral" style="display:inline-block">−3% ≈ stable</div>
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">Aktive Tage</span></div>
+        <div class="card-header"><span class="card-title">Active Days</span></div>
         <div style="display:flex; gap:16px; align-items:center; margin-bottom:10px">
           <div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:2px">April</div>
@@ -620,14 +620,14 @@
           </div>
           <div style="font-size:20px;color:var(--border)">→</div>
           <div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Mai</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">May</div>
             <div style="font-size:22px;font-weight:800;color:var(--may)">~22</div>
           </div>
         </div>
         <div class="kpi-delta delta-pos" style="display:inline-block">↑ +22%</div>
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">Ø App-Wechsel/h</span></div>
+        <div class="card-header"><span class="card-title">Avg App Switches/h</span></div>
         <div style="display:flex; gap:16px; align-items:center; margin-bottom:10px">
           <div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:2px">April</div>
@@ -635,14 +635,14 @@
           </div>
           <div style="font-size:20px;color:var(--border)">→</div>
           <div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Mai</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">May</div>
             <div style="font-size:22px;font-weight:800;color:var(--green)">~14</div>
           </div>
         </div>
-        <div class="kpi-delta delta-pos" style="display:inline-block">↓ −44% (besser)</div>
+        <div class="kpi-delta delta-pos" style="display:inline-block">↓ −44% (better)</div>
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">Git-Commits</span></div>
+        <div class="card-header"><span class="card-title">Git Commits</span></div>
         <div style="display:flex; gap:16px; align-items:center; margin-bottom:10px">
           <div>
             <div style="font-size:11px;color:var(--muted);margin-bottom:2px">April</div>
@@ -650,7 +650,7 @@
           </div>
           <div style="font-size:20px;color:var(--border)">→</div>
           <div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">Mai</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:2px">May</div>
             <div style="font-size:22px;font-weight:800;color:var(--red)">0</div>
           </div>
         </div>
@@ -662,10 +662,10 @@
     <div class="grid-2-1">
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Wochen-Score Verlauf — W15 bis W21</span>
+          <span class="card-title">Weekly Score Trend — W15 to W21</span>
           <div style="display:flex;gap:8px">
             <span class="week-pill w15" style="font-size:10px;padding:2px 7px">April</span>
-            <span class="week-pill w21" style="font-size:10px;padding:2px 7px">Mai</span>
+            <span class="week-pill w21" style="font-size:10px;padding:2px 7px">May</span>
           </div>
         </div>
         <div class="chart-container">
@@ -674,12 +674,12 @@
       </div>
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Score pro Woche</span>
+          <span class="card-title">Score per Week</span>
         </div>
         <table class="data-table">
           <thead>
             <tr>
-              <th>Woche</th>
+              <th>Week</th>
               <th>Score</th>
               <th class="right">Trend</th>
             </tr>
@@ -726,10 +726,10 @@
     </div>
 
     <!-- TIME DISTRIBUTION CHART -->
-    <div class="section-label">Zeitverteilung pro Woche</div>
+    <div class="section-label">Time Distribution per Week</div>
     <div class="card" style="margin-bottom:24px">
       <div class="card-header">
-        <span class="card-title">Erfasste Stunden — Kategorie-Aufschlüsselung</span>
+        <span class="card-title">Tracked Hours — Category Breakdown</span>
       </div>
       <div class="chart-container tall">
         <canvas id="timeDistChart"></canvas>
@@ -739,16 +739,16 @@
   </div><!-- /overview -->
 
   <!-- ═══════════════════════════════════════════════════════ -->
-  <!-- SECTION: WOCHEN -->
+  <!-- SECTION: WEEKS -->
   <!-- ═══════════════════════════════════════════════════════ -->
   <div id="section-weekly" class="section">
 
-    <div class="section-label">Wochen-Detail — W15 bis W21</div>
+    <div class="section-label">Weekly Detail — W15 to W21</div>
     <div class="grid-3" style="margin-bottom:24px">
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Focus Sessions / Woche</span>
-          <span class="card-badge badge-green">+62% Mai</span>
+          <span class="card-title">Focus Sessions / Week</span>
+          <span class="card-badge badge-green">+62% May</span>
         </div>
         <div class="chart-container short">
           <canvas id="focusChart"></canvas>
@@ -756,8 +756,8 @@
       </div>
       <div class="card">
         <div class="card-header">
-          <span class="card-title">App-Wechsel/h</span>
-          <span class="card-badge badge-green">↓ Mai</span>
+          <span class="card-title">App Switches/h</span>
+          <span class="card-badge badge-green">↓ May</span>
         </div>
         <div class="chart-container short">
           <canvas id="switchChart"></canvas>
@@ -765,7 +765,7 @@
       </div>
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Hintergrundmedien / Woche</span>
+          <span class="card-title">Background Media / Week</span>
           <span class="card-badge badge-yellow">Pattern</span>
         </div>
         <div class="chart-container short">
@@ -775,13 +775,13 @@
     </div>
 
     <!-- WEEKLY DETAIL TABLE -->
-    <div class="section-label">Vollständiger Wochenvergleich</div>
+    <div class="section-label">Complete Weekly Comparison</div>
     <div class="card" style="margin-bottom:24px">
       <div class="table-scroll">
         <table class="data-table" style="min-width:900px">
           <thead>
             <tr>
-              <th>Woche</th>
+              <th>Week</th>
               <th>Score</th>
               <th>Focus</th>
               <th>YouTube</th>
@@ -789,8 +789,8 @@
               <th>Social</th>
               <th>ORF</th>
               <th>Bitget</th>
-              <th>Top Projekt</th>
-              <th>Highlight / Tief</th>
+              <th>Top Project</th>
+              <th>Highlight / Low</th>
             </tr>
           </thead>
           <tbody>
@@ -804,7 +804,7 @@
               <td class="num">—</td>
               <td class="num">—</td>
               <td>WorkTracker</td>
-              <td>Do 14:00 Block: 5.712 Keys/h</td>
+              <td>Thu 14:00 block: 5,712 keys/h</td>
             </tr>
             <tr style="background:rgba(52,211,153,0.04)">
               <td><span class="week-pill w16">W16 🏆</span></td>
@@ -816,7 +816,7 @@
               <td class="num">—</td>
               <td class="num">—</td>
               <td style="color:var(--green)">ai-brainmap</td>
-              <td style="color:var(--green)">28.227 Keys Rekord, 9 Commits</td>
+              <td style="color:var(--green)">28,227 key record, 9 commits</td>
             </tr>
             <tr style="background:rgba(248,113,113,0.04)">
               <td><span class="week-pill w17">W17</span></td>
@@ -828,7 +828,7 @@
               <td class="num">—</td>
               <td class="num">—</td>
               <td style="color:var(--red)">Media (44%!)</td>
-              <td style="color:var(--red)">Post-Peak-Kollaps: 44h Konsum</td>
+              <td style="color:var(--red)">Post-peak collapse: 44h consumption</td>
             </tr>
             <tr>
               <td><span class="week-pill w18">W18</span></td>
@@ -840,7 +840,7 @@
               <td class="num">—</td>
               <td class="num">—</td>
               <td>ChatGPT/Research</td>
-              <td>YouTube ↓78%, aber Social ↑</td>
+              <td>YouTube ↓78%, but social ↑</td>
             </tr>
             <tr>
               <td><span class="week-pill w19">W19</span></td>
@@ -851,8 +851,8 @@
               <td class="num">—</td>
               <td class="num" style="color:var(--orange)">25h</td>
               <td class="num">—</td>
-              <td>ORF Hintergrund</td>
-              <td>Amazon Prime 15h, Kanu-Trip 2.8h</td>
+              <td>ORF Background</td>
+              <td>Amazon Prime 15h, canoe trip 2.8h</td>
             </tr>
             <tr style="background:rgba(248,113,113,0.04)">
               <td><span class="week-pill w20">W20</span></td>
@@ -863,8 +863,8 @@
               <td class="num">—</td>
               <td class="num">—</td>
               <td class="num" style="color:var(--red)">18.7h</td>
-              <td style="color:var(--red)">Bitget passiv</td>
-              <td style="color:var(--red)">Sa allein: 8.4h Bitget-Staring</td>
+              <td style="color:var(--red)">Passive Bitget</td>
+              <td style="color:var(--red)">Saturday alone: 8.4h watching Bitget</td>
             </tr>
             <tr style="background:rgba(74,222,128,0.04)">
               <td><span class="week-pill w21">W21</span></td>
@@ -876,36 +876,36 @@
               <td class="num">—</td>
               <td class="num">~0.7h</td>
               <td style="color:var(--green)">Hippieparty 4.4h</td>
-              <td style="color:var(--green)">Bitget normalisiert, Mi offline</td>
+              <td style="color:var(--green)">Bitget normalized, Wednesday offline</td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <!-- W16 vs W21 Vergleich -->
-    <div class="section-label">Beste Woche des Monats im Vergleich</div>
+    <!-- W16 vs W21 comparison -->
+    <div class="section-label">Best Week of Each Month Compared</div>
     <div class="grid-2">
       <div class="card" style="border-color:rgba(52,211,153,0.3)">
         <div class="card-header">
-          <span class="card-title">W16 — Bester April</span>
+          <span class="card-title">W16 — Best of April</span>
           <span class="week-pill w16">4.1/10</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
           <div style="background:var(--bg3);border-radius:8px;padding:12px;text-align:center">
             <div style="font-size:24px;font-weight:800;color:var(--green)">28.227</div>
-            <div style="font-size:11px;color:var(--muted)">Keys Rekord (So)</div>
+            <div style="font-size:11px;color:var(--muted)">Key Record (Sun)</div>
           </div>
           <div style="background:var(--bg3);border-radius:8px;padding:12px;text-align:center">
             <div style="font-size:24px;font-weight:800;color:var(--green)">9</div>
-            <div style="font-size:11px;color:var(--muted)">Git-Commits</div>
+            <div style="font-size:11px;color:var(--muted)">Git Commits</div>
           </div>
         </div>
-        <div style="font-size:12px;color:var(--muted);line-height:1.6">Ostersonntag 07:30–14:00 · Claude Code + ai-brainmap · Live-Preview. Bester Tageslicht-Produktivitätsbeweis. 3.064 Keys/h Ø.</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6">Easter Sunday 07:30–14:00 · Claude Code + ai-brainmap · Live preview. Strongest evidence for daytime productivity. 3,064 keys/h average.</div>
       </div>
       <div class="card" style="border-color:rgba(74,222,128,0.3)">
         <div class="card-header">
-          <span class="card-title">W21 — Bester Mai</span>
+          <span class="card-title">W21 — Best of May</span>
           <span class="week-pill w21">4.0/10</span>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
@@ -918,7 +918,7 @@
             <div style="font-size:11px;color:var(--muted)">Bitget (W20: 18.7h)</div>
           </div>
         </div>
-        <div style="font-size:12px;color:var(--muted);line-height:1.6">Sender.net + Photopea · Austro Intelligence Mo-Nacht 1h 35min · Mi offline ("Anna Essen") als positiver Reset. Bitget normalisiert.</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6">Sender.net + Photopea · Austro Intelligence Monday night 1h 35min · Wednesday offline ("Anna Essen") as a positive reset. Bitget normalized.</div>
       </div>
     </div>
 
@@ -929,11 +929,11 @@
   <!-- ═══════════════════════════════════════════════════════ -->
   <div id="section-projects" class="section">
 
-    <div class="section-label">Projektverteilung — April vs. Mai</div>
+    <div class="section-label">Project Distribution — April vs. May</div>
     <div class="grid-2" style="margin-bottom:24px">
       <div class="card">
         <div class="card-header">
-          <span class="card-title">April 2026 — Projekte</span>
+          <span class="card-title">April 2026 — Projects</span>
           <span style="font-size:12px;color:var(--muted)">395h gesamt</span>
         </div>
         <div class="chart-container">
@@ -942,7 +942,7 @@
       </div>
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Mai 2026 — Projekte</span>
+          <span class="card-title">May 2026 — Projects</span>
           <span style="font-size:12px;color:var(--muted)">~385h bis 22.05.</span>
         </div>
         <div class="chart-container">
@@ -952,10 +952,10 @@
     </div>
 
     <!-- Side-by-side bar comparison -->
-    <div class="section-label">Projektvergleich April → Mai</div>
+    <div class="section-label">Project Comparison April → May</div>
     <div class="card" style="margin-bottom:24px">
       <div class="card-header">
-        <span class="card-title">Stunden pro Projekt — Direktvergleich</span>
+        <span class="card-title">Hours per Project — Direct Comparison</span>
       </div>
       <div class="chart-container tall">
         <canvas id="projectCompChart"></canvas>
@@ -970,12 +970,12 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>Projekt</th>
+            <th>Project</th>
             <th>April</th>
             <th>April %</th>
-            <th>Mai</th>
-            <th>Mai %</th>
-            <th>Δ Stunden</th>
+            <th>May</th>
+            <th>May %</th>
+            <th>Δ Hours</th>
             <th>Trend</th>
           </tr>
         </thead>
@@ -1008,12 +1008,12 @@
             <td style="color:var(--red)">↓↓ −79%</td>
           </tr>
           <tr>
-            <td><strong>ORF</strong> <span style="font-size:11px;color:var(--muted)">(Hintergrund)</span></td>
+            <td><strong>ORF</strong> <span style="font-size:11px;color:var(--muted)">(Background)</span></td>
             <td class="num">—</td>
             <td class="num">—</td>
             <td class="num">~26h</td>
             <td class="num">7%</td>
-            <td><span class="kpi-delta delta-neg">neu</span></td>
+            <td><span class="kpi-delta delta-neg">new</span></td>
             <td style="color:var(--orange)">↑↑ W19-Spike</td>
           </tr>
           <tr>
@@ -1022,7 +1022,7 @@
             <td class="num">—</td>
             <td class="num">~15h</td>
             <td class="num">4%</td>
-            <td><span class="kpi-delta delta-neg">neu</span></td>
+            <td><span class="kpi-delta delta-neg">new</span></td>
             <td style="color:var(--yellow)">↑ W18-Spike</td>
           </tr>
           <tr>
@@ -1031,7 +1031,7 @@
             <td class="num">—</td>
             <td class="num">~8h</td>
             <td class="num">2%</td>
-            <td><span class="kpi-delta delta-neg">neu</span></td>
+            <td><span class="kpi-delta delta-neg">new</span></td>
             <td style="color:var(--red)">↑↑↑ W20-Explosion</td>
           </tr>
           <tr>
@@ -1040,8 +1040,8 @@
             <td class="num">—</td>
             <td class="num">~7h</td>
             <td class="num">2%</td>
-            <td><span class="kpi-delta delta-pos">neu</span></td>
-            <td style="color:var(--green)">↑↑ W21-Durchbruch</td>
+            <td><span class="kpi-delta delta-pos">new</span></td>
+            <td style="color:var(--green)">↑↑ W21 breakthrough</td>
           </tr>
           <tr>
             <td><strong>Studio / LM Studio</strong></td>
@@ -1050,7 +1050,7 @@
             <td class="num">~3h</td>
             <td class="num">1%</td>
             <td><span class="kpi-delta delta-neg">−6h</span></td>
-            <td>→ kein Output</td>
+            <td>→ no output</td>
           </tr>
           <tr>
             <td><strong>ElevenLabs</strong></td>
@@ -1058,7 +1058,7 @@
             <td class="num">1%</td>
             <td class="num">~4h</td>
             <td class="num">1%</td>
-            <td><span class="kpi-delta delta-neu">≈</span></td>
+            <td><span class="kpi-delta delta-neutral">≈</span></td>
             <td>→ 0 Deliverables</td>
           </tr>
           <tr>
@@ -1068,7 +1068,7 @@
             <td class="num">~2h</td>
             <td class="num">&lt;1%</td>
             <td><span class="kpi-delta delta-neg">−1h</span></td>
-            <td style="color:var(--red)">↓↓ eingeschlafen</td>
+            <td style="color:var(--red)">↓↓ dormant</td>
           </tr>
         </tbody>
       </table>
@@ -1077,16 +1077,16 @@
   </div><!-- /projects -->
 
   <!-- ═══════════════════════════════════════════════════════ -->
-  <!-- SECTION: MEDIEN & MUSTER -->
+  <!-- SECTION: MEDIA & PATTERNS -->
   <!-- ═══════════════════════════════════════════════════════ -->
   <div id="section-media" class="section">
 
-    <!-- HINTERGRUNDMEDIEN ROTATION -->
-    <div class="section-label">Hintergrundmedien-Rotation — Das Kernmuster</div>
+    <!-- BACKGROUND MEDIA ROTATION -->
+    <div class="section-label">Background Media Rotation — The Core Pattern</div>
     <div class="card" style="margin-bottom:20px">
       <div class="card-header">
-        <span class="card-title">Primäres Hintergrundmedium pro Woche</span>
-        <span class="card-badge badge-yellow">Pattern erkannt</span>
+        <span class="card-title">Primary Background Medium per Week</span>
+        <span class="card-badge badge-yellow">Pattern detected</span>
       </div>
       <div style="margin-bottom:16px">
         <div class="pattern-track">
@@ -1112,7 +1112,7 @@
             <span>W21</span>
           </div>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:8px">Breite proportional zu Konsumstunden. Jede Woche ein anderes Medium — gleiche Funktion.</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px">Width is proportional to consumption hours. A different medium each week, serving the same function.</div>
       </div>
 
       <div class="chart-container">
@@ -1129,12 +1129,12 @@
     </div>
 
     <!-- DRIFT METERS -->
-    <div class="section-label">Post-Flow-Drift — Task-Ende → Passivkonsum</div>
+    <div class="section-label">Post-Flow Drift — Task End → Passive Consumption</div>
     <div class="grid-2">
       <div class="card">
         <div class="card-header">
-          <span class="card-title">YouTube Wochenverlauf</span>
-          <span class="card-badge badge-yellow">W17 Kollaps</span>
+          <span class="card-title">Weekly YouTube Trend</span>
+          <span class="card-badge badge-yellow">W17 Collapse</span>
         </div>
         <div class="chart-container">
           <canvas id="ytTrendChart"></canvas>
@@ -1142,7 +1142,7 @@
       </div>
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Konsum-Diversifikation</span>
+          <span class="card-title">Consumption Diversification</span>
           <span class="card-badge badge-purple">Rotation</span>
         </div>
         <div style="padding-top:8px">
@@ -1150,7 +1150,7 @@
             <div class="drift-icon">📺</div>
             <div class="drift-info">
               <div class="drift-title">W17 — Netflix Explosion</div>
-              <div class="drift-sub">Post-W16-Peak-Kollaps · 18h 10min in einer Woche</div>
+              <div class="drift-sub">Post-W16 peak collapse · 18h 10min in one week</div>
             </div>
             <div class="drift-value" style="color:var(--red)">18h</div>
           </div>
@@ -1158,15 +1158,15 @@
             <div class="drift-icon">📱</div>
             <div class="drift-info">
               <div class="drift-title">W18 — Social Media Switch</div>
-              <div class="drift-sub">YouTube ↓78% aber Energie wechselt Medium</div>
+              <div class="drift-sub">YouTube ↓78%, but the energy shifts medium</div>
             </div>
             <div class="drift-value" style="color:var(--yellow)">16h</div>
           </div>
           <div class="drift-meter">
             <div class="drift-icon">📻</div>
             <div class="drift-info">
-              <div class="drift-title">W19 — ORF Hintergrundberieselung</div>
-              <div class="drift-sub">+ Amazon Prime 15h · 40h Passivkonsum total</div>
+              <div class="drift-title">W19 — ORF Background Noise</div>
+              <div class="drift-sub">+ Amazon Prime 15h · 40h total passive consumption</div>
             </div>
             <div class="drift-value" style="color:var(--orange)">40h</div>
           </div>
@@ -1174,15 +1174,15 @@
             <div class="drift-icon">📊</div>
             <div class="drift-info">
               <div class="drift-title">W20 — Bitget Passiv-Staring</div>
-              <div class="drift-sub">Samstag allein: 8h 23min Chart-Watching</div>
+              <div class="drift-sub">Saturday alone: 8h 23min watching charts</div>
             </div>
             <div class="drift-value" style="color:var(--red)">19h</div>
           </div>
           <div class="drift-meter" style="border-color:rgba(74,222,128,0.25);background:rgba(74,222,128,0.05)">
             <div class="drift-icon">✅</div>
             <div class="drift-info">
-              <div class="drift-title">W21 — Normalisierung</div>
-              <div class="drift-sub">Bitget ~45min · Mi offline · Projekt-Fokus</div>
+              <div class="drift-title">W21 — Normalization</div>
+              <div class="drift-sub">Bitget ~45min · Wednesday offline · project focus</div>
             </div>
             <div class="drift-value" style="color:var(--green)">&lt;2h</div>
           </div>
@@ -1191,10 +1191,10 @@
     </div>
 
     <!-- CONSUMPTION VS PRODUCTIVITY -->
-    <div class="section-label">Konsum vs. Produktivität — Korrelation</div>
+    <div class="section-label">Consumption vs. Productivity — Correlation</div>
     <div class="card" style="margin-bottom:24px">
       <div class="card-header">
-        <span class="card-title">Konsumstunden vs. Wochen-Score — inverse Korrelation</span>
+        <span class="card-title">Consumption Hours vs. Weekly Score — Inverse Correlation</span>
       </div>
       <div class="chart-container">
         <canvas id="correlationChart"></canvas>
@@ -1204,40 +1204,40 @@
   </div><!-- /media -->
 
   <!-- ═══════════════════════════════════════════════════════ -->
-  <!-- SECTION: ERKENNTNISSE -->
+  <!-- SECTION: INSIGHTS -->
   <!-- ═══════════════════════════════════════════════════════ -->
   <div id="section-insights" class="section">
 
-    <div class="section-label">Kernerkenntnisse aus 7 Wochen Tracking</div>
+    <div class="section-label">Core Insights from 7 Weeks of Tracking</div>
 
     <div class="grid-2">
       <div>
         <div class="insight positive">
           <div class="insight-icon">🚀</div>
           <div>
-            <div class="insight-title">W16-Ostersonntag: Der Beweis ist dokumentiert</div>
-            <div class="insight-text">07:30–14:00, Claude Code + ai-brainmap + Live-Preview = 28.227 Keystrokes, 9 Git-Commits. Die Kombination Tageslicht + klares Ziel + kein Konsum vorher ist reproduzierbar. Score 4.1/10 — das Ceiling ist noch nicht erreicht.</div>
+            <div class="insight-title">W16 Easter Sunday: The Evidence Is Documented</div>
+            <div class="insight-text">07:30–14:00, Claude Code + ai-brainmap + live preview = 28,227 keystrokes and 9 Git commits. The combination of daylight, a clear goal, and no prior consumption is reproducible. Score 4.1/10, with room to improve.</div>
           </div>
         </div>
         <div class="insight positive">
           <div class="insight-icon">📉</div>
           <div>
-            <div class="insight-title">YouTube −47% ohne Script-Zwang (Mai vs. April)</div>
-            <div class="insight-text">Focus-Sessions +62% gleichzeitig. Das zeigt: Verhaltensänderung ist möglich wenn ein konkretes Projekt Priorität hat. W21 beweist es erneut mit Hippieparty als Anker.</div>
+            <div class="insight-title">YouTube −47% Without Script Enforcement (May vs. April)</div>
+            <div class="insight-text">Focus sessions increased 62% at the same time. This shows that behavior can change when a concrete project has priority. W21 demonstrates it again with Hippieparty as the anchor.</div>
           </div>
         </div>
         <div class="insight positive">
           <div class="insight-icon">🎉</div>
           <div>
-            <div class="insight-title">Hippieparty — stärkstes wachsendes Projekt W21</div>
-            <div class="insight-text">4h 26min in W21, Sender.net Email-Marketing + Photopea Visual-Work. Erstmals ein externes Deliverable-Projekt mit echter Momentum. Sender.net-Account läuft bereits.</div>
+            <div class="insight-title">Hippieparty — Strongest Growing Project in W21</div>
+            <div class="insight-text">4h 26min in W21 across Sender.net email marketing and Photopea visual work. It is the first external deliverable project with real momentum. The Sender.net account is already active.</div>
           </div>
         </div>
         <div class="insight info">
           <div class="insight-icon">🔄</div>
           <div>
-            <div class="insight-title">App-Wechsel: April 25/h → Mai 14/h</div>
-            <div class="insight-text">−44% App-Wechsel bei stabiler Gesamtzeit ist ein starkes Signal für tiefere Fokus-Fähigkeit. Weniger Multitasking-Fragmentierung, auch wenn das Medium wechselt.</div>
+            <div class="insight-title">App Switches: April 25/h → May 14/h</div>
+            <div class="insight-text">A 44% reduction in app switches with stable total time strongly indicates deeper focus. Multitasking fragmentation decreased even when the medium changed.</div>
           </div>
         </div>
       </div>
@@ -1245,43 +1245,43 @@
         <div class="insight negative">
           <div class="insight-icon">🔁</div>
           <div>
-            <div class="insight-title">Hintergrundmedien-Rotationsmuster — 5 Wochen in Folge</div>
-            <div class="insight-text">W17 Netflix → W18 Social → W19 ORF → W20 Bitget → W21 normalisiert. Jede Woche ein anderes Medium, gleiche Funktion: passives Auffüllen von unstrukturierten Stunden. Das Grundproblem (kein definierter nächster Schritt) rotiert nur das Symptom.</div>
+            <div class="insight-title">Background Media Rotation — 5 Consecutive Weeks</div>
+            <div class="insight-text">W17 Netflix → W18 social media → W19 ORF → W20 Bitget → W21 normalized. Each week uses a different medium for the same function: passively filling unstructured hours. The underlying issue, no defined next step, merely rotates the symptom.</div>
           </div>
         </div>
         <div class="insight negative">
           <div class="insight-icon">🛑</div>
           <div>
-            <div class="insight-title">WorkTracker Dev: −79%, 0 Git-Commits in 4 Maiwochen</div>
-            <div class="insight-text">Das Kerntool, das alle anderen Systeme verbessern würde, hat seit W16 keinen einzigen Commit. project_patterns.yaml ist 7+ Wochen offen. Night-Lock-Script 7+ Wochen offen. Identifiziert, dokumentiert, nicht umgesetzt.</div>
+            <div class="insight-title">WorkTracker Dev: −79%, 0 Git Commits in 4 May Weeks</div>
+            <div class="insight-text">The core tool that would improve every other system has not received a single commit since W16. project_patterns.yaml and the night-lock script have both been open for 7+ weeks: identified and documented, but not implemented.</div>
           </div>
         </div>
         <div class="insight negative">
           <div class="insight-icon">😴</div>
           <div>
-            <div class="insight-title">Austro Intelligence: 3h 19min April → ~2h Mai</div>
-            <div class="insight-text">Das kommerzielle Hauptprojekt verliert in beiden Monaten Zeit. W19: 6min. W20: nicht messbar. Nur W21 Montagsnacht 1h 35min als Signal. Ohne regelmäßige Slot-Bindung stirbt das Projekt in W22.</div>
+            <div class="insight-title">Austro Intelligence: 3h 19min April → ~2h May</div>
+            <div class="insight-text">The main commercial project lost time across both months. W19 had 6min, W20 was not measurable, and only Monday night in W21 showed a 1h 35min signal. Without a recurring time slot, the project will stall in W22.</div>
           </div>
         </div>
         <div class="insight warning">
           <div class="insight-icon">⚠️</div>
           <div>
-            <div class="insight-title">61–64% "Other" — Blindspot bleibt ungeklärt</div>
-            <div class="insight-text">project_patterns.yaml würde 20–25% des Blindspots auflösen (30 Minuten Arbeit). Stattdessen wächst der unkategorisierte Bereich von 61% auf 64%. Diagnose ohne Umsetzung ist das Kernmuster über beide Monate.</div>
+            <div class="insight-title">61–64% "Other" — Blind Spot Remains Unresolved</div>
+            <div class="insight-text">Updating project_patterns.yaml would resolve 20–25% of the blind spot in about 30 minutes. Instead, the uncategorized share grew from 61% to 64%. Diagnosis without implementation is the core pattern across both months.</div>
           </div>
         </div>
       </div>
     </div>
 
     <!-- RECOMMENDATIONS -->
-    <div class="section-label" style="margin-top:8px">Strategische Empfehlungen — Priorität für Juni</div>
+    <div class="section-label" style="margin-top:8px">Strategic Recommendations — June Priorities</div>
     <div class="card">
       <table class="data-table">
         <thead>
           <tr>
             <th>#</th>
-            <th>Maßnahme</th>
-            <th>Aufwand</th>
+            <th>Action</th>
+            <th>Effort</th>
             <th>Impact</th>
             <th>Status</th>
           </tr>
@@ -1290,63 +1290,63 @@
           <tr>
             <td><span class="card-badge badge-red">1</span></td>
             <td>
-              <strong>Night-Lock-Script + youtube_guard.py installieren</strong><br>
-              <span style="font-size:11px;color:var(--muted)">Code fertig seit W15/W21. LaunchAgent. Verhindert Post-Flow-Drift automatisch.</span>
+              <strong>Install night-lock script + youtube_guard.py</strong><br>
+              <span style="font-size:11px;color:var(--muted)">Code has been ready since W15/W21. Add a LaunchAgent to prevent post-flow drift automatically.</span>
             </td>
             <td><span class="card-badge badge-green">15 min</span></td>
-            <td style="color:var(--green)">🔥 Höchster ROI</td>
-            <td><span class="card-badge badge-red">7 Wochen offen</span></td>
+            <td style="color:var(--green)">🔥 Highest ROI</td>
+            <td><span class="card-badge badge-red">Open 7 weeks</span></td>
           </tr>
           <tr>
             <td><span class="card-badge badge-yellow">2</span></td>
             <td>
-              <strong>project_patterns.yaml updaten</strong><br>
-              <span style="font-size:11px;color:var(--muted)">64% Blindspot auf ~40% senken. Kategorien für ORF, Bitget, Hippieparty, Social Media.</span>
+              <strong>Update project_patterns.yaml</strong><br>
+              <span style="font-size:11px;color:var(--muted)">Reduce the 64% blind spot to ~40%. Add categories for ORF, Bitget, Hippieparty, and social media.</span>
             </td>
             <td><span class="card-badge badge-green">30 min</span></td>
-            <td style="color:var(--yellow)">Dashboard wird sinnvoll</td>
-            <td><span class="card-badge badge-red">7 Wochen offen</span></td>
+            <td style="color:var(--yellow)">Makes dashboard useful</td>
+            <td><span class="card-badge badge-red">Open 7 weeks</span></td>
           </tr>
           <tr>
             <td><span class="card-badge badge-purple">3</span></td>
             <td>
-              <strong>Austro Intelligence — wöchentlicher Slot Mo oder Mi 19–21 Uhr</strong><br>
-              <span style="font-size:11px;color:var(--muted)">W21-Montagsnacht zeigt: Abendslots funktionieren. Recurring Calendar-Block setzen.</span>
+              <strong>Austro Intelligence — weekly slot Mon or Wed 19:00–21:00</strong><br>
+              <span style="font-size:11px;color:var(--muted)">Monday night in W21 shows that evening slots work. Add a recurring calendar block.</span>
             </td>
             <td><span class="card-badge badge-green">5 min</span></td>
-            <td style="color:var(--cyan)">Kommerziell kritisch</td>
-            <td><span class="card-badge badge-yellow">offen</span></td>
+            <td style="color:var(--cyan)">Commercially critical</td>
+            <td><span class="card-badge badge-yellow">Open</span></td>
           </tr>
           <tr>
             <td><span class="card-badge badge-cyan">4</span></td>
             <td>
-              <strong>Hippieparty-Momentum halten</strong><br>
-              <span style="font-size:11px;color:var(--muted)">Sender.net läuft. Nächster Schritt definieren (erste Mail-Campaign oder Flyer). W21 als Baseline.</span>
+              <strong>Maintain Hippieparty momentum</strong><br>
+              <span style="font-size:11px;color:var(--muted)">Sender.net is running. Define the next step, either the first email campaign or a flyer. Use W21 as the baseline.</span>
             </td>
-            <td><span class="card-badge badge-yellow">2h/Woche</span></td>
-            <td style="color:var(--green)">Einziges Wachstumsprojekt</td>
-            <td><span class="card-badge badge-green">aktiv W21</span></td>
+            <td><span class="card-badge badge-yellow">2h/week</span></td>
+            <td style="color:var(--green)">Only growth project</td>
+            <td><span class="card-badge badge-green">Active W21</span></td>
           </tr>
           <tr>
             <td><span class="card-badge badge-purple">5</span></td>
             <td>
-              <strong>ElevenLabs: Deadline oder streichen</strong><br>
-              <span style="font-size:11px;color:var(--muted)">2 Monate Research, 0 Deliverables. Entweder bis W23 ein konkretes Audio-Produkt oder Projekt pausieren.</span>
+              <strong>ElevenLabs: Set a deadline or drop it</strong><br>
+              <span style="font-size:11px;color:var(--muted)">Two months of research, zero deliverables. Produce a concrete audio product by W23 or pause the project.</span>
             </td>
-            <td><span class="card-badge badge-yellow">Entscheidung</span></td>
-            <td style="color:var(--muted)">Ressourcen freigeben</td>
-            <td><span class="card-badge badge-yellow">entscheiden</span></td>
+            <td><span class="card-badge badge-yellow">Decision</span></td>
+            <td style="color:var(--muted)">Free resources</td>
+            <td><span class="card-badge badge-yellow">Decide</span></td>
           </tr>
         </tbody>
       </table>
     </div>
 
     <!-- RADAR / MONTH COMPARE -->
-    <div class="section-label" style="margin-top:24px">Monatsprofil im Vergleich</div>
+    <div class="section-label" style="margin-top:24px">Monthly Profile Comparison</div>
     <div class="grid-1-2">
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Radar — April vs. Mai</span>
+          <span class="card-title">Radar — April vs. May</span>
         </div>
         <div class="chart-container" style="height:280px">
           <canvas id="radarChart"></canvas>
@@ -1354,48 +1354,48 @@
       </div>
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Entwicklungsrichtung</span>
+          <span class="card-title">Direction of Development</span>
         </div>
         <div style="padding-top:4px">
           <div style="margin-bottom:14px">
             <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-              <span style="font-size:13px;font-weight:600">Focus-Qualität</span>
-              <span style="font-size:12px;color:var(--green)">April 6.2 → Mai 7.1 ↑</span>
+              <span style="font-size:13px;font-weight:600">Focus Quality</span>
+              <span style="font-size:12px;color:var(--green)">April 6.2 → May 7.1 ↑</span>
             </div>
             <div class="score-bar"><div class="score-fill" style="width:71%;background:linear-gradient(90deg,var(--april),var(--may))"></div></div>
           </div>
           <div style="margin-bottom:14px">
             <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-              <span style="font-size:13px;font-weight:600">Media-Kontrolle</span>
-              <span style="font-size:12px;color:var(--green)">April 3.1 → Mai 5.8 ↑</span>
+              <span style="font-size:13px;font-weight:600">Media Control</span>
+              <span style="font-size:12px;color:var(--green)">April 3.1 → May 5.8 ↑</span>
             </div>
             <div class="score-bar"><div class="score-fill" style="width:58%;background:linear-gradient(90deg,#f87171,#34d399)"></div></div>
           </div>
           <div style="margin-bottom:14px">
             <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-              <span style="font-size:13px;font-weight:600">Projekt-Output</span>
-              <span style="font-size:12px;color:var(--red)">April 5.5 → Mai 2.1 ↓</span>
+              <span style="font-size:13px;font-weight:600">Project Output</span>
+              <span style="font-size:12px;color:var(--red)">April 5.5 → May 2.1 ↓</span>
             </div>
             <div class="score-bar"><div class="score-fill" style="width:21%;background:linear-gradient(90deg,var(--accent),#f87171)"></div></div>
           </div>
           <div style="margin-bottom:14px">
             <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-              <span style="font-size:13px;font-weight:600">System-Konsistenz</span>
-              <span style="font-size:12px;color:var(--red)">April 4.0 → Mai 3.2 ↓</span>
+              <span style="font-size:13px;font-weight:600">System Consistency</span>
+              <span style="font-size:12px;color:var(--red)">April 4.0 → May 3.2 ↓</span>
             </div>
             <div class="score-bar"><div class="score-fill" style="width:32%;background:linear-gradient(90deg,var(--accent),#f87171)"></div></div>
           </div>
           <div style="margin-bottom:14px">
             <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-              <span style="font-size:13px;font-weight:600">Neue Projekte</span>
-              <span style="font-size:12px;color:var(--green)">April 2.0 → Mai 4.5 ↑</span>
+              <span style="font-size:13px;font-weight:600">New Projects</span>
+              <span style="font-size:12px;color:var(--green)">April 2.0 → May 4.5 ↑</span>
             </div>
             <div class="score-bar"><div class="score-fill" style="width:45%;background:linear-gradient(90deg,var(--muted),var(--cyan))"></div></div>
           </div>
           <div style="margin-bottom:4px">
             <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-              <span style="font-size:13px;font-weight:600">Script-Umsetzung</span>
-              <span style="font-size:12px;color:var(--red)">7 Wochen → 0%</span>
+              <span style="font-size:13px;font-weight:600">Script Implementation</span>
+              <span style="font-size:12px;color:var(--red)">7 weeks → 0%</span>
             </div>
             <div class="score-bar"><div class="score-fill" style="width:5%;background:var(--red)"></div></div>
           </div>
@@ -1423,11 +1423,11 @@ function showSection(name) {
   document.getElementById('section-' + name).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => {
     if (b.textContent.toLowerCase().includes(name.substring(0,4)) ||
-        (name === 'overview' && b.textContent === 'Übersicht') ||
-        (name === 'weekly' && b.textContent === 'Wochen') ||
-        (name === 'projects' && b.textContent === 'Projekte') ||
-        (name === 'media' && b.textContent.includes('Medien')) ||
-        (name === 'insights' && b.textContent === 'Erkenntnisse')) {
+        (name === 'overview' && b.textContent === 'Overview') ||
+        (name === 'weekly' && b.textContent === 'Weeks') ||
+        (name === 'projects' && b.textContent === 'Projects') ||
+        (name === 'media' && b.textContent.includes('Media')) ||
+        (name === 'insights' && b.textContent === 'Insights')) {
       b.classList.add('active');
     }
   });
@@ -1440,7 +1440,7 @@ new Chart(document.getElementById('scoreTimelineChart'), {
   data: {
     labels: WEEKS,
     datasets: [{
-      label: 'Wochen-Score',
+      label: 'Weekly Score',
       data: [3.7, 4.1, 2.5, 3.5, 3.0, 2.5, 4.0],
       borderColor: '#6366f1',
       backgroundColor: 'rgba(99,102,241,0.08)',
@@ -1452,7 +1452,7 @@ new Chart(document.getElementById('scoreTimelineChart'), {
       fill: true,
       borderWidth: 2.5,
     }, {
-      label: 'April Ø (3.4)',
+      label: 'April Avg (3.4)',
       data: [3.4, 3.4, 3.4, null, null, null, null],
       borderColor: '#818cf8',
       borderDash: [5,4],
@@ -1460,7 +1460,7 @@ new Chart(document.getElementById('scoreTimelineChart'), {
       pointRadius: 0,
       fill: false,
     }, {
-      label: 'Mai Ø (3.2)',
+      label: 'May Avg (3.2)',
       data: [null, null, null, 3.2, 3.2, 3.2, 3.2],
       borderColor: '#34d399',
       borderDash: [5,4],
@@ -1692,7 +1692,7 @@ new Chart(document.getElementById('projectCompChart'), {
         borderRadius: 6,
       },
       {
-        label: 'Mai 2026',
+        label: 'May 2026',
         data: [232, 18, 6, 26, 15, 8, 7, 3, 4, 2],
         backgroundColor: 'rgba(52,211,153,0.7)',
         borderColor: '#34d399',
@@ -1747,7 +1747,7 @@ new Chart(document.getElementById('ytTrendChart'), {
   data: {
     labels: WEEKS,
     datasets: [{
-      label: 'YouTube Stunden',
+      label: 'YouTube Hours',
       data: [5, 9, 25.8, 5.6, 9.6, 4.2, 1],
       borderColor: '#ff4444',
       backgroundColor: 'rgba(255,68,68,0.08)',
@@ -1788,7 +1788,7 @@ new Chart(document.getElementById('correlationChart'), {
   data: {
     labels: WEEKS,
     datasets: [{
-      label: 'Konsum gesamt (h)',
+      label: 'Total Consumption (h)',
       data: [5, 11, 44, 22, 40, 23, 2],
       backgroundColor: WEEK_COLORS.map((c,i) => `rgba(248,113,113,${0.4 + i*0.02})`),
       borderColor: '#f87171',
@@ -1819,7 +1819,7 @@ new Chart(document.getElementById('correlationChart'), {
       legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16 } },
       tooltip: {
         callbacks: {
-          label: ctx => ctx.datasetIndex === 0 ? ` Konsum: ${ctx.parsed.y}h` : ` Score: ${ctx.parsed.y}/10`
+          label: ctx => ctx.datasetIndex === 0 ? ` Consumption: ${ctx.parsed.y}h` : ` Score: ${ctx.parsed.y}/10`
         }
       }
     }
@@ -1830,7 +1830,7 @@ new Chart(document.getElementById('correlationChart'), {
 new Chart(document.getElementById('radarChart'), {
   type: 'radar',
   data: {
-    labels: ['Focus-Qualität', 'Media-Kontrolle', 'Projekt-Output', 'Konsistenz', 'System-Pflege', 'Neue Projekte'],
+    labels: ['Focus Quality', 'Media Control', 'Project Output', 'Consistency', 'System Maintenance', 'New Projects'],
     datasets: [{
       label: 'April 2026',
       data: [6.2, 3.1, 5.5, 4.0, 2.0, 2.0],
@@ -1840,7 +1840,7 @@ new Chart(document.getElementById('radarChart'), {
       borderWidth: 2,
       pointRadius: 4,
     }, {
-      label: 'Mai 2026',
+      label: 'May 2026',
       data: [7.1, 5.8, 2.1, 3.2, 1.0, 4.5],
       borderColor: '#34d399',
       backgroundColor: 'rgba(52,211,153,0.12)',

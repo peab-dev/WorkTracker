@@ -34,8 +34,8 @@ USER_FILE = Path(__file__).parent / "categories.yaml"
 
 _USER_STUB = """# WorkTracker — User category pool (gitignored, overlays categories.default.yaml)
 #
-# Eigene Kategorien/Farben/Aliase hier ergänzen — Schema siehe
-# categories.default.yaml. Beispiel:
+# Add custom categories, colors, and aliases here. See
+# categories.default.yaml for the schema. Example:
 #   activity_categories:
 #     Hobby: { color: "#aabbcc", aliases: [] }
 #   domain_categories:

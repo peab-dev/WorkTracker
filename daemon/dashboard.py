@@ -72,7 +72,7 @@ REFRESH_MS = 2000
 
 
 def tail_jsonl(path, n=6):
-    """Liest die letzten n Zeilen einer JSONL-Datei (effizient von hinten)."""
+    """Read the last n lines of a JSONL file efficiently from the end."""
     try:
         with open(path, "rb") as f:
             f.seek(0, 2)
@@ -173,7 +173,7 @@ def fmt_age(mtime):
 
 
 def log_tail(path, n=1):
-    """Liest die letzte Zeile einer Log-Datei."""
+    """Read the last line of a log file."""
     try:
         with open(path, "rb") as f:
             f.seek(0, 2)
@@ -191,7 +191,7 @@ def log_tail(path, n=1):
 
 
 def fmt_dur(seconds):
-    """Formatiert Sekunden als 'Xh XXm' oder 'Xm'."""
+    """Format seconds as 'Xh XXm' or 'Xm'."""
     if seconds is None or seconds < 0:
         return "—"
     s = int(seconds)
@@ -263,13 +263,13 @@ def draw(stdscr):
         today = now.strftime("%Y-%m-%d")
 
         if H < 20 or W < 60:
-            put(stdscr, 0, 0, "Terminal zu klein — mind. 60×20", RED | B)
+            put(stdscr, 0, 0, "Terminal too small — minimum 60×20", RED | B)
             stdscr.refresh()
             if stdscr.getch() in (ord("q"), 27):
                 break
             continue
 
-        # ── Daten sammeln ──
+        # ── Collect data ──
         cfg = load_config()
         interval = cfg["interval"]
         snaps = tail_jsonl(DATA_SNAP / f"{today}.jsonl", 6)
@@ -296,7 +296,7 @@ def draw(stdscr):
 
         # ── Daemon Status ──
         put(stdscr, r, 2, "SERVICES", CYN | B)
-        snap_info = f"  {snap_total} Snapshots heute" if snap_total else ""
+        snap_info = f"  {snap_total} snapshots today" if snap_total else ""
         put(stdscr, r, 14, snap_info, D)
         r += 1
 
@@ -351,7 +351,7 @@ def draw(stdscr):
             put(stdscr, r, 2, "App:", D)
             put(stdscr, r, 10, app_name, WHT | B)
             r += 1
-            put(stdscr, r, 2, "Fenster:", D)
+            put(stdscr, r, 2, "Window:", D)
             put(stdscr, r, 10, (win_title or "—")[: W - 12], WHT)
             r += 1
 
@@ -368,7 +368,7 @@ def draw(stdscr):
 
             r += 1
 
-            # Input-Raten
+            # Input rates
             inp = latest.get("input", {})
             if len(snaps) >= 2:
                 span = len(snaps) * interval
@@ -409,13 +409,13 @@ def draw(stdscr):
             parts = []
             bp = sys_info.get("battery_pct")
             if bp is not None:
-                batt = f"Akku: {bp}%"
+                batt = f"Battery: {bp}%"
                 if sys_info.get("battery_charging"):
                     batt += " ⚡"
                 parts.append(batt)
             br = sys_info.get("brightness")
             if br is not None:
-                parts.append(f"Helligkeit: {int(br * 100)}%")
+                parts.append(f"Brightness: {int(br * 100)}%")
             sp = sys_info.get("active_space")
             if sp is not None:
                 parts.append(f"Space: {sp}")
@@ -519,7 +519,7 @@ def draw(stdscr):
             r += 1
 
             # Recent Sessions
-            put(stdscr, r, 2, "LETZTE SESSIONS", CYN | B)
+            put(stdscr, r, 2, "RECENT SESSIONS", CYN | B)
             r += 1
 
             recent = list(reversed(sessions[-8:]))
@@ -570,7 +570,7 @@ def draw(stdscr):
                 put(stdscr, r, 14, "—", D)
             r += 1
 
-        # ── Log-Zeile ──
+        # ── Log line ──
         r += 1
         last_log = log_tail(LOGS / "collector.log")
         if last_log:
@@ -581,7 +581,7 @@ def draw(stdscr):
         # ── Footer ──
         hline(stdscr, H - 2, W, D)
         put(stdscr, H - 1, 2, "q", WHT | B)
-        put(stdscr, H - 1, 3, "=Beenden  ", D)
+        put(stdscr, H - 1, 3, "=Quit  ", D)
         put(stdscr, H - 1, 13, "r", WHT | B)
         put(stdscr, H - 1, 14, "=Refresh  ", D)
         put(stdscr, H - 1, 24, f"↻ {REFRESH_MS / 1000:.0f}s", D)
