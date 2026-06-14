@@ -97,8 +97,7 @@ def fmt_duration(sec):
     """Format seconds as Xh Ym."""
     if sec is None or sec == 0:
         return "0m"
-    h, m = divmod(int(sec), 3600)
-    _, m = divmod(int(sec) % 3600, 60)
+    h, m = divmod(int(sec) // 60, 60)
     if h > 0:
         return f"{h}h {m:02d}m"
     return f"{m}m"
