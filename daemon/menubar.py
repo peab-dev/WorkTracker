@@ -54,7 +54,8 @@ from AppKit import (
 from Foundation import NSObject, NSLog, NSMakeRange, NSMakeRect, NSMakePoint, NSMakeSize
 
 # ── Config ──────────────────────────────────────────────────────────────
-API_URL = "http://127.0.0.1:7880/api/live"
+API_BASE = "http://127.0.0.1:7880"
+API_URL = f"{API_BASE}/api/live"
 POLL_INTERVAL = 30.0  # seconds
 RETRY_INTERVAL = 60.0  # seconds after failure
 
@@ -1331,8 +1332,11 @@ class WorkTrackerMenubar(NSObject):
                     f"running · {fmt_uptime(uptime_sec)}" if uptime_sec else "running"
                 )
                 self._add_service_row("Collector", status_text, ok=True)
+                self._add_action("  ↻ Restart Collector", "restartCollector:")
+                self._add_action("  ◼ Stop Collector", "stopCollector:")
             else:
                 self._add_service_row("Collector", "offline", ok=False)
+                self._add_action("  ▶ Start Collector", "startCollector:")
 
         self._add_separator()
 
@@ -1673,7 +1677,52 @@ class WorkTrackerMenubar(NSObject):
     def openDashboard_(self, sender):
         """Open the web dashboard in default browser."""
         import webbrowser
-        webbrowser.open("http://127.0.0.1:7880")
+        webbrowser.open(API_BASE)
+
+    # ── Collector control ───────────────────────────────────────
+    # These POST to the dashboard's /api/service/collector/<action> endpoint
+    # (launchctl logic lives there, already used by the web UI) so the menubar
+    # never shells out to launchctl itself.
+
+    def startCollector_(self, sender):
+        self._service_action("start")
+
+    def stopCollector_(self, sender):
+        self._service_action("stop")
+
+    def restartCollector_(self, sender):
+        self._service_action("restart")
+
+    def _service_action(self, action):
+        """Fire a collector action in the background, then refresh the menu."""
+        if getattr(self, "_svc_busy", False):
+            return
+        self._svc_busy = True
+        # Immediate feedback in the menubar title while launchctl works.
+        self.statusItem.setTitle_(f"WT {action}…")
+        threading.Thread(
+            target=self._service_action_worker, args=(action,), daemon=True
+        ).start()
+
+    def _service_action_worker(self, action):
+        try:
+            req = urllib.request.Request(
+                f"{API_BASE}/api/service/collector/{action}",
+                data=b"",
+                method="POST",
+                headers={"Accept": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            pass
+        finally:
+            self._svc_busy = False
+        # launchctl state takes a moment to settle before /api/live reflects it.
+        time.sleep(1.5)
+        self.performSelectorOnMainThread_withObject_waitUntilDone_(
+            "refresh:", None, False
+        )
 
     def terminate_(self, sender):
         """Quit the menubar widget."""
